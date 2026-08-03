@@ -370,7 +370,7 @@
     background:linear-gradient(135deg,rgba(5,18,22,.08),rgba(5,12,16,.035));
   }
   .trench-head {
-    display:flex; align-items:center; gap:9px; min-height:38px; padding:7px 10px;
+    display:none; align-items:center; gap:9px; min-height:38px; padding:7px 10px;
     border-bottom:1px solid rgba(214,255,240,.10); background:rgba(255,255,255,.025);
   }
   .trench-title {
@@ -392,7 +392,7 @@
   table.trenches { width:100%; border-collapse:collapse; table-layout:fixed; }
   table.trenches th {
     position:sticky; top:0; z-index:2; padding:7px 5px; border-bottom:1px solid rgba(214,255,240,.09);
-    background:rgba(8,18,21,.78); color:var(--muted); font:600 7px 'Space Grotesk',sans-serif;
+    background:transparent; color:var(--muted); font:600 7px 'Space Grotesk',sans-serif;
     letter-spacing:.08em; text-align:right; white-space:nowrap;
   }
   table.trenches th:first-child, table.trenches td:first-child { text-align:left; padding-left:10px; width:14%; }
@@ -674,6 +674,9 @@ const cacheSet = (k,v) => { try { localStorage.setItem(k, JSON.stringify(v)); } 
 const TRENCH_CACHE_KEY = 'mus_trenches_cache_v1';
 const TRENCH_PREVIOUS_KEY = 'mus_trenches_previous_v1';
 const TRENCH_AUTO_MS = 3 * 60 * 60 * 1000;
+const TRENCH_API_BASE = location.protocol === 'file:'
+  ? 'https://mus-terminal.vercel.app/api/trenches'
+  : '/api/trenches';
 let trenchesLoading = false;
 
 function trenchEscape(value){
@@ -757,13 +760,13 @@ async function loadTrenches(force=false){
   if (!force && cached) renderTrenches(cached);
   else trenchState('Solana tokenleri taranıyor…');
   try {
-    const response=await fetch(`/api/trenches${force?'?refresh=1':''}`,{cache:force?'no-store':'default'});
+    const response=await fetch(`${TRENCH_API_BASE}${force?'?refresh=1':''}`,{cache:force?'no-store':'default'});
     const payload=await response.json().catch(()=>({}));
     if (!response.ok) throw new Error(payload.error||`HTTP ${response.status}`);
     renderTrenches(payload);
   } catch(error){
     console.warn('trenches scan failed',error);
-    if (!cached) trenchState(`Tarama kullanılamıyor — ${error.message||'API hatası'}`,true);
+    if (!cached) trenchState('');
   } finally {
     trenchesLoading=false;
     if (button) button.disabled=false;
