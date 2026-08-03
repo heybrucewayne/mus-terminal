@@ -461,6 +461,7 @@
     text-align:left;
     text-decoration:none;
     cursor:pointer;
+    touch-action:manipulation;
   }
   .asset-menu-action:hover { background:rgba(0,255,136,.14); border-color:rgba(0,255,136,.48); color:var(--green); }
   .asset-menu-action.danger { color:var(--red); border-color:rgba(255,68,102,.28); background:rgba(255,68,102,.08); }
@@ -1006,10 +1007,14 @@ function openAssetMenu(asset, anchor){
 }
 
 $('#assetMenuTradingView').addEventListener('click', closeAssetMenu);
-$('#assetMenuRemove').addEventListener('click', () => {
-  if (!activeAssetMenu || !activeAssetMenu.custom) return;
-  removeCustom(activeAssetMenu.rmsym || activeAssetMenu.name);
+$('#assetMenuRemove').addEventListener('click', e => {
+  e.preventDefault();
+  e.stopPropagation();
+  const asset = activeAssetMenu;
+  if (!asset || !asset.custom) return;
+  const symbol = asset.rmsym || asset.name;
   closeAssetMenu();
+  removeCustom(symbol);
 });
 document.addEventListener('click', e => {
   if (!activeAssetMenu) return;
@@ -1135,8 +1140,19 @@ async function addCustom(){
   }
 }
 function removeCustom(sym){
-  customItems = customItems.filter(c => c.sym !== sym);
-  delete customQuotes[sym]; saveCustom(); renderWatchlist(); renderMarketTable();
+  const symbol = String(sym || '').trim().toUpperCase();
+  const before = customItems.length;
+  customItems = customItems.filter(c => c.sym !== symbol);
+  if (customItems.length === before){
+    pxMsg(`${symbol || 'Asset'} is not in the added list`, 'err');
+    return false;
+  }
+  delete customQuotes[symbol];
+  saveCustom();
+  renderWatchlist();
+  renderMarketTable();
+  pxMsg(`Removed ${symbol} from list`, 'ok');
+  return true;
 }
 
 function renderWatchlist(){
