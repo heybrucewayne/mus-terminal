@@ -21,8 +21,36 @@
     try { previous = localStorage.getItem(storageKey) || ''; } catch (error) {}
     const choices = backgrounds.filter(path => path !== previous);
     const selected = choices[Math.floor(Math.random() * choices.length)] || backgrounds[0];
+
+    // Start the selected image request before the stylesheet is parsed.
+    const preload = document.createElement('link');
+    preload.rel = 'preload';
+    preload.as = 'image';
+    preload.href = selected;
+    preload.fetchPriority = 'high';
+    document.head.append(preload);
+
     document.documentElement.style.setProperty('--terminal-background', `url("${selected}")`);
     try { localStorage.setItem(storageKey, selected); } catch (error) {}
+
+    // Warm the remaining images only after the visible page has loaded.
+    window.addEventListener('load', () => {
+      const warmRemaining = () => {
+        backgrounds.filter(path => path !== selected).forEach(path => {
+          const prefetch = document.createElement('link');
+          prefetch.rel = 'prefetch';
+          prefetch.as = 'image';
+          prefetch.href = path;
+          document.head.append(prefetch);
+        });
+      };
+
+      if ('requestIdleCallback' in window) {
+        window.requestIdleCallback(warmRemaining, { timeout: 2500 });
+      } else {
+        window.setTimeout(warmRemaining, 800);
+      }
+    }, { once: true });
   })();
 </script>
 <style>
