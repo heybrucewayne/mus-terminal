@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>◈ COIN TERMINAL</title>
+<title>MUS Terminal</title>
+<meta name="theme-color" content="#071416" />
+<link rel="icon" href="favicon.svg" type="image/svg+xml" />
 <style>
   :root {
     --bg: #05070e;
@@ -68,90 +70,6 @@
     gap: 12px;
   }
   ::selection { background: rgba(0,255,136,0.25); }
-
-  header.topbar {
-    display: flex;
-    align-items: center;
-    gap: 18px;
-    padding: 8px 16px;
-    background: rgba(13,19,34,0.42);
-    -webkit-backdrop-filter: blur(22px) saturate(160%);
-    backdrop-filter: blur(22px) saturate(160%);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.15), 0 6px 24px rgba(0,0,0,0.32);
-    flex: 0 0 auto;
-  }
-  .brand {
-    font-weight: 700;
-    font-size: 16px;
-    letter-spacing: 2px;
-    color: var(--text-bright);
-    display: flex;
-    align-items: center;
-    gap: 9px;
-  }
-  .brand .logo {
-    color: var(--green);
-    text-shadow: 0 0 12px var(--green);
-    font-size: 18px;
-  }
-  .brand small {
-    font-size: 10px;
-    letter-spacing: 3px;
-    color: var(--muted);
-    font-weight: 500;
-  }
-  .topbar .spacer { flex: 1; }
-  .stat-chip {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    line-height: 1.25;
-    padding-left: 18px;
-    border-left: 1px solid var(--border-soft);
-  }
-  .stat-chip .label { font-size: 9px; letter-spacing: 2px; color: var(--muted); text-transform: uppercase; }
-  .stat-chip .val { font-size: 14px; font-weight: 600; color: var(--text-bright); }
-  .clock { min-width: 92px; }
-
-  /* BTC box — background reacts to live price moves (up=green, down=red) + 10-click easter egg */
-  .stat-chip.btc-box {
-    border-left: none;
-    border: 1.5px solid var(--border);
-    border-radius: 10px;
-    padding: 4px 16px;
-    margin-left: 6px;
-    background: rgba(255,255,255,0.05);
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: background .55s ease, border-color .55s ease, box-shadow .55s ease;
-  }
-  .stat-chip.btc-box .val { font-size: 16px; font-weight: 700; color: var(--text-bright); transition: color .4s; }
-  .stat-chip.btc-box.up {
-    background: rgba(0,255,136,.14); border-color: rgba(0,255,136,.5); box-shadow: 0 0 14px rgba(0,255,136,.28);
-  }
-  .stat-chip.btc-box.up .val { color: var(--green); }
-  .stat-chip.btc-box.down {
-    background: rgba(255,68,102,.14); border-color: rgba(255,68,102,.5); box-shadow: 0 0 14px rgba(255,68,102,.28);
-  }
-  .stat-chip.btc-box.down .val { color: var(--red); }
-  .stat-chip.btc-box.up.flash   { animation: btcUp .8s ease-out; }
-  .stat-chip.btc-box.down.flash { animation: btcDown .8s ease-out; }
-  @keyframes btcUp   { 0%{ background:rgba(0,255,136,.5);  box-shadow:0 0 22px rgba(0,255,136,.6);} 100%{ background:rgba(0,255,136,.14);} }
-  @keyframes btcDown { 0%{ background:rgba(255,68,102,.5); box-shadow:0 0 22px rgba(255,68,102,.6);} 100%{ background:rgba(255,68,102,.14);} }
-
-  .live-dot {
-    width: 7px; height: 7px; border-radius: 50%;
-    background: var(--green);
-    box-shadow: 0 0 8px var(--green);
-    animation: pulse 1.6s infinite;
-    display: inline-block;
-  }
-  .live-dot.stale { background: var(--orange); box-shadow: 0 0 8px var(--orange); }
-  .live-dot.dead { background: var(--red); box-shadow: 0 0 8px var(--red); animation:none; }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
 
   /* ===== GRID ===== */
   .grid {
@@ -308,6 +226,28 @@
   .px-search { display:flex; gap:6px; padding:8px 10px; border-bottom:1px solid var(--border-soft); }
   .px-search input { flex:1; }
   .px-search .btn { padding:6px 10px; font-size:11px; }
+  .px-watchlist {
+    display:flex; align-items:center; flex-wrap:wrap; gap:5px;
+    padding:6px 10px; border-bottom:1px solid var(--border-soft);
+    background:rgba(255,255,255,0.018);
+  }
+  .px-watchlist:empty { display:none; }
+  .px-watchlist-label {
+    color:var(--muted); font-size:8px; letter-spacing:1px;
+    text-transform:uppercase; margin-right:2px;
+  }
+  .watch-chip {
+    display:inline-flex; align-items:center; gap:4px;
+    padding:2px 4px 2px 8px; border:1px solid rgba(0,255,136,.24);
+    border-radius:999px; background:rgba(0,255,136,.08);
+    color:var(--text-bright); font:600 9px 'JetBrains Mono',monospace;
+  }
+  .watch-chip button {
+    display:inline-grid; place-items:center; width:15px; height:15px;
+    padding:0; border:0; border-radius:50%; background:transparent;
+    color:var(--muted); cursor:pointer; font-size:13px; line-height:1;
+  }
+  .watch-chip button:hover { background:rgba(255,68,102,.16); color:var(--red); }
   .px-msg { font-size:10px; padding:0 12px; height:0; overflow:hidden; color:var(--muted); transition:height .15s, padding .15s; }
   .px-msg.show { height:auto; padding:5px 12px; }
   .px-msg.ok { color:var(--green); } .px-msg.err { color:var(--red); }
@@ -385,103 +325,6 @@
     .grid { grid-template-columns: 0.58fr 1.2fr 1fr 1fr; }
   }
 
-  /* theme toggle button (next to the COIN TERMINAL brand) */
-  .theme-toggle{
-    background: rgba(255,255,255,0.07);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 3px 9px;
-    font-size: 13px;
-    line-height: 1;
-    cursor: pointer;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.14);
-    transition: transform .15s, background .15s;
-  }
-  .theme-toggle:hover{ transform: scale(1.1); }
-</style>
-<style id="light-css">
-  /* Minimal light theme for the visible two-panel terminal. */
-  :root {
-    --bg:#dfe6f2; --bg2:#eef2fa;
-    --panel: linear-gradient(160deg, rgba(255,255,255,0.62) 0%, rgba(255,255,255,0.40) 100%);
-    --panel-flat: rgba(255,255,255,0.6);
-    --glass: rgba(255,255,255,0.5);
-    --border: rgba(16,38,76,0.13);
-    --border-soft: rgba(16,38,76,0.08);
-    --green:#009a55; --green-dim:#00b365;
-    --red:#e02e50; --red-dim:#c22745;
-    --yellow:#b8860b; --orange:#d9731a;
-    --text:#33415a; --text-bright:#0e1c33;
-    --muted:#64748f; --muted2:#9aa7bd;
-  }
-
-  html { background: var(--bg); }
-
-  body::before {
-    background:
-      radial-gradient(52% 56% at 10% 12%, rgba(0,220,150,0.50), transparent 70%),
-      radial-gradient(56% 58% at 92% 6%, rgba(80,150,255,0.55), transparent 70%),
-      radial-gradient(60% 64% at 84% 92%, rgba(190,110,255,0.45), transparent 70%),
-      radial-gradient(54% 60% at 12% 96%, rgba(255,110,150,0.42), transparent 70%),
-      radial-gradient(46% 48% at 50% 50%, rgba(0,200,255,0.30), transparent 72%);
-    filter: saturate(120%);
-  }
-
-  .panel {
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.85), 0 12px 34px rgba(30,48,90,0.16), 0 2px 10px rgba(30,48,90,0.10);
-  }
-  .panel::before { background: linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0) 46%); }
-  header.topbar { background: rgba(255,255,255,0.5); }
-  .brand .logo { text-shadow: 0 0 10px rgba(0,200,120,0.6); }
-  table.ticker thead th { background: rgba(255,255,255,0.72); }
-  table.ticker tbody td { border-bottom-color: rgba(16,38,76,0.07); }
-  table.ticker tbody tr:hover { background: rgba(16,38,76,0.045); }
-  .scroll::-webkit-scrollbar-thumb, .panel-body::-webkit-scrollbar-thumb { background: rgba(16,38,76,0.22); }
-  .scroll::-webkit-scrollbar-thumb:hover { background: rgba(16,38,76,0.36); }
-
-  input, select { background: rgba(255,255,255,0.6); }
-  input:focus, select:focus {
-    background: #fff;
-    border-color: rgba(0,154,85,0.55);
-    box-shadow: 0 0 0 3px rgba(0,154,85,0.12);
-  }
-  .btn {
-    background: rgba(0,154,85,0.12);
-    border-color: rgba(0,154,85,0.4);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
-  }
-  .btn:hover {
-    background: rgba(0,154,85,0.2);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.85), 0 0 16px rgba(0,154,85,0.2);
-  }
-  .chgpill.pos { background: rgba(0,154,85,0.12); border-color: rgba(0,154,85,0.3); }
-  .chgpill.neg { background: rgba(224,46,80,0.10); border-color: rgba(224,46,80,0.3); }
-
-  .kind-tag.t-COIN { color:#0b8a78; border-color:rgba(11,138,120,.4); background:rgba(11,138,120,.10); }
-  .kind-tag.t-STOCK { color:#0b6fc2; border-color:rgba(11,111,194,.4); background:rgba(11,111,194,.10); }
-  .kind-tag.t-INDEX { color:#7d3bd0; border-color:rgba(125,59,208,.4); background:rgba(125,59,208,.10); }
-  .kind-tag.t-COMMODITY { color:#a87b00; border-color:rgba(168,123,0,.4); background:rgba(168,123,0,.12); }
-
-  .stat-chip.btc-box { background: rgba(255,255,255,0.6); }
-  .stat-chip.btc-box.up {
-    background: rgba(0,154,85,0.16);
-    border-color: rgba(0,154,85,0.5);
-    box-shadow: 0 0 14px rgba(0,154,85,0.25);
-  }
-  .stat-chip.btc-box.down {
-    background: rgba(224,46,80,0.14);
-    border-color: rgba(224,46,80,0.5);
-    box-shadow: 0 0 14px rgba(224,46,80,0.25);
-  }
-  @keyframes btcUp { 0% { background: rgba(0,154,85,.4); } 100% { background: rgba(0,154,85,.16); } }
-  @keyframes btcDown { 0% { background: rgba(224,46,80,.4); } 100% { background: rgba(224,46,80,.14); } }
-
-  #bubbleTip { background: rgba(255,255,255,0.82); box-shadow: inset 0 1px 0 rgba(255,255,255,0.95), 0 12px 34px rgba(30,48,90,0.25); }
-  .bubble-legend { background: rgba(255,255,255,0.6); box-shadow: inset 0 1px 0 rgba(255,255,255,0.9); }
-  .skel { background: rgba(16,38,76,0.08); }
-  .skel::after { background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent); }
-  .warn-badge { color:#b35900; background:rgba(217,115,26,0.12); border-color:rgba(217,115,26,0.4); }
-  ::selection { background: rgba(0,154,85,0.22); }
 </style>
 <style id="terminal-refresh">
   /* Focused desktop terminal: no page scroll, only the prices list scrolls internally. */
@@ -508,56 +351,6 @@
     padding: 14px clamp(14px, 2.4vw, 36px) 18px;
     gap: 12px;
   }
-
-  header.topbar {
-    flex: 0 0 auto;
-    gap: 16px;
-    min-height: 56px;
-    padding: 8px 12px 8px 16px;
-    background: rgba(7, 15, 18, 0.78);
-    border: 1px solid rgba(174, 220, 198, 0.16);
-    border-radius: 14px;
-    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.26), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-    -webkit-backdrop-filter: blur(22px) saturate(130%);
-    backdrop-filter: blur(22px) saturate(130%);
-  }
-
-  .brand { flex: 0 0 auto; gap: 10px; letter-spacing: 0; }
-
-  .brand-name {
-    color: var(--text-bright);
-    font-size: 0.82rem;
-    font-weight: 700;
-    letter-spacing: 0.18em;
-  }
-
-  .topbar .spacer { min-width: 18px; }
-
-  .stat-chip.btc-box {
-    min-width: 145px;
-    margin-left: 0;
-    padding: 7px 14px;
-    flex-direction: row;
-    align-items: baseline;
-    justify-content: flex-end;
-    gap: 8px;
-    border-radius: 9px;
-    background: rgba(141, 244, 182, 0.06);
-    border-color: rgba(141, 244, 182, 0.18);
-  }
-
-  .stat-chip.btc-box::before {
-    color: var(--green);
-    content: 'BTC / USD';
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.5rem;
-    letter-spacing: 0.08em;
-  }
-
-  .stat-chip.btc-box .val { font-size: 0.82rem; }
-  .stat-chip.clock { min-width: 84px; }
-  .stat-chip.clock .label { font-size: 0.5rem; }
-  .stat-chip.clock .val { font-size: 0.74rem; }
 
   .grid {
     display: grid;
@@ -623,7 +416,6 @@
   @media (max-width: 900px) {
     html, body { overflow-y: auto; }
     #app { height: auto; min-height: 100vh; }
-    header.topbar { position: relative; }
     .grid {
       min-height: 0;
       grid-template-columns: 1fr 1fr;
@@ -633,10 +425,6 @@
 
   @media (max-width: 700px) {
     #app { min-height: 100vh; }
-    header.topbar { flex-wrap: wrap; }
-    .topbar .spacer { display: none; }
-    .stat-chip.btc-box { margin-left: auto; }
-    .stat-chip.btc-box::before { display: none; }
     .grid {
       grid-template-columns: 1fr;
       grid-template-rows: minmax(360px, 1fr) minmax(360px, 1fr);
@@ -645,51 +433,15 @@
   }
 
   @media (max-width: 520px) {
-    .stat-chip.clock { display: none; }
     .px-search { flex-wrap: wrap; }
     .px-search input { flex: 1 1 100%; }
     .px-search .btn { flex: 0 0 auto; }
   }
 
-  body.light-mode {
-    background:
-      radial-gradient(700px 420px at 78% -8%, rgba(0, 180, 120, 0.11), transparent 70%),
-      radial-gradient(560px 380px at 7% 106%, rgba(45, 118, 255, 0.08), transparent 72%),
-      var(--bg);
-  }
-
-  body.light-mode header.topbar {
-    background: rgba(255, 255, 255, 0.72);
-    border-color: rgba(16, 38, 76, 0.12);
-    box-shadow: 0 16px 36px rgba(30, 48, 90, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.88);
-  }
-
-  body.light-mode .panel {
-    background: linear-gradient(145deg, rgba(255, 255, 255, 0.78), rgba(244, 248, 253, 0.68));
-  }
-
-  body.light-mode #panel-table .panel-body { background: rgba(255, 255, 255, 0.24); }
-  body.light-mode .bubble-legend { background: rgba(255, 255, 255, 0.68); }
 </style>
 </head>
 <body>
 <div id="app">
-  <header class="topbar">
-    <div class="brand">
-      <span class="logo">◈</span>
-      <span class="brand-name">COIN TERMINAL</span>
-      <button class="theme-toggle" id="theme-toggle" title="Light / Dark theme">🌙</button>
-    </div>
-    <div class="spacer"></div>
-    <div class="stat-chip btc-box" id="btc-box" title="BTC / USDT">
-      <span class="val num" id="hdr-btc">—</span>
-    </div>
-    <div class="stat-chip clock">
-      <span class="label">UTC TIME</span>
-      <span class="val num" id="clock">--:--:--</span>
-    </div>
-  </header>
-
   <div class="grid">
     <!-- BUBBLES -->
     <section class="panel" id="panel-bubbles">
@@ -724,6 +476,7 @@
           <input id="px-q" placeholder="Add coin or stock — e.g. TSLA, AAPL, ADA" autocomplete="off" spellcheck="false" />
           <button class="btn" id="px-add" title="Add to list">+ ADD</button>
         </div>
+        <div id="px-watchlist" class="px-watchlist" aria-label="Added assets"></div>
         <div id="px-msg" class="px-msg"></div>
         <div class="px-scroll scroll">
           <table class="ticker">
@@ -749,11 +502,9 @@
 
 <script>
 /* ============================================================
-   CRYPTO COMMAND CENTER — vanilla JS
+   MUS TERMINAL — vanilla JS
    ============================================================ */
 const $ = (s, r=document) => r.querySelector(s);
-const lightCss = document.getElementById('light-css');
-const isLight = () => !!lightCss && !lightCss.disabled;
 const fmtNum = (n, d=2) => Number(n).toLocaleString('en-US',{minimumFractionDigits:d, maximumFractionDigits:d});
 function smartPrice(p){
   p = +p;
@@ -812,28 +563,6 @@ async function fetchTickers(){
 function renderAll(){
   refreshBubbles();
   renderMarketTable();
-}
-
-/* fast BTC price tick for the header box — flashes green/red on every up/down move */
-let lastBtcTick = null;
-function updateBtcBox(p){
-  const el = $('#hdr-btc'), box = $('#btc-box');
-  if (!el || !box) return;
-  el.textContent = fmtNum(p, 2);                       // e.g. 62,674.50
-  if (lastBtcTick != null && p !== lastBtcTick){
-    const up = p > lastBtcTick;
-    box.classList.remove('up','down','flash');
-    void box.offsetWidth;                              // restart the flash animation
-    box.classList.add(up ? 'up' : 'down', 'flash');
-  }
-  lastBtcTick = p;
-}
-async function fetchBtcTick(){
-  try {
-    const r = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT');
-    if (!r.ok) return;
-    updateBtcBox(+(await r.json()).price);
-  } catch(e){ /* keep last */ }
 }
 
 // bubble dataset = everything in the Prices table (crypto + TradFi),
@@ -1183,7 +912,7 @@ function renderMarketTable(){
     const highStr  = fmtP(r.high)!=null ? fmtP(r.high) : '—';
     const lowStr   = fmtP(r.low) !=null ? fmtP(r.low)  : '—';
     const tag = r.cls ? `<span class="kind-tag t-${r.cls}">${r.cls}</span>` : '';
-    const rm  = r.custom ? `<button class="x-row" data-rm="${r.rmsym}" title="Remove">×</button>` : '';
+    const rm  = r.custom ? `<button class="x-row" data-rm="${r.rmsym}" title="Remove ${r.name}" aria-label="Remove ${r.name}">×</button>` : '';
     return `<tr>
       <td><div class="sym-cell"><span class="rank">${i+1}</span><span class="base">${r.name}</span><span class="quote">${r.sub}</span>${tag}${rm}</div></td>
       <td class="pricecell num ${flash}">${priceStr}</td>
@@ -1225,21 +954,48 @@ async function addCustom(){
   // 1) crypto on Binance?
   if (tickerMap[sym]){
     customItems.push({ sym, type:'crypto' }); saveCustom();
-    $('#px-q').value=''; pxMsg(`Added ${sym} · crypto`, 'ok'); renderMarketTable(); return;
+    $('#px-q').value=''; pxMsg(`Added ${sym} · crypto`, 'ok'); renderWatchlist(); renderMarketTable(); return;
   }
   // 2) stock via CNBC
   pxMsg(`Searching “${sym}”…`);
   const quote = await cnbcQuoteOne(sym);
   if (quote){
     customItems.push({ sym, type:'stock', name:quote.name }); customQuotes[sym] = quote; saveCustom();
-    $('#px-q').value=''; pxMsg(`Added ${quote.name} (${sym})`, 'ok'); renderMarketTable();
+    $('#px-q').value=''; pxMsg(`Added ${quote.name} (${sym})`, 'ok'); renderWatchlist(); renderMarketTable();
   } else {
     pxMsg(`“${sym}” not found as a coin or stock`, 'err');
   }
 }
 function removeCustom(sym){
   customItems = customItems.filter(c => c.sym !== sym);
-  delete customQuotes[sym]; saveCustom(); renderMarketTable();
+  delete customQuotes[sym]; saveCustom(); renderWatchlist(); renderMarketTable();
+}
+
+function renderWatchlist(){
+  const box = $('#px-watchlist');
+  if (!box) return;
+  box.replaceChildren();
+  if (!customItems.length) return;
+
+  const title = document.createElement('span');
+  title.className = 'px-watchlist-label';
+  title.textContent = 'ADDED';
+  box.append(title);
+
+  customItems.forEach(item => {
+    const chip = document.createElement('span');
+    chip.className = 'watch-chip';
+    const label = document.createElement('span');
+    label.textContent = item.sym;
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.textContent = '×';
+    remove.title = `Remove ${item.sym}`;
+    remove.setAttribute('aria-label', `Remove ${item.sym}`);
+    remove.onclick = () => removeCustom(item.sym);
+    chip.append(label, remove);
+    box.append(chip);
+  });
 }
 
 // reflect the active sort column/direction in the table headers
@@ -1313,14 +1069,6 @@ async function fetchTradFi(){
 }
 
 /* ============================================================
-   CLOCK
-   ============================================================ */
-setInterval(()=>{
-  const d = new Date();
-  $('#clock').textContent = d.toUTCString().slice(17,25);
-}, 1000);
-
-/* ============================================================
    INIT + SCHEDULERS
    ============================================================ */
 // loading skeletons for table
@@ -1330,16 +1078,7 @@ $('#ticker-body').innerHTML = Array.from({length:8}).map(()=>
 // prices watchlist: add a coin or stock by symbol
 $('#px-add').onclick = addCustom;
 $('#px-q').addEventListener('keydown', e => { if (e.key === 'Enter') addCustom(); });
-
-// ☀️/🌙 theme toggle — enables/disables the light-glass stylesheet
-function applyTheme(t){
-  if (lightCss) lightCss.disabled = (t !== 'light');
-  document.body.classList.toggle('light-mode', t === 'light');
-  const b = $('#theme-toggle'); if (b) b.textContent = (t === 'light') ? '🌙' : '☀️';
-  cacheSet('cc_theme', t);
-}
-$('#theme-toggle').onclick = () => applyTheme(isLight() ? 'dark' : 'light');
-applyTheme(cacheGet('cc_theme') || 'dark');
+renderWatchlist();
 
 // click a column header to sort by it (toggles asc/desc)
 document.querySelectorAll('#panel-table thead th[data-sort]').forEach(th => {
@@ -1352,7 +1091,6 @@ document.querySelectorAll('#panel-table thead th[data-sort]').forEach(th => {
 });
 
 fetchTickers();
-fetchBtcTick();
 fetchHype();
 fetchTradFi();
 
@@ -1361,7 +1099,6 @@ setTimeout(() => { if (!Object.keys(tradfiRows).length) fetchTradFi(); }, 5000);
 setTimeout(() => { if (!Object.keys(tradfiRows).length) fetchTradFi(); }, 15000);
 
 setInterval(fetchTickers, 5000);      // 5s price refresh (Binance)
-setInterval(fetchBtcTick, 3000);      // 3s — header BTC box (green/red on every move)
 setInterval(fetchHype, 60*1000);      // 60s (CoinGecko — HYPE)
 setInterval(fetchTradFi, 60*1000);    // 60s (CNBC — S&P/NASDAQ/Gold/Oil)
 </script>
