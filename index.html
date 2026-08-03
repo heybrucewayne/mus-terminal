@@ -274,13 +274,21 @@
   .kind-tag.t-STOCK     { color:#3fb6ff; border-color:rgba(63,182,255,.34); background:rgba(63,182,255,.10); }
   .kind-tag.t-INDEX     { color:#c77dff; border-color:rgba(199,125,255,.34); background:rgba(199,125,255,.10); }
   .kind-tag.t-COMMODITY { color:#ffd23f; border-color:rgba(255,210,63,.34); background:rgba(255,210,63,.10); }
+  .kind-tag.t-PAIR      { color:#66e2ff; border-color:rgba(102,226,255,.34); background:rgba(102,226,255,.10); }
+  .kind-tag.t-FOREX     { color:#9bdcff; border-color:rgba(155,220,255,.36); background:rgba(155,220,255,.11); }
 
   /* prices search / add */
   #panel-table .panel-body { display:flex; flex-direction:column; }
   .px-scroll { flex:1 1 auto; min-height:0; overflow-y:auto; }
-  .px-search { display:flex; gap:6px; padding:8px 10px; border-bottom:1px solid var(--border-soft); }
-  .px-search input { flex:1; }
-  .px-search .btn { padding:6px 10px; font-size:12px; }
+  .market-head { display:flex; align-items:center; gap:8px; width:100%; min-width:0; }
+  .market-sort-label { flex:0 0 auto; display:inline-flex; align-items:center; gap:3px; }
+  .px-search {
+    display:flex; flex:1 1 auto; align-items:center; gap:4px;
+    min-width:112px; max-width:250px; margin-left:auto;
+    padding:0; border:0; background:none;
+  }
+  .px-search input { flex:1 1 auto; min-width:0; height:26px; padding:4px 7px; font-size:10.5px; border-radius:7px; text-transform:none; letter-spacing:.15px; }
+  .px-search .btn { flex:0 0 27px; width:27px; height:26px; padding:0; font-size:15px; line-height:1; border-radius:7px; }
   .px-msg { font-size:10.5px; padding:0 12px; height:0; overflow:hidden; color:var(--muted); transition:height .15s, padding .15s; }
   .px-msg.show { height:auto; padding:5px 12px; }
   .px-msg.ok { color:var(--green); } .px-msg.err { color:var(--red); }
@@ -750,12 +758,12 @@
   }
 
   .px-search {
-    padding: 9px 10px;
-    background:linear-gradient(180deg,rgba(8,13,20,.48),rgba(12,18,25,.30));
-    border-bottom-color:var(--border-soft);
-    -webkit-backdrop-filter:blur(16px) saturate(135%);
-    backdrop-filter:blur(16px) saturate(135%);
-    box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
+    padding:0;
+    background:none;
+    border:0;
+    -webkit-backdrop-filter:none;
+    backdrop-filter:none;
+    box-shadow:none;
   }
 
   .px-search input { min-width: 0; }
@@ -764,12 +772,12 @@
   table.ticker thead th,
   table.ticker tbody td { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   table.ticker thead th:first-child,
-  table.ticker tbody td:first-child { width:34%; }
+  table.ticker tbody td:first-child { width:40%; }
   table.ticker thead th:not(:first-child),
-  table.ticker tbody td:not(:first-child) { width:16.5%; }
+  table.ticker tbody td:not(:first-child) { width:15%; }
   table.ticker thead th {
-    padding-top: 9px;
-    padding-bottom: 8px;
+    padding-top:5px;
+    padding-bottom:5px;
     background:linear-gradient(180deg,rgba(7,12,18,.64),rgba(11,17,24,.48));
     border-bottom-color:rgba(255,255,255,.15);
     box-shadow:inset 0 1px 0 rgba(255,255,255,.10),0 4px 12px rgba(0,0,0,.10);
@@ -785,6 +793,9 @@
     .sym-cell { gap:5px; }
     .sym-cell .quote { display:none; }
     .kind-tag { margin-left:auto; padding-left:5px; padding-right:5px; }
+    .market-head { gap:5px; }
+    .px-search { min-width:96px; max-width:155px; }
+    .px-search input { font-size:9.5px; }
   }
 
   @media (max-width: 900px) {
@@ -809,9 +820,10 @@
   }
 
   @media (max-width: 520px) {
-    .px-search { flex-wrap: wrap; }
-    .px-search input { flex: 1 1 100%; }
-    .px-search .btn { flex: 0 0 auto; }
+    .market-sort-label { font-size:9px; letter-spacing:.75px; }
+    .px-search { flex-wrap:nowrap; min-width:0; max-width:112px; }
+    .px-search input { height:24px; padding-left:6px; padding-right:6px; font-size:9px; }
+    .px-search .btn { flex-basis:24px; width:24px; height:24px; }
   }
 
 </style>
@@ -829,16 +841,20 @@
     <!-- PRICE TABLE -->
     <section class="panel" id="panel-table" aria-label="Market prices">
       <div class="panel-body">
-        <div class="px-search">
-          <input id="px-q" placeholder="Add coin, stock or commodity — e.g. ADA, AAPL, SILVER" autocomplete="off" spellcheck="false" />
-          <button class="btn" id="px-add" title="Add to list">+ ADD</button>
-        </div>
         <div id="px-msg" class="px-msg"></div>
         <div class="px-scroll scroll">
           <table class="ticker">
             <thead>
               <tr>
-                <th data-sort="mcap">Market <span class="sort-ar"></span></th>
+                <th data-sort="mcap">
+                  <div class="market-head">
+                    <span class="market-sort-label">Market <span class="sort-ar"></span></span>
+                    <div class="px-search" role="search" aria-label="Add market asset">
+                      <input id="px-q" aria-label="Coin, stock or commodity" placeholder="ADA, AAPL, SILVER…" autocomplete="off" spellcheck="false" />
+                      <button class="btn" id="px-add" type="button" title="Add to list" aria-label="Add to list">+</button>
+                    </div>
+                  </div>
+                </th>
                 <th data-sort="price">Price <span class="sort-ar"></span></th>
                 <th data-sort="chg">24h % <span class="sort-ar"></span></th>
                 <th data-sort="high">24h High <span class="sort-ar"></span></th>
@@ -926,7 +942,7 @@ function compact(n){
 function bubblePriceLabel(asset){
   const price=Number(asset?.price);
   if (!isFinite(price) || price<=0) return '—';
-  const currency=(asset.kind==='tradfi' || asset.kind==='stock') && asset.usd===false ? '' : '$';
+  const currency=asset.usd===false ? '' : '$';
   if (price>=10000) return currency+(price/1000).toFixed(1)+'K';
   if (price>=1000) return currency+fmtNum(price,0);
   if (price>=1) return currency+fmtNum(price,2);
@@ -1212,9 +1228,22 @@ function focusTrenches(force=false){
 }
 
 /* ---------- Global state ---------- */
-let tickerMap = {};        // BASE -> ticker obj (USDT pairs)
+let tickerMap = {};        // BASE -> ticker obj (USDT quoted assets)
+let tickerSymbolMap = {};  // exact Binance symbol -> ticker obj
 let tickerFetchInFlight = false;
 const EXCLUDE = /(UPUSDT|DOWNUSDT|BULLUSDT|BEARUSDT)$/;
+
+function rebuildTickerMaps(rows){
+  tickerMap={};
+  tickerSymbolMap={};
+  (Array.isArray(rows)?rows:[]).forEach(t => {
+    if (!t?.symbol) return;
+    tickerSymbolMap[t.symbol]=t;
+    if (t.symbol.endsWith('USDT') && !EXCLUDE.test(t.symbol)){
+      tickerMap[t.symbol.replace(/USDT$/,'')]=t;
+    }
+  });
+}
 
 /* ============================================================
    BINANCE TICKER FETCH (shared by bubbles and table)
@@ -1229,17 +1258,17 @@ async function fetchTickers(){
     const usdt = all.filter(t =>
       t.symbol.endsWith('USDT') && !EXCLUDE.test(t.symbol) && +t.quoteVolume > 0
     );
-    tickerMap = {};
-    usdt.forEach(t => { tickerMap[t.symbol.replace(/USDT$/,'')] = t; });
-    cacheSet('cc_tickers', usdt);
+    const reservedPairs=all.filter(t => t.symbol==='USDTTRY');
+    const cachedTickers=[...usdt,...reservedPairs];
+    rebuildTickerMaps(cachedTickers);
+    cacheSet('cc_tickers',cachedTickers);
     renderAll();
     return true;
   } catch (e) {
     console.warn('ticker fetch failed', e);
     const cached = cacheGet('cc_tickers');
     if (cached && Object.keys(tickerMap).length === 0){
-      tickerMap = {};
-      cached.forEach(t => { tickerMap[t.symbol.replace(/USDT$/,'')] = t; });
+      rebuildTickerMaps(cached);
       renderAll();
     }
     return false;
@@ -1364,7 +1393,7 @@ const bubbles = (function(){
       const spread = Math.sqrt((i+0.5)/raw.length) * Math.min(W, H) * 0.28;
       return {
         id:c.id||base, base, name:c.name||c.full||base, cls:c.cls,
-        pair:c.pair, pct:c.pct, kind:c.kind, usd:c.usd, full:c.full,
+        pair:c.pair, pct:c.pct, kind:c.kind, usd:c.usd, full:c.full, decimals:c.decimals,
         custom:Boolean(c.custom), rmsym:c.rmsym, source:c.source, cgId:c.cgId,
         tvSymbol:c.tvSymbol, tvExchange:c.tvExchange,
         price: c.price, vol: c.vol,
@@ -1438,9 +1467,7 @@ const bubbles = (function(){
       return {
         core:`hsla(145,100%,${78+mag*5}%,1)`,
         body:`hsla(150,96%,${mid}%,1)`,
-        edge:`hsla(154,100%,${24+mag*5}%,1)`,
-        ring:'hsla(150,100%,78%,.92)',
-        rimDark:'rgba(0,49,29,.62)',
+        edge:`hsla(154,96%,${39+mag*5}%,1)`,
         glow:'rgba(0,255,140,.48)',
         text:'#02160c'
       };
@@ -1449,9 +1476,7 @@ const bubbles = (function(){
       return {
         core:`hsla(351,100%,${80+mag*4}%,1)`,
         body:`hsla(348,96%,${mid}%,1)`,
-        edge:`hsla(350,100%,${29+mag*4}%,1)`,
-        ring:'hsla(350,100%,80%,.92)',
-        rimDark:'rgba(72,0,17,.64)',
+        edge:`hsla(350,96%,${42+mag*4}%,1)`,
         glow:'rgba(255,55,95,.46)',
         text:'#2a0006'
       };
@@ -1472,7 +1497,6 @@ const bubbles = (function(){
     const hover = mouse.over ? bubbleAt(mouse.x, mouse.y) : null;
     for (const n of nodes){
       const c = colorFor(n.pct);
-      const isHovered = hover === n;
       const grad = ctx.createRadialGradient(
         n.x-n.r*0.36, n.y-n.r*0.42, n.r*0.03,
         n.x+n.r*0.12, n.y+n.r*0.14, n.r*1.08
@@ -1482,20 +1506,11 @@ const bubbles = (function(){
       grad.addColorStop(0.62, c.body);
       grad.addColorStop(1, c.edge);
 
-      // Projected shadow and directional body gradient create the sphere depth.
-      ctx.save();
-      ctx.shadowColor='rgba(0,0,0,.58)';
-      ctx.shadowBlur=Math.max(8,n.r*0.25);
-      ctx.fillStyle='rgba(0,0,0,.24)';
-      ctx.beginPath();
-      ctx.ellipse(n.x+n.r*0.10,n.y+n.r*0.76,n.r*0.66,n.r*0.15,-0.06,0,Math.PI*2);
-      ctx.fill();
-      ctx.restore();
-
+      // Directional body gradient creates depth without a detached floor shadow.
       ctx.save();
       ctx.shadowColor = c.glow;
-      ctx.shadowBlur = isHovered ? 28 : Math.max(14, Math.min(22,n.r*0.34));
-      ctx.shadowOffsetY = Math.max(2,n.r*0.08);
+      ctx.shadowBlur = Math.max(14,Math.min(22,n.r*0.34));
+      ctx.shadowOffsetY = 0;
       ctx.beginPath();
       ctx.arc(n.x, n.y, n.r, 0, Math.PI*2);
       ctx.fillStyle = grad;
@@ -1511,7 +1526,7 @@ const bubbles = (function(){
       const depth=ctx.createLinearGradient(n.x,n.y-n.r,n.x,n.y+n.r);
       depth.addColorStop(0,'rgba(255,255,255,.10)');
       depth.addColorStop(0.52,'rgba(255,255,255,0)');
-      depth.addColorStop(1,'rgba(0,0,0,.30)');
+      depth.addColorStop(1,'rgba(0,0,0,.11)');
       ctx.fillStyle=depth;
       ctx.fillRect(n.x-n.r,n.y-n.r,n.r*2,n.r*2);
 
@@ -1541,29 +1556,14 @@ const bubbles = (function(){
       ctx.fillRect(n.x-n.r,n.y,n.r*2,n.r);
       ctx.restore();
 
-      // Split rim lighting reinforces the top-lit, rounded silhouette.
-      ctx.lineCap='round';
-      ctx.lineWidth = isHovered ? 2.2 : 1.55;
-      ctx.strokeStyle = c.ring;
+      // A single restrained outline keeps the sphere clean without split arcs.
+      ctx.save();
+      ctx.lineWidth=0.7;
+      ctx.strokeStyle='rgba(255,255,255,.20)';
       ctx.beginPath();
-      ctx.arc(n.x,n.y,n.r-0.75,Math.PI*1.15,Math.PI*1.86);
+      ctx.arc(n.x,n.y,n.r-0.65,0,Math.PI*2);
       ctx.stroke();
-      ctx.lineWidth=Math.max(1,n.r*0.035);
-      ctx.strokeStyle=c.rimDark;
-      ctx.beginPath();
-      ctx.arc(n.x,n.y,n.r-0.9,Math.PI*0.10,Math.PI*0.90);
-      ctx.stroke();
-      ctx.lineCap='butt';
-
-      if (isHovered){
-        ctx.save();
-        ctx.strokeStyle='rgba(255,255,255,.70)';
-        ctx.lineWidth=1;
-        ctx.beginPath();
-        ctx.arc(n.x,n.y,n.r+3,0,Math.PI*2);
-        ctx.stroke();
-        ctx.restore();
-      }
+      ctx.restore();
       // labels
       if (n.r >= 19){
         const fs = Math.max(9, Math.min(n.r*0.36,16));
@@ -1608,18 +1608,19 @@ const bubbles = (function(){
     } else if (hover && mouse.over){
       tip.style.display='block';
       const isT = hover.kind === 'tradfi' || hover.kind === 'stock';
-      const cur = isT ? (hover.usd ? '$' : '') : '$';
-      const priceTxt = isT ? cur+fmtNum(hover.price,2) : '$'+smartPrice(hover.price);
+      const cur = hover.usd===false ? '' : '$';
+      const fixedDigits=Number.isInteger(hover.decimals) ? hover.decimals : (isT ? 2 : null);
+      const priceTxt = cur+(fixedDigits==null ? smartPrice(hover.price) : fmtNum(hover.price,fixedDigits));
       const hiloTxt = isT
-        ? (hover.high!=null ? `${cur}${fmtNum(hover.high,2)} / ${cur}${fmtNum(hover.low,2)}` : '—')
-        : `${smartPrice(hover.high)} / ${smartPrice(hover.low)}`;
+        ? (hover.high!=null ? `${cur}${fmtNum(hover.high,fixedDigits)} / ${cur}${fmtNum(hover.low,fixedDigits)}` : '—')
+        : `${fixedDigits==null?smartPrice(hover.high):fmtNum(hover.high,fixedDigits)} / ${fixedDigits==null?smartPrice(hover.low):fmtNum(hover.low,fixedDigits)}`;
       const symLabel = isT ? (hover.full||hover.base)
         : `${hover.base}<span style="color:var(--muted2);font-weight:500">${hover.pair||''}</span>`;
       let html =
         `<div class="t-sym">${symLabel}</div>`+
         `<div class="t-row"><span class="k">Price</span><span class="num">${priceTxt}</span></div>`+
         `<div class="t-row"><span class="k">24h Chg</span><span class="num ${hover.pct>=0?'pos':'neg'}">${hover.pct>=0?'+':''}${hover.pct.toFixed(2)}%</span></div>`;
-      if (hover.vol) html += `<div class="t-row"><span class="k">${isT?'Volume':'24h Vol'}</span><span class="num">${isT?'':'$'}${compact(hover.vol)}</span></div>`;
+      if (hover.vol) html += `<div class="t-row"><span class="k">${isT?'Volume':'24h Vol'}</span><span class="num">${isT || hover.usd===false?'':'$'}${compact(hover.vol)}</span></div>`;
       html += `<div class="t-row"><span class="k">${isT?'Day H/L':'H / L'}</span><span class="num">${hiloTxt}</span></div>`;
       tip.innerHTML = html;
       const pad=14;
@@ -1733,10 +1734,30 @@ const CUSTOM_TRADFI_INPUTS = {
   SILVER:'SILVER', XAG:'SILVER', XAGUSD:'SILVER', GUMUS:'SILVER', 'GÜMÜŞ':'SILVER'
 };
 
+const CUSTOM_PAIR_ALIASES = {
+  USDTTRY: {
+    sym:'USDTTRY', type:'crypto_pair', source:'binance', name:'USDT/TRY', sub:'BINANCE', cls:'PAIR',
+    binanceSymbol:'USDTTRY', tvSymbol:'USDTTRY', tvExchange:'BINANCE', usd:false, decimals:3
+  },
+  USDTRY: {
+    sym:'USDTRY', type:'forex', source:'yahoo', name:'USD/TRY', sub:'FX', cls:'FOREX',
+    ysym:'TRY=X', tvSymbol:'USDTRY', tvExchange:'FX_IDC', usd:false, decimals:4
+  }
+};
+const CUSTOM_PAIR_INPUTS = {
+  USDTTRY:'USDTTRY', USDTRY:'USDTRY', USIRYY:'USDTRY', USDTRYY:'USDTRY'
+};
+
 function customTradFiAlias(rawInput){
-  const key=String(rawInput||'').trim().toUpperCase().replace(/\s+/g,'');
+  const key=String(rawInput||'').trim().toUpperCase().replace(/[^A-Z0-9ÇĞİÖŞÜ]/g,'');
   const aliasKey=CUSTOM_TRADFI_INPUTS[key];
   return aliasKey ? { ...CUSTOM_TRADFI_ALIASES[aliasKey] } : null;
+}
+
+function customPairAlias(rawInput){
+  const key=String(rawInput||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const aliasKey=CUSTOM_PAIR_INPUTS[key];
+  return aliasKey ? { ...CUSTOM_PAIR_ALIASES[aliasKey] } : null;
 }
 
 let hypeRow      = cacheGet('cc_hype')    || null;  // HYPE via CoinGecko (not on Binance)
@@ -1761,6 +1782,30 @@ if (repairedLegacySilver){
   delete customCoinQuotes.SILVER;
   cacheSet('cc_custom', customItems);
   cacheSet('cc_custom_cgq', customCoinQuotes);
+}
+
+let repairedLegacyPairs=false;
+customItems=customItems.map(item => {
+  const symbol=String(item?.sym||'').toUpperCase();
+  if ((symbol==='USDTRY' || symbol==='USIRYY' || symbol==='USDTRYY') && (symbol!=='USDTRY' || item.type!=='forex')){
+    repairedLegacyPairs=true;
+    return { ...CUSTOM_PAIR_ALIASES.USDTRY };
+  }
+  if (symbol==='USDTTRY' && item.type!=='crypto_pair'){
+    repairedLegacyPairs=true;
+    return { ...CUSTOM_PAIR_ALIASES.USDTTRY };
+  }
+  return item;
+});
+if (repairedLegacyPairs){
+  customItems=[...new Map(customItems.map(item=>[item.sym,item])).values()];
+  delete customQuotes.USIRYY;
+  delete customQuotes.USDTRYY;
+  delete customCoinQuotes.USDTTRY;
+  delete customCoinQuotes.USDTRY;
+  cacheSet('cc_custom',customItems);
+  cacheSet('cc_customq',customQuotes);
+  cacheSet('cc_custom_cgq',customCoinQuotes);
 }
 let hiddenAssets = Array.isArray(cachedHiddenAssets)
   ? [...new Set(cachedHiddenAssets.filter(id => typeof id === 'string'))]
@@ -1794,8 +1839,17 @@ function customAssetSnapshot(c){
     cgId:c.cgId,
     tvSymbol:c.tvSymbol,
     tvExchange:c.tvExchange,
-    usd:c.usd !== false
+    usd:c.usd !== false,
+    decimals:c.decimals
   };
+  if (c.type==='crypto_pair'){
+    const t=tickerSymbolMap[c.binanceSymbol || c.sym];
+    if (!t) return null;
+    return { ...common, sub:c.sub||'', kind:'crypto', cls:c.cls||'PAIR',
+      historyProvider:'binance', historySymbol:c.binanceSymbol || c.sym,
+      price:+t.lastPrice, chg:+t.priceChangePercent,
+      high:+t.highPrice, low:+t.lowPrice, vol:+t.quoteVolume, mcap:0 };
+  }
   if (c.type === 'crypto'){
     if (c.source === 'coingecko'){
       const d = customCoinQuotes[c.sym];
@@ -1814,7 +1868,9 @@ function customAssetSnapshot(c){
   }
   const d = customQuotes[c.sym];
   const isCommodity=c.type==='commodity';
-  return { ...common, sub:isCommodity ? (c.sub||'') : '', kind:isCommodity ? 'tradfi' : 'stock', cls:isCommodity ? (c.cls||'COMMODITY') : 'STOCK',
+  const isForex=c.type==='forex';
+  const isTradFi=isCommodity || isForex;
+  return { ...common, sub:isTradFi ? (c.sub||'') : '', kind:isTradFi ? 'tradfi' : 'stock', cls:isCommodity ? (c.cls||'COMMODITY') : isForex ? (c.cls||'FOREX') : 'STOCK',
     historyProvider:'yahoo', historySymbol:c.ysym || c.sym.replace(/\./g,'-'),
     price:d ? d.price : null, chg:d ? d.chgPct : 0,
     high:d ? d.high : null, low:d ? d.low : null,
@@ -1831,6 +1887,7 @@ function defaultAssetIdForSymbol(sym){
 function tradingViewSymbol(asset){
   const id = asset.id || '';
   if (asset.kind === 'crypto'){
+    if (asset.tvSymbol) return `${asset.tvExchange || 'BINANCE'}:${asset.tvSymbol}`;
     if (asset.source === 'coingecko'){
       if (asset.tvSymbol && asset.tvExchange){
         return `${asset.tvExchange}:${asset.tvSymbol}`;
@@ -2270,7 +2327,8 @@ function renderMarketTable(){
     let flash=''; if (r.price!=null && prev!==undefined && prev!==r.price) flash = r.price>prev ? 'fu':'fd';
     if (r.price!=null) prevPrices[r.id] = r.price;
     const eq = (r.kind==='tradfi' || r.kind==='stock');          // equity-style formatting (2 decimals)
-    const fmtP = v => (v==null || (eq && v<=0)) ? null : (eq ? fmtNum(v,2) : smartPrice(v));
+    const fixedDigits=Number.isInteger(r.decimals) ? r.decimals : (eq ? 2 : null);
+    const fmtP = v => (v==null || (eq && v<=0)) ? null : (fixedDigits==null ? smartPrice(v) : fmtNum(v,fixedDigits));
     const cur = r.usd ? '$' : '';
     const priceStr = fmtP(r.price)!=null ? cur+fmtP(r.price) : '<span style="color:var(--muted2)">…</span>';
     const highStr  = fmtP(r.high)!=null ? fmtP(r.high) : '—';
@@ -2384,6 +2442,26 @@ function pxMsg(text, kind){
   el.textContent = text || '';
   el.className = 'px-msg' + (text?' show':'') + (kind?' '+kind:'');
 }
+
+async function binancePairQuoteOne(symbol){
+  try {
+    const r=await fetchWithTimeout(`https://api.binance.com/api/v3/ticker/24hr?symbol=${encodeURIComponent(symbol)}`,{cache:'no-store'},10000);
+    if (!r.ok) return null;
+    const t=await r.json();
+    if (!isFinite(+t.lastPrice)) return null;
+    return t;
+  } catch(e){ return null; }
+}
+
+async function yahooQuoteOne(symbol){
+  try {
+    const r=await fetchWithTimeout(`${APP_API_ORIGIN}/api/quote?symbol=${encodeURIComponent(symbol)}`,{cache:'no-store'},12000);
+    if (!r.ok) return null;
+    const quote=await r.json();
+    return isFinite(+quote.price) ? quote : null;
+  } catch(e){ return null; }
+}
+
 async function cnbcQuoteOne(sym){
   try {
     const r = await fetch('https://quote.cnbc.com/quote-html-webservice/quote.htm?requestMethod=quick&fund=1&exthrs=1&output=json&symbols='+encodeURIComponent(sym), { cache:'no-store' });
@@ -2491,6 +2569,21 @@ async function fetchCustomCoinGecko(){
   } catch(e){ console.warn('custom CoinGecko refresh failed', e); }
 }
 
+async function fetchCustomForex(){
+  const forexItems=customItems.filter(c => c.type==='forex' && c.ysym);
+  if (!forexItems.length) return;
+  const results=await Promise.all(forexItems.map(async item => [item,await yahooQuoteOne(item.ysym)]));
+  let changed=false;
+  results.forEach(([item,quote]) => {
+    if (!quote) return;
+    customQuotes[item.sym]=quote;
+    changed=true;
+  });
+  if (!changed) return;
+  saveCustom();
+  renderAll();
+}
+
 async function addCustom(){
   const rawInput=($('#px-q').value||'').trim();
   const command=rawInput.toLowerCase().replace(/\s+/g,' ');
@@ -2499,9 +2592,9 @@ async function addCustom(){
     focusTrenches(command.endsWith(' refresh'));
     return;
   }
-  const tradFiAlias=customTradFiAlias(rawInput);
+  const specialAlias=customTradFiAlias(rawInput) || customPairAlias(rawInput);
   const rawSym = rawInput.toUpperCase().replace(/[^A-Z0-9.\-]/g,'');
-  const sym = tradFiAlias?.sym || (rawSym === 'BACKPACK' ? 'BP' : rawSym);
+  const sym = specialAlias?.sym || (rawSym === 'BACKPACK' ? 'BP' : rawSym);
   if (!sym){ $('#px-q').focus(); return; }
   const defaultId=defaultAssetIdForSymbol(sym);
   if (defaultId && isAssetHidden(defaultId)){
@@ -2514,12 +2607,11 @@ async function addCustom(){
   }
   const existingCustom = customItems.find(c => c.sym === sym);
   let replaceExistingStock = false;
+  let replaceExistingSpecial = false;
   if (existingCustom){
-    const shouldReplaceWithTradFi=tradFiAlias && existingCustom.type!==tradFiAlias.type;
-    if (shouldReplaceWithTradFi){
-      customItems=customItems.filter(c=>c.sym!==sym);
-      delete customQuotes[sym];
-      delete customCoinQuotes[sym];
+    const shouldReplaceWithSpecial=specialAlias && existingCustom.type!==specialAlias.type;
+    if (shouldReplaceWithSpecial){
+      replaceExistingSpecial=true;
     } else {
       const alias = COINGECKO_ALIASES[sym];
       const isRequestedCoinMissing = alias && existingCustom.type !== 'crypto';
@@ -2530,19 +2622,34 @@ async function addCustom(){
     pxMsg(`${sym} is already in the list`, 'err');
     return;
   }
-  // Commodity aliases take priority over crypto symbols with the same name.
-  if (tradFiAlias){
-    pxMsg(`Loading ${tradFiAlias.name} commodity…`);
-    const quote=await customTradFiQuoteOne(tradFiAlias);
-    if (!quote){
-      pxMsg(`${tradFiAlias.name} commodity price could not be loaded right now`, 'err');
-      return;
+  // Reserved commodities, Binance pairs and FX pairs take priority over
+  // similarly named coins or stock symbols.
+  if (specialAlias){
+    let quote=null;
+    if (specialAlias.type==='commodity'){
+      pxMsg(`Loading ${specialAlias.name} commodity…`);
+      quote=await customTradFiQuoteOne(specialAlias);
+      if (!quote){
+        pxMsg(`${specialAlias.name} commodity price could not be loaded right now`, 'err');
+        return;
+      }
+    } else if (specialAlias.type==='crypto_pair'){
+      quote=tickerSymbolMap[specialAlias.binanceSymbol] || await binancePairQuoteOne(specialAlias.binanceSymbol);
+    } else if (specialAlias.type==='forex'){
+      quote=await yahooQuoteOne(specialAlias.ysym);
     }
-    customItems.push(tradFiAlias);
-    customQuotes[tradFiAlias.sym]=quote;
+    if (replaceExistingSpecial){
+      customItems=customItems.filter(c=>c.sym!==sym);
+      delete customQuotes[sym];
+      delete customCoinQuotes[sym];
+    }
+    customItems.push(specialAlias);
+    if (specialAlias.type==='crypto_pair' && quote) tickerSymbolMap[specialAlias.binanceSymbol]=quote;
+    else if (quote) customQuotes[specialAlias.sym]=quote;
     saveCustom();
     $('#px-q').value='';
-    pxMsg(`Added ${tradFiAlias.name} · commodity`, 'ok');
+    const typeLabel=specialAlias.type==='crypto_pair'?'Binance pair':specialAlias.type==='forex'?'forex':'commodity';
+    pxMsg(`Added ${specialAlias.name} · ${typeLabel}${quote?'':' · price loading'}`, 'ok');
     renderAll();
     return;
   }
@@ -2706,7 +2813,8 @@ setupPanelResizers();
 
 // click a column header to sort by it (toggles asc/desc)
 document.querySelectorAll('#panel-table thead th[data-sort]').forEach(th => {
-  th.addEventListener('click', () => {
+  th.addEventListener('click', event => {
+    if (event.target.closest('.px-search')) return;
     const key = th.dataset.sort;
     if (tableSort.key === key) tableSort.dir *= -1;
     else tableSort = { key, dir: -1 };   // new column starts descending (highest first)
@@ -2718,6 +2826,7 @@ fetchTickers();
 fetchHype();
 fetchTradFi();
 fetchCustomCoinGecko();
+fetchCustomForex();
 loadTrenches(false);
 
 // early retries: if no TradFi loaded yet (a proxy was briefly down), try again soon
@@ -2727,6 +2836,7 @@ setTimeout(() => { if (!Object.keys(tradfiRows).length) fetchTradFi(); }, 15000)
 setInterval(fetchTickers, 5000);      // 5s price refresh (Binance)
 setInterval(fetchHype, 60*1000);      // 60s (CoinGecko — HYPE)
 setInterval(fetchCustomCoinGecko, 60*1000); // 60s (added CoinGecko coins)
+setInterval(fetchCustomForex, 60*1000); // 60s (added FX pairs)
 setInterval(fetchTradFi, 60*1000);    // 60s (CNBC — S&P/NASDAQ/Gold/Oil)
 setInterval(() => loadTrenches(false), TRENCH_AUTO_MS); // 16m SOL Meme Trenches scan
 </script>
