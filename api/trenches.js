@@ -359,7 +359,7 @@ async function buildScan() {
 
   return {
     generatedAt: new Date().toISOString(),
-    autoRefreshMs: 3 * 60 * 60 * 1000,
+    autoRefreshMs: 16 * 60 * 1000,
     scannedCount: classified.length,
     tokens: visible,
     eliminatedCount: eliminated.length,

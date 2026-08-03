@@ -855,7 +855,7 @@ function setupPanelResizers(){
    ============================================================ */
 const TRENCH_CACHE_KEY = 'mus_trenches_cache_v1';
 const TRENCH_PREVIOUS_KEY = 'mus_trenches_previous_v1';
-const TRENCH_AUTO_MS = 3 * 60 * 60 * 1000;
+const TRENCH_AUTO_MS = 16 * 60 * 1000;
 const TRENCH_API_BASE = `${APP_API_ORIGIN}/api/trenches`;
 let trenchesLoading = false;
 
@@ -1987,7 +1987,7 @@ setInterval(fetchTickers, 5000);      // 5s price refresh (Binance)
 setInterval(fetchHype, 60*1000);      // 60s (CoinGecko — HYPE)
 setInterval(fetchCustomCoinGecko, 60*1000); // 60s (added CoinGecko coins)
 setInterval(fetchTradFi, 60*1000);    // 60s (CNBC — S&P/NASDAQ/Gold/Oil)
-setInterval(() => loadTrenches(false), TRENCH_AUTO_MS); // 3h SOL Meme Trenches scan
+setInterval(() => loadTrenches(false), TRENCH_AUTO_MS); // 16m SOL Meme Trenches scan
 </script>
 </body>
 </html>
