@@ -251,8 +251,13 @@
   .px-msg { font-size:10px; padding:0 12px; height:0; overflow:hidden; color:var(--muted); transition:height .15s, padding .15s; }
   .px-msg.show { height:auto; padding:5px 12px; }
   .px-msg.ok { color:var(--green); } .px-msg.err { color:var(--red); }
-  .x-row { background:none; border:none; color:var(--muted2); cursor:pointer; font-size:13px; line-height:1; padding:0 0 0 4px; transition:color .12s; }
-  .x-row:hover { color:var(--red); }
+  .x-row {
+    background:rgba(255,68,102,.08); border:1px solid rgba(255,68,102,.32);
+    border-radius:5px; color:var(--red); cursor:pointer; font-size:8px;
+    font-weight:700; letter-spacing:.06em; line-height:1; padding:4px 6px;
+    transition:background .12s, border-color .12s, color .12s;
+  }
+  .x-row:hover { background:rgba(255,68,102,.2); border-color:var(--red); color:#fff; }
 
   @keyframes flashUp { 0%{ background: rgba(0,255,136,0.22);} 100%{ background: transparent;} }
   @keyframes flashDown { 0%{ background: rgba(255,68,102,0.22);} 100%{ background: transparent;} }
@@ -335,13 +340,18 @@
   }
 
   body {
-    background:
-      radial-gradient(700px 420px at 78% -8%, rgba(0, 255, 170, 0.13), transparent 70%),
-      radial-gradient(560px 380px at 7% 106%, rgba(45, 118, 255, 0.1), transparent 72%),
-      var(--bg);
+    background: #071416;
   }
 
-  body::before { opacity: 0.34; filter: saturate(110%); }
+  body::before {
+    z-index: -1;
+    inset: -18px;
+    opacity: 0.82;
+    background:
+      linear-gradient(135deg, rgba(4, 14, 15, 0.52), rgba(3, 10, 15, 0.68)),
+      url('background.jpeg') center / cover no-repeat;
+    filter: blur(8px) saturate(90%);
+  }
 
   #app {
     width: min(1680px, 100%);
@@ -365,12 +375,12 @@
   .panel {
     min-width: 0;
     min-height: 0;
-    border: 1px solid rgba(174, 220, 198, 0.13);
+    border: 1px solid rgba(214, 255, 240, 0.2);
     border-radius: 14px;
-    background: linear-gradient(145deg, rgba(18, 34, 32, 0.86), rgba(7, 16, 19, 0.88));
-    box-shadow: 0 16px 38px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-    -webkit-backdrop-filter: blur(16px) saturate(125%);
-    backdrop-filter: blur(16px) saturate(125%);
+    background: linear-gradient(145deg, rgba(18, 38, 36, 0.58), rgba(5, 17, 20, 0.5));
+    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    -webkit-backdrop-filter: blur(22px) saturate(135%);
+    backdrop-filter: blur(22px) saturate(135%);
   }
 
   .panel::before {
@@ -381,8 +391,8 @@
   .panel-head {
     min-height: 45px;
     padding: 10px 13px;
-    background: rgba(255, 255, 255, 0.018);
-    border-bottom-color: rgba(174, 220, 198, 0.1);
+    background: rgba(255, 255, 255, 0.06);
+    border-bottom-color: rgba(214, 255, 240, 0.14);
   }
 
   .panel-head h2 { font-size: 0.62rem; letter-spacing: 0.16em; }
@@ -405,7 +415,7 @@
 
   .px-search {
     padding: 9px 10px;
-    background: rgba(3, 10, 12, 0.42);
+    background: rgba(255, 255, 255, 0.06);
   }
 
   .px-search input { min-width: 0; }
@@ -912,7 +922,7 @@ function renderMarketTable(){
     const highStr  = fmtP(r.high)!=null ? fmtP(r.high) : '—';
     const lowStr   = fmtP(r.low) !=null ? fmtP(r.low)  : '—';
     const tag = r.cls ? `<span class="kind-tag t-${r.cls}">${r.cls}</span>` : '';
-    const rm  = r.custom ? `<button class="x-row" data-rm="${r.rmsym}" title="Remove ${r.name}" aria-label="Remove ${r.name}">×</button>` : '';
+    const rm  = r.custom ? `<button class="x-row" data-rm="${r.rmsym}" title="Remove ${r.name}" aria-label="Remove ${r.name}">REMOVE</button>` : '';
     return `<tr>
       <td><div class="sym-cell"><span class="rank">${i+1}</span><span class="base">${r.name}</span><span class="quote">${r.sub}</span>${tag}${rm}</div></td>
       <td class="pricecell num ${flash}">${priceStr}</td>
