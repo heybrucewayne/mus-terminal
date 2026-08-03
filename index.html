@@ -894,15 +894,21 @@ let hypeRow      = cacheGet('cc_hype')    || null;  // HYPE via CoinGecko (not o
 let tradfiRows   = cacheGet('cc_tradfi')  || {};    // key -> CNBC row
 const cachedCustomItems = cacheGet('cc_custom');
 const cachedCustomQuotes = cacheGet('cc_customq');
+const cachedCustomCoinQuotes = cacheGet('cc_custom_cgq');
 const cachedHiddenAssets = cacheGet('cc_hidden_assets');
 let customItems  = Array.isArray(cachedCustomItems) ? cachedCustomItems : [];
 let customQuotes = cachedCustomQuotes && typeof cachedCustomQuotes === 'object' ? cachedCustomQuotes : {};
+let customCoinQuotes = cachedCustomCoinQuotes && typeof cachedCustomCoinQuotes === 'object' ? cachedCustomCoinQuotes : {};
 let hiddenAssets = Array.isArray(cachedHiddenAssets)
   ? [...new Set(cachedHiddenAssets.filter(id => typeof id === 'string'))]
   : [];
 let prevPrices = {};
 let tableSort  = { key:'mcap', dir:-1 };           // default: market cap, descending
-const saveCustom = () => { cacheSet('cc_custom', customItems); cacheSet('cc_customq', customQuotes); };
+const saveCustom = () => {
+  cacheSet('cc_custom', customItems);
+  cacheSet('cc_customq', customQuotes);
+  cacheSet('cc_custom_cgq', customCoinQuotes);
+};
 const saveHiddenAssets = () => cacheSet('cc_hidden_assets', hiddenAssets);
 let activeAssetMenu = null;
 
@@ -916,6 +922,12 @@ function defaultAssetIdForSymbol(sym){
 function tradingViewUrl(asset){
   const id = asset.id || '';
   if (asset.kind === 'crypto'){
+    if (asset.source === 'coingecko'){
+      if (asset.tvSymbol && asset.tvExchange){
+        return `https://www.tradingview.com/symbols/${encodeURIComponent(asset.tvSymbol)}/?exchange=${encodeURIComponent(asset.tvExchange)}`;
+      }
+      return `https://www.tradingview.com/search/?query=${encodeURIComponent(asset.name)}`;
+    }
     const symbol = id === 'HYPE' ? 'HYPEUSDT' : `${asset.name}USDT`;
     const exchange = id === 'HYPE' ? 'BYBIT' : 'BINANCE';
     return `https://www.tradingview.com/symbols/${encodeURIComponent(symbol)}/?exchange=${exchange}`;
@@ -1010,10 +1022,18 @@ function renderMarketTable(){
   // user-added watchlist items (kept out of the bubbles; mcap:0 → sorts to the bottom by default)
   customItems.forEach(c => {
     if (c.type === 'crypto'){
-      const t = tickerMap[c.sym]; if (!t) return;
-      const price = +t.lastPrice;
-      rows.push({ id:'c:'+c.sym, rmsym:c.sym, custom:true, name:c.sym, sub:'/USDT', kind:'crypto', cls:'COIN', usd:true,
-        price, chg:+t.priceChangePercent, high:+t.highPrice, low:+t.lowPrice, vol:+t.quoteVolume, mcap:0 });
+      if (c.source === 'coingecko'){
+        const d = customCoinQuotes[c.sym];
+        rows.push({ id:'c:'+c.sym, rmsym:c.sym, custom:true, name:c.sym, sub:'/USD', kind:'crypto', cls:'COIN', usd:true,
+          source:c.source, cgId:c.cgId, tvSymbol:c.tvSymbol, tvExchange:c.tvExchange,
+          price:d ? d.price : null, chg:d ? d.chg : 0, high:d ? d.high : null, low:d ? d.low : null,
+          vol:d ? d.vol : null, mcap:d ? d.mcap : 0 });
+      } else {
+        const t = tickerMap[c.sym]; if (!t) return;
+        const price = +t.lastPrice;
+        rows.push({ id:'c:'+c.sym, rmsym:c.sym, custom:true, name:c.sym, sub:'/USDT', kind:'crypto', cls:'COIN', usd:true,
+          price, chg:+t.priceChangePercent, high:+t.highPrice, low:+t.lowPrice, vol:+t.quoteVolume, mcap:0 });
+      }
     } else {
       const d = customQuotes[c.sym];
       rows.push({ id:'c:'+c.sym, rmsym:c.sym, custom:true, name:c.sym, sub:'', kind:'stock', cls:'STOCK', usd:true,
@@ -1056,7 +1076,7 @@ function renderMarketTable(){
   });
 }
 
-/* ---- watchlist add/remove (coins via Binance, stocks via CNBC) ---- */
+/* ---- watchlist add/remove (coins via Binance/CoinGecko, stocks via CNBC) ---- */
 function isKnownSymbol(sym){
   const defaultId=defaultAssetIdForSymbol(sym);
   return (defaultId && !isAssetHidden(defaultId)) || customItems.some(c=>c.sym===sym);
@@ -1079,8 +1099,87 @@ async function cnbcQuoteOne(sym){
              high:parseFloat(x.high)||null, low:parseFloat(x.low)||null, vol:x.volume?parseFloat(x.volume):null, name:x.name||sym };
   } catch(e){ return null; }
 }
+
+const COINGECKO_BASE = 'https://api.coingecko.com/api/v3';
+const COINGECKO_ALIASES = {
+  BP: { id:'backpack', name:'Backpack', tvSymbol:'BPUSDT', tvExchange:'MEXC' }
+};
+
+function normalizeCoinGeckoQuote(c){
+  if (!c || !isFinite(+c.current_price)) return null;
+  return {
+    price:+c.current_price,
+    chg:isFinite(+c.price_change_percentage_24h) ? +c.price_change_percentage_24h : 0,
+    high:isFinite(+c.high_24h) ? +c.high_24h : null,
+    low:isFinite(+c.low_24h) ? +c.low_24h : null,
+    vol:isFinite(+c.total_volume) ? +c.total_volume : null,
+    mcap:isFinite(+c.market_cap) ? +c.market_cap : 0
+  };
+}
+
+async function coinGeckoMarket(ids){
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (!unique.length) return [];
+  const url = `${COINGECKO_BASE}/coins/markets?vs_currency=usd&ids=${encodeURIComponent(unique.join(','))}&price_change_percentage=24h`;
+  const r = await fetch(url, { cache:'no-store' });
+  if (!r.ok) throw new Error('CoinGecko HTTP '+r.status);
+  const data = await r.json();
+  return Array.isArray(data) ? data : [];
+}
+
+async function coinGeckoCoinOne(sym){
+  try {
+    const alias = COINGECKO_ALIASES[sym];
+    let match = alias ? { id:alias.id, name:alias.name, symbol:sym } : null;
+    if (!match){
+      const r = await fetch(`${COINGECKO_BASE}/search?query=${encodeURIComponent(sym)}`, { cache:'no-store' });
+      if (!r.ok) throw new Error('CoinGecko search HTTP '+r.status);
+      const data = await r.json();
+      const exact = (Array.isArray(data.coins) ? data.coins : [])
+        .filter(c => String(c.symbol || '').toUpperCase() === sym)
+        .sort((a,b) => (a.market_cap_rank || Infinity) - (b.market_cap_rank || Infinity));
+      match = exact[0] || null;
+    }
+    if (!match) return null;
+    const market = (await coinGeckoMarket([match.id]))[0];
+    const quote = normalizeCoinGeckoQuote(market);
+    if (!quote) return null;
+    return {
+      item:{
+        sym,
+        type:'crypto',
+        source:'coingecko',
+        cgId:match.id,
+        name:match.name || sym,
+        tvSymbol:alias && alias.tvSymbol,
+        tvExchange:alias && alias.tvExchange
+      },
+      quote
+    };
+  } catch(e){
+    console.warn('CoinGecko coin search failed', e);
+    return null;
+  }
+}
+
+async function fetchCustomCoinGecko(){
+  const coins = customItems.filter(c => c.type === 'crypto' && c.source === 'coingecko' && c.cgId);
+  if (!coins.length) return;
+  try {
+    const markets = await coinGeckoMarket(coins.map(c => c.cgId));
+    const byId = new Map(markets.map(c => [c.id, c]));
+    coins.forEach(item => {
+      const quote = normalizeCoinGeckoQuote(byId.get(item.cgId));
+      if (quote) customCoinQuotes[item.sym] = quote;
+    });
+    saveCustom();
+    renderMarketTable();
+  } catch(e){ console.warn('custom CoinGecko refresh failed', e); }
+}
+
 async function addCustom(){
-  const sym = ($('#px-q').value||'').trim().toUpperCase().replace(/[^A-Z0-9.\-]/g,'');
+  const rawSym = ($('#px-q').value||'').trim().toUpperCase().replace(/[^A-Z0-9.\-]/g,'');
+  const sym = rawSym === 'BACKPACK' ? 'BP' : rawSym;
   if (!sym){ $('#px-q').focus(); return; }
   const defaultId=defaultAssetIdForSymbol(sym);
   if (defaultId && isAssetHidden(defaultId)){
@@ -1091,14 +1190,44 @@ async function addCustom(){
     pxMsg(`Restored ${sym} to list`, 'ok');
     return;
   }
-  if (isKnownSymbol(sym)){ pxMsg(`${sym} is already in the list`, 'err'); return; }
+  const existingCustom = customItems.find(c => c.sym === sym);
+  let replaceExistingStock = false;
+  if (existingCustom){
+    const alias = COINGECKO_ALIASES[sym];
+    const isRequestedCoinMissing = alias && existingCustom.type !== 'crypto';
+    if (!isRequestedCoinMissing){ pxMsg(`${sym} is already in the list`, 'err'); return; }
+    replaceExistingStock = true;
+  } else if (isKnownSymbol(sym)){
+    pxMsg(`${sym} is already in the list`, 'err');
+    return;
+  }
   // 1) crypto on Binance?
   if (tickerMap[sym]){
     customItems.push({ sym, type:'crypto' }); saveCustom();
     $('#px-q').value=''; pxMsg(`Added ${sym} · crypto`, 'ok'); renderWatchlist(); renderMarketTable(); return;
   }
-  // 2) stock via CNBC
+  // 2) coins not listed on Binance (including Backpack/BP)
   pxMsg(`Searching “${sym}”…`);
+  const coin = await coinGeckoCoinOne(sym);
+  if (coin){
+    if (replaceExistingStock){
+      customItems = customItems.filter(c => c.sym !== sym);
+      delete customQuotes[sym];
+    }
+    customItems.push(coin.item);
+    customCoinQuotes[sym] = coin.quote;
+    saveCustom();
+    $('#px-q').value='';
+    pxMsg(`Added ${coin.item.name} (${sym}) · crypto`, 'ok');
+    renderWatchlist();
+    renderMarketTable();
+    return;
+  }
+  if (replaceExistingStock){
+    pxMsg(`Backpack (BP) price could not be loaded right now`, 'err');
+    return;
+  }
+  // 3) stock via CNBC
   const quote = await cnbcQuoteOne(sym);
   if (quote){
     customItems.push({ sym, type:'stock', name:quote.name }); customQuotes[sym] = quote; saveCustom();
@@ -1130,6 +1259,7 @@ function removeCustom(sym){
     return false;
   }
   delete customQuotes[symbol];
+  delete customCoinQuotes[symbol];
   saveCustom();
   renderWatchlist();
   renderMarketTable();
@@ -1161,6 +1291,10 @@ function renderWatchlist(){
       name:item.sym,
       kind:item.type,
       cls:item.type === 'crypto' ? 'COIN' : 'STOCK',
+      source:item.source,
+      cgId:item.cgId,
+      tvSymbol:item.tvSymbol,
+      tvExchange:item.tvExchange,
       custom:true
     }, chip);
     box.append(chip);
@@ -1262,6 +1396,7 @@ document.querySelectorAll('#panel-table thead th[data-sort]').forEach(th => {
 fetchTickers();
 fetchHype();
 fetchTradFi();
+fetchCustomCoinGecko();
 
 // early retries: if no TradFi loaded yet (a proxy was briefly down), try again soon
 setTimeout(() => { if (!Object.keys(tradfiRows).length) fetchTradFi(); }, 5000);
@@ -1269,6 +1404,7 @@ setTimeout(() => { if (!Object.keys(tradfiRows).length) fetchTradFi(); }, 15000)
 
 setInterval(fetchTickers, 5000);      // 5s price refresh (Binance)
 setInterval(fetchHype, 60*1000);      // 60s (CoinGecko — HYPE)
+setInterval(fetchCustomCoinGecko, 60*1000); // 60s (added CoinGecko coins)
 setInterval(fetchTradFi, 60*1000);    // 60s (CNBC — S&P/NASDAQ/Gold/Oil)
 </script>
 </body>
