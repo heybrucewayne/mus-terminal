@@ -274,8 +274,8 @@
   .kind-tag.t-STOCK     { color:#3fb6ff; border-color:rgba(63,182,255,.34); background:rgba(63,182,255,.10); }
   .kind-tag.t-INDEX     { color:#c77dff; border-color:rgba(199,125,255,.34); background:rgba(199,125,255,.10); }
   .kind-tag.t-COMMODITY { color:#ffd23f; border-color:rgba(255,210,63,.34); background:rgba(255,210,63,.10); }
-  .kind-tag.t-PAIR      { color:#66e2ff; border-color:rgba(102,226,255,.34); background:rgba(102,226,255,.10); }
   .kind-tag.t-FOREX     { color:#9bdcff; border-color:rgba(155,220,255,.36); background:rgba(155,220,255,.11); }
+  .kind-tag.t-ECONOMIC  { color:#ffb86c; border-color:rgba(255,184,108,.38); background:rgba(255,184,108,.11); }
 
   /* prices search / add */
   #panel-table .panel-body { display:flex; flex-direction:column; }
@@ -941,15 +941,18 @@ function compact(n){
 }
 function bubblePriceLabel(asset){
   const price=Number(asset?.price);
-  if (!isFinite(price) || price<=0) return '—';
+  if (!isFinite(price)) return '—';
   const currency=asset.usd===false ? '' : '$';
-  if (price>=10000) return currency+(price/1000).toFixed(1)+'K';
-  if (price>=1000) return currency+fmtNum(price,0);
-  if (price>=1) return currency+fmtNum(price,2);
-  if (price>=0.01) return currency+fmtNum(price,4);
-  if (price>=0.001) return currency+Number(price.toFixed(5)).toString();
-  if (price>=0.0001) return currency+Number(price.toFixed(6)).toString();
-  return currency+price.toExponential(1).replace('e+','e');
+  const suffix=asset.suffix || '';
+  if (asset.cls==='ECONOMIC') return fmtNum(price,Number.isInteger(asset.decimals)?asset.decimals:1)+suffix;
+  if (price<=0) return '—';
+  if (price>=10000) return currency+(price/1000).toFixed(1)+'K'+suffix;
+  if (price>=1000) return currency+fmtNum(price,0)+suffix;
+  if (price>=1) return currency+fmtNum(price,2)+suffix;
+  if (price>=0.01) return currency+fmtNum(price,4)+suffix;
+  if (price>=0.001) return currency+Number(price.toFixed(5)).toString()+suffix;
+  if (price>=0.0001) return currency+Number(price.toFixed(6)).toString()+suffix;
+  return currency+price.toExponential(1).replace('e+','e')+suffix;
 }
 const cacheGet = k => { try { return JSON.parse(localStorage.getItem(k)); } catch(e){ return null; } };
 const cacheSet = (k,v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} };
@@ -1393,7 +1396,7 @@ const bubbles = (function(){
       const spread = Math.sqrt((i+0.5)/raw.length) * Math.min(W, H) * 0.28;
       return {
         id:c.id||base, base, name:c.name||c.full||base, cls:c.cls,
-        pair:c.pair, pct:c.pct, kind:c.kind, usd:c.usd, full:c.full, decimals:c.decimals,
+        pair:c.pair, pct:c.pct, kind:c.kind, usd:c.usd, full:c.full, decimals:c.decimals, suffix:c.suffix,
         custom:Boolean(c.custom), rmsym:c.rmsym, source:c.source, cgId:c.cgId,
         tvSymbol:c.tvSymbol, tvExchange:c.tvExchange,
         price: c.price, vol: c.vol,
@@ -1609,10 +1612,11 @@ const bubbles = (function(){
       tip.style.display='block';
       const isT = hover.kind === 'tradfi' || hover.kind === 'stock';
       const cur = hover.usd===false ? '' : '$';
+      const suffix = hover.suffix || '';
       const fixedDigits=Number.isInteger(hover.decimals) ? hover.decimals : (isT ? 2 : null);
-      const priceTxt = cur+(fixedDigits==null ? smartPrice(hover.price) : fmtNum(hover.price,fixedDigits));
+      const priceTxt = cur+(fixedDigits==null ? smartPrice(hover.price) : fmtNum(hover.price,fixedDigits))+suffix;
       const hiloTxt = isT
-        ? (hover.high!=null ? `${cur}${fmtNum(hover.high,fixedDigits)} / ${cur}${fmtNum(hover.low,fixedDigits)}` : '—')
+        ? (hover.high!=null ? `${cur}${fmtNum(hover.high,fixedDigits)}${suffix} / ${cur}${fmtNum(hover.low,fixedDigits)}${suffix}` : '—')
         : `${fixedDigits==null?smartPrice(hover.high):fmtNum(hover.high,fixedDigits)} / ${fixedDigits==null?smartPrice(hover.low):fmtNum(hover.low,fixedDigits)}`;
       const symLabel = isT ? (hover.full||hover.base)
         : `${hover.base}<span style="color:var(--muted2);font-weight:500">${hover.pair||''}</span>`;
@@ -1736,7 +1740,7 @@ const CUSTOM_TRADFI_INPUTS = {
 
 const CUSTOM_PAIR_ALIASES = {
   USDTTRY: {
-    sym:'USDTTRY', type:'crypto_pair', source:'binance', name:'USDT/TRY', sub:'BINANCE', cls:'PAIR',
+    sym:'USDTTRY', type:'crypto_pair', source:'binance', name:'USDT/TRY', sub:'BINANCE', cls:'FOREX',
     binanceSymbol:'USDTTRY', tvSymbol:'USDTTRY', tvExchange:'BINANCE', usd:false, decimals:3
   },
   USDTRY: {
@@ -1745,7 +1749,17 @@ const CUSTOM_PAIR_ALIASES = {
   }
 };
 const CUSTOM_PAIR_INPUTS = {
-  USDTTRY:'USDTTRY', USDTRY:'USDTRY', USIRYY:'USDTRY', USDTRYY:'USDTRY'
+  USDTTRY:'USDTTRY', USDTRY:'USDTRY', USDTRYY:'USDTRY'
+};
+
+const CUSTOM_ECONOMIC_ALIASES = {
+  USIRYY: {
+    sym:'USIRYY', type:'economic', source:'bls', name:'US INFLATION RATE YOY', sub:'BLS', cls:'ECONOMIC',
+    tvSymbol:'USIRYY', tvExchange:'ECONOMICS', usd:false, decimals:1, suffix:'%'
+  }
+};
+const CUSTOM_ECONOMIC_INPUTS = {
+  USIRYY:'USIRYY', USINFLATION:'USIRYY', USINFLATIONRATE:'USIRYY'
 };
 
 function customTradFiAlias(rawInput){
@@ -1758,6 +1772,12 @@ function customPairAlias(rawInput){
   const key=String(rawInput||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
   const aliasKey=CUSTOM_PAIR_INPUTS[key];
   return aliasKey ? { ...CUSTOM_PAIR_ALIASES[aliasKey] } : null;
+}
+
+function customEconomicAlias(rawInput){
+  const key=String(rawInput||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const aliasKey=CUSTOM_ECONOMIC_INPUTS[key];
+  return aliasKey ? { ...CUSTOM_ECONOMIC_ALIASES[aliasKey] } : null;
 }
 
 let hypeRow      = cacheGet('cc_hype')    || null;  // HYPE via CoinGecko (not on Binance)
@@ -1787,7 +1807,11 @@ if (repairedLegacySilver){
 let repairedLegacyPairs=false;
 customItems=customItems.map(item => {
   const symbol=String(item?.sym||'').toUpperCase();
-  if ((symbol==='USDTRY' || symbol==='USIRYY' || symbol==='USDTRYY') && (symbol!=='USDTRY' || item.type!=='forex')){
+  if (symbol==='USIRYY' && item.type!=='economic'){
+    repairedLegacyPairs=true;
+    return { ...CUSTOM_ECONOMIC_ALIASES.USIRYY };
+  }
+  if ((symbol==='USDTRY' || symbol==='USDTRYY') && (symbol!=='USDTRY' || item.type!=='forex')){
     repairedLegacyPairs=true;
     return { ...CUSTOM_PAIR_ALIASES.USDTRY };
   }
@@ -1840,12 +1864,13 @@ function customAssetSnapshot(c){
     tvSymbol:c.tvSymbol,
     tvExchange:c.tvExchange,
     usd:c.usd !== false,
-    decimals:c.decimals
+    decimals:c.decimals,
+    suffix:c.suffix || ''
   };
   if (c.type==='crypto_pair'){
     const t=tickerSymbolMap[c.binanceSymbol || c.sym];
     if (!t) return null;
-    return { ...common, sub:c.sub||'', kind:'crypto', cls:c.cls||'PAIR',
+    return { ...common, sub:c.sub||'', kind:'crypto', cls:'FOREX',
       historyProvider:'binance', historySymbol:c.binanceSymbol || c.sym,
       price:+t.lastPrice, chg:+t.priceChangePercent,
       high:+t.highPrice, low:+t.lowPrice, vol:+t.quoteVolume, mcap:0 };
@@ -1869,9 +1894,10 @@ function customAssetSnapshot(c){
   const d = customQuotes[c.sym];
   const isCommodity=c.type==='commodity';
   const isForex=c.type==='forex';
-  const isTradFi=isCommodity || isForex;
-  return { ...common, sub:isTradFi ? (c.sub||'') : '', kind:isTradFi ? 'tradfi' : 'stock', cls:isCommodity ? (c.cls||'COMMODITY') : isForex ? (c.cls||'FOREX') : 'STOCK',
-    historyProvider:'yahoo', historySymbol:c.ysym || c.sym.replace(/\./g,'-'),
+  const isEconomic=c.type==='economic';
+  const isTradFi=isCommodity || isForex || isEconomic;
+  return { ...common, sub:isTradFi ? (c.sub||'') : '', kind:isTradFi ? 'tradfi' : 'stock', cls:isCommodity ? (c.cls||'COMMODITY') : isForex ? (c.cls||'FOREX') : isEconomic ? (c.cls||'ECONOMIC') : 'STOCK',
+    historyProvider:isEconomic ? 'economic' : 'yahoo', historySymbol:isEconomic ? c.sym : (c.ysym || c.sym.replace(/\./g,'-')),
     price:d ? d.price : null, chg:d ? d.chgPct : 0,
     high:d ? d.high : null, low:d ? d.low : null,
     vol:d ? d.vol : null, mcap:0 };
@@ -2168,8 +2194,13 @@ async function loadPerformanceHistory(asset){
     if (!r.ok) throw new Error('Market history '+r.status);
     const data = await r.json();
     points = Array.isArray(data.points) ? data.points.map(p => [+p[0], +p[1]]) : [];
+  } else if (provider === 'economic'){
+    const r = await fetchWithTimeout(`${APP_API_ORIGIN}/api/economic?symbol=${encodeURIComponent(symbol)}`,{},20000);
+    if (!r.ok) throw new Error('Economic history '+r.status);
+    const data = await r.json();
+    points = Array.isArray(data.points) ? data.points.map(p => [+p[0], +p[1]]) : [];
   }
-  points = points.filter(p => isFinite(p[0]) && isFinite(p[1]) && p[1] > 0).sort((a,b) => a[0]-b[0]);
+  points = points.filter(p => isFinite(p[0]) && isFinite(p[1]) && (provider==='economic' || p[1] > 0)).sort((a,b) => a[0]-b[0]);
   if (!points.length) throw new Error('Historical prices are empty');
   performanceCache.set(key, { time:Date.now(), points });
   return points;
@@ -2328,11 +2359,12 @@ function renderMarketTable(){
     if (r.price!=null) prevPrices[r.id] = r.price;
     const eq = (r.kind==='tradfi' || r.kind==='stock');          // equity-style formatting (2 decimals)
     const fixedDigits=Number.isInteger(r.decimals) ? r.decimals : (eq ? 2 : null);
-    const fmtP = v => (v==null || (eq && v<=0)) ? null : (fixedDigits==null ? smartPrice(v) : fmtNum(v,fixedDigits));
+    const fmtP = v => (v==null || (eq && r.cls!=='ECONOMIC' && v<=0)) ? null : (fixedDigits==null ? smartPrice(v) : fmtNum(v,fixedDigits));
     const cur = r.usd ? '$' : '';
-    const priceStr = fmtP(r.price)!=null ? cur+fmtP(r.price) : '<span style="color:var(--muted2)">…</span>';
-    const highStr  = fmtP(r.high)!=null ? fmtP(r.high) : '—';
-    const lowStr   = fmtP(r.low) !=null ? fmtP(r.low)  : '—';
+    const suffix = r.suffix || '';
+    const priceStr = fmtP(r.price)!=null ? cur+fmtP(r.price)+suffix : '<span style="color:var(--muted2)">…</span>';
+    const highStr  = fmtP(r.high)!=null ? fmtP(r.high)+suffix : '—';
+    const lowStr   = fmtP(r.low) !=null ? fmtP(r.low)+suffix  : '—';
     const tag = r.cls ? `<span class="kind-tag t-${r.cls}">${r.cls}</span>` : '';
     return `<tr class="asset-row" data-asset-id="${r.id}" draggable="true" tabindex="0" role="button" aria-label="${r.name} actions; drag to reorder">
       <td><div class="sym-cell"><span class="rank">${i+1}</span><span class="base">${r.name}</span><span class="quote">${r.sub}</span>${tag}</div></td>
@@ -2462,6 +2494,15 @@ async function yahooQuoteOne(symbol){
   } catch(e){ return null; }
 }
 
+async function economicQuoteOne(symbol){
+  try {
+    const r=await fetchWithTimeout(`${APP_API_ORIGIN}/api/economic?symbol=${encodeURIComponent(symbol)}`,{cache:'no-store'},16000);
+    if (!r.ok) return null;
+    const quote=await r.json();
+    return isFinite(+quote.price) ? quote : null;
+  } catch(e){ return null; }
+}
+
 async function cnbcQuoteOne(sym){
   try {
     const r = await fetch('https://quote.cnbc.com/quote-html-webservice/quote.htm?requestMethod=quick&fund=1&exthrs=1&output=json&symbols='+encodeURIComponent(sym), { cache:'no-store' });
@@ -2584,6 +2625,21 @@ async function fetchCustomForex(){
   renderAll();
 }
 
+async function fetchCustomEconomic(){
+  const economicItems=customItems.filter(c => c.type==='economic');
+  if (!economicItems.length) return;
+  const results=await Promise.all(economicItems.map(async item => [item,await economicQuoteOne(item.sym)]));
+  let changed=false;
+  results.forEach(([item,quote]) => {
+    if (!quote) return;
+    customQuotes[item.sym]=quote;
+    changed=true;
+  });
+  if (!changed) return;
+  saveCustom();
+  renderAll();
+}
+
 async function addCustom(){
   const rawInput=($('#px-q').value||'').trim();
   const command=rawInput.toLowerCase().replace(/\s+/g,' ');
@@ -2592,7 +2648,7 @@ async function addCustom(){
     focusTrenches(command.endsWith(' refresh'));
     return;
   }
-  const specialAlias=customTradFiAlias(rawInput) || customPairAlias(rawInput);
+  const specialAlias=customTradFiAlias(rawInput) || customEconomicAlias(rawInput) || customPairAlias(rawInput);
   const rawSym = rawInput.toUpperCase().replace(/[^A-Z0-9.\-]/g,'');
   const sym = specialAlias?.sym || (rawSym === 'BACKPACK' ? 'BP' : rawSym);
   if (!sym){ $('#px-q').focus(); return; }
@@ -2622,7 +2678,7 @@ async function addCustom(){
     pxMsg(`${sym} is already in the list`, 'err');
     return;
   }
-  // Reserved commodities, Binance pairs and FX pairs take priority over
+  // Reserved commodities, economic indicators, Binance pairs and FX pairs take priority over
   // similarly named coins or stock symbols.
   if (specialAlias){
     let quote=null;
@@ -2637,6 +2693,13 @@ async function addCustom(){
       quote=tickerSymbolMap[specialAlias.binanceSymbol] || await binancePairQuoteOne(specialAlias.binanceSymbol);
     } else if (specialAlias.type==='forex'){
       quote=await yahooQuoteOne(specialAlias.ysym);
+    } else if (specialAlias.type==='economic'){
+      pxMsg(`Loading ${specialAlias.name}…`);
+      quote=await economicQuoteOne(specialAlias.sym);
+      if (!quote){
+        pxMsg(`${specialAlias.name} could not be loaded right now`, 'err');
+        return;
+      }
     }
     if (replaceExistingSpecial){
       customItems=customItems.filter(c=>c.sym!==sym);
@@ -2648,7 +2711,9 @@ async function addCustom(){
     else if (quote) customQuotes[specialAlias.sym]=quote;
     saveCustom();
     $('#px-q').value='';
-    const typeLabel=specialAlias.type==='crypto_pair'?'Binance pair':specialAlias.type==='forex'?'forex':'commodity';
+    const typeLabel=specialAlias.type==='crypto_pair' || specialAlias.type==='forex'
+      ? 'forex'
+      : specialAlias.type==='economic' ? 'economic indicator' : 'commodity';
     pxMsg(`Added ${specialAlias.name} · ${typeLabel}${quote?'':' · price loading'}`, 'ok');
     renderAll();
     return;
@@ -2827,6 +2892,7 @@ fetchHype();
 fetchTradFi();
 fetchCustomCoinGecko();
 fetchCustomForex();
+fetchCustomEconomic();
 loadTrenches(false);
 
 // early retries: if no TradFi loaded yet (a proxy was briefly down), try again soon
@@ -2837,6 +2903,7 @@ setInterval(fetchTickers, 5000);      // 5s price refresh (Binance)
 setInterval(fetchHype, 60*1000);      // 60s (CoinGecko — HYPE)
 setInterval(fetchCustomCoinGecko, 60*1000); // 60s (added CoinGecko coins)
 setInterval(fetchCustomForex, 60*1000); // 60s (added FX pairs)
+setInterval(fetchCustomEconomic, 60*60*1000); // 60m (BLS economic indicators)
 setInterval(fetchTradFi, 60*1000);    // 60s (CNBC — S&P/NASDAQ/Gold/Oil)
 setInterval(() => loadTrenches(false), TRENCH_AUTO_MS); // 16m SOL Meme Trenches scan
 </script>
