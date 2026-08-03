@@ -228,7 +228,7 @@
   .px-search .btn { padding:6px 10px; font-size:11px; }
   .px-watchlist {
     display:flex; align-items:center; flex-wrap:wrap; gap:5px;
-    padding:6px 10px; border-bottom:1px solid var(--border-soft);
+    min-height:34px; padding:6px 10px; border-bottom:1px solid var(--border-soft);
     background:rgba(255,255,255,0.018);
   }
   .px-watchlist:empty { display:none; }
@@ -238,20 +238,22 @@
   }
   .watch-chip {
     display:inline-flex; align-items:center; gap:4px;
-    padding:2px 4px 2px 8px; border:1px solid rgba(0,255,136,.24);
+    padding:3px 4px 3px 9px; border:1px solid rgba(0,255,136,.30);
     border-radius:999px; background:rgba(0,255,136,.08);
     color:var(--text-bright); font:600 9px 'JetBrains Mono',monospace;
   }
   .watch-chip button {
-    display:inline-grid; place-items:center; width:15px; height:15px;
-    padding:0; border:0; border-radius:50%; background:transparent;
-    color:var(--muted); cursor:pointer; font-size:13px; line-height:1;
+    display:inline-grid; place-items:center; min-width:54px; height:21px;
+    padding:0 8px; border:1px solid rgba(255,68,102,.55); border-radius:999px;
+    background:rgba(255,68,102,.14); color:var(--red); cursor:pointer;
+    font:700 8px 'Space Grotesk',sans-serif; letter-spacing:.06em; line-height:1;
   }
-  .watch-chip button:hover { background:rgba(255,68,102,.16); color:var(--red); }
+  .watch-chip button:hover { background:rgba(255,68,102,.30); border-color:var(--red); color:#fff; }
   .px-msg { font-size:10px; padding:0 12px; height:0; overflow:hidden; color:var(--muted); transition:height .15s, padding .15s; }
   .px-msg.show { height:auto; padding:5px 12px; }
   .px-msg.ok { color:var(--green); } .px-msg.err { color:var(--red); }
   .x-row {
+    flex:0 0 auto;
     background:rgba(255,68,102,.08); border:1px solid rgba(255,68,102,.32);
     border-radius:5px; color:var(--red); cursor:pointer; font-size:8px;
     font-weight:700; letter-spacing:.06em; line-height:1; padding:4px 6px;
@@ -348,9 +350,11 @@
     inset: -18px;
     opacity: 0.94;
     background:
-      linear-gradient(135deg, rgba(4, 14, 15, 0.28), rgba(3, 10, 15, 0.44)),
+      linear-gradient(135deg, rgba(4, 14, 15, 0.18), rgba(3, 10, 15, 0.30)),
       url('background.jpeg') center / cover no-repeat;
-    filter: blur(8px) saturate(105%);
+    filter: blur(3px) saturate(110%);
+    animation: none;
+    transform: none;
   }
 
   #app {
@@ -379,7 +383,7 @@
     min-height: 0;
     border: 1px solid rgba(214, 255, 240, 0.2);
     border-radius: 14px;
-    background: linear-gradient(145deg, rgba(18, 38, 36, 0.34), rgba(5, 17, 20, 0.27));
+    background: linear-gradient(145deg, rgba(18, 38, 36, 0.28), rgba(5, 17, 20, 0.20));
     box-shadow: 0 18px 42px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.12);
     -webkit-backdrop-filter: blur(22px) saturate(135%);
     backdrop-filter: blur(22px) saturate(135%);
@@ -403,11 +407,18 @@
 
   #panel-bubbles { border-color: rgba(141, 244, 182, 0.26); }
   #panel-bubbles .panel-body {
-    background: radial-gradient(circle at 48% 48%, rgba(57, 220, 134, 0.045), transparent 58%);
+    background:
+      linear-gradient(135deg, rgba(4, 19, 20, 0.24), rgba(4, 10, 14, 0.16)),
+      radial-gradient(circle at 48% 48%, rgba(57, 220, 134, 0.07), transparent 58%);
   }
-  #panel-table .panel-body { background: rgba(4, 12, 14, 0.10); }
+  #panel-table .panel-body {
+    background: linear-gradient(135deg, rgba(4, 16, 18, 0.16), rgba(4, 10, 14, 0.10));
+  }
+  #panel-table .sym-cell { flex-wrap: wrap; row-gap: 4px; }
+  #bubbleCanvas { position: relative; z-index: 1; }
 
   .bubble-legend {
+    z-index: 2;
     top: 10px;
     right: 12px;
     padding: 5px 10px;
@@ -1001,7 +1012,7 @@ function renderWatchlist(){
     label.textContent = item.sym;
     const remove = document.createElement('button');
     remove.type = 'button';
-    remove.textContent = '×';
+    remove.textContent = 'REMOVE';
     remove.title = `Remove ${item.sym}`;
     remove.setAttribute('aria-label', `Remove ${item.sym}`);
     remove.onclick = () => removeCustom(item.sym);
