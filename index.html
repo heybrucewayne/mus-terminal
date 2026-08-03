@@ -216,8 +216,15 @@
   }
   table.ticker tbody td:first-child { text-align: left; }
   table.ticker tbody tr:hover { background: rgba(255,255,255,0.05); }
-  table.ticker tbody tr.asset-row { cursor: pointer; }
+  table.ticker tbody tr.asset-row { cursor: grab; user-select:none; }
+  table.ticker tbody tr.asset-row:active { cursor: grabbing; }
   table.ticker tbody tr.asset-row:focus-visible { outline: 1px solid rgba(0,255,136,.7); outline-offset: -1px; }
+  table.ticker tbody tr.asset-row.dragging { opacity:.34; }
+  table.ticker tbody tr.asset-row.drop-before { box-shadow:inset 0 2px 0 var(--green); }
+  table.ticker tbody tr.asset-row.drop-after { box-shadow:inset 0 -2px 0 var(--green); }
+  table.ticker tbody tr.asset-row.dragging,
+  table.ticker tbody tr.asset-row.drop-before,
+  table.ticker tbody tr.asset-row.drop-after { background:rgba(0,255,136,.08); }
   .sym-cell { display:flex; align-items:center; gap:8px; min-width:0; }
   .sym-cell .base {
     flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis;
@@ -501,7 +508,10 @@
     font:600 11px 'JetBrains Mono',monospace; text-align:right; white-space:nowrap;
     overflow:hidden; text-overflow:ellipsis;
   }
-  .trench-symbol { color:#f5fffc; font-size:11.5px; }
+  .trench-symbol { color:#f5fffc; font-size:11.5px; text-decoration:none; }
+  a.trench-symbol { cursor:pointer; transition:color .14s,text-shadow .14s; }
+  a.trench-symbol:hover { color:var(--green); text-shadow:0 0 10px rgba(0,255,136,.38); }
+  a.trench-symbol:focus-visible { outline:1px solid var(--green); outline-offset:3px; border-radius:2px; }
   .trench-score { display:block; margin-top:3px; color:rgba(207,225,221,.72); font-size:8px; }
   .trench-decision { font-size:12px; }
   .trench-note {
@@ -566,6 +576,21 @@
   .asset-menu-action:hover { background:rgba(0,255,136,.14); border-color:rgba(0,255,136,.48); color:var(--green); }
   .asset-menu-action.danger { color:var(--red); border-color:rgba(255,68,102,.28); background:rgba(255,68,102,.08); }
   .asset-menu-action.danger:hover { background:rgba(255,68,102,.22); border-color:var(--red); color:#fff; }
+
+  .page-context-menu {
+    z-index: 200;
+    min-width: 170px;
+  }
+  .page-context-menu .asset-menu-action {
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .page-context-icon {
+    color:var(--green);
+    font-size:14px;
+    line-height:1;
+  }
 
   .perf-overlay {
     position:fixed; inset:0; z-index:140; display:grid; place-items:center; padding:20px;
@@ -730,6 +755,13 @@
   <div id="assetMenuTitle" class="asset-menu-title"></div>
   <a id="assetMenuTradingView" class="asset-menu-action" target="_blank" rel="noopener noreferrer" role="menuitem">VIEW IN TRADINGVIEW</a>
   <button id="assetMenuRemove" class="asset-menu-action danger" type="button" role="menuitem">REMOVE FROM LIST</button>
+</div>
+
+<div id="pageContextMenu" class="asset-menu page-context-menu" hidden role="menu" aria-label="Page actions">
+  <button id="pageReload" class="asset-menu-action" type="button" role="menuitem">
+    <span class="page-context-icon" aria-hidden="true">↻</span>
+    SAYFAYI YENİLE
+  </button>
 </div>
 
 <div id="performanceModal" class="perf-overlay" hidden>
@@ -930,6 +962,21 @@ function trenchPercent(value){
   if (!isFinite(n)) return '—';
   return `${n>=0?'+':''}${n.toFixed(Math.abs(n)>=100?0:1)}%`;
 }
+function trenchDexUrl(value){
+  try {
+    const url=new URL(String(value||''));
+    const trusted=url.protocol==='https:' && (url.hostname==='dexscreener.com' || url.hostname.endsWith('.dexscreener.com'));
+    return trusted ? url.href : '';
+  } catch(e){
+    return '';
+  }
+}
+function trenchSymbolLink(token,className='trench-symbol'){
+  const symbol=trenchEscape(token?.symbol);
+  const dexUrl=trenchDexUrl(token?.dexUrl);
+  if (!dexUrl) return `<span class="${className}">${symbol}</span>`;
+  return `<a class="${className}" href="${trenchEscape(dexUrl)}" target="_blank" rel="noopener noreferrer" aria-label="Open ${symbol} on DexScreener">${symbol}</a>`;
+}
 function trenchChanges(token, previous){
   if (!previous) return ['YENİ'];
   const changes=[];
@@ -956,7 +1003,7 @@ function renderTrenches(payload){
     token._changes=changes;
     const decisionIcon=token.decision==='green'?'🟢':'🟡';
     return `<tr title="${trenchEscape(token.decisionLabel)}">
-      <td><span class="trench-symbol">${trenchEscape(token.symbol)}</span><span class="trench-score">${Number(token.score)||0}/100</span></td>
+      <td>${trenchSymbolLink(token)}<span class="trench-score">${Number(token.score)||0}/100</span></td>
       <td>${trenchMoney(token.marketCap)}</td>
       <td>${trenchMoney(token.liquidity)}</td>
       <td>${trenchMoney(token.volume?.h1)} / ${trenchMoney(token.volume?.h6)} / ${trenchMoney(token.volume?.h24)}</td>
@@ -966,7 +1013,7 @@ function renderTrenches(payload){
   }).join('');
   const notes=tokens.map(token=>{
     const badges=token._changes?.length?`<span class="trench-change">${token._changes.map(trenchEscape).join(' · ')}</span>`:'';
-    return `<div class="trench-note"><strong>${trenchEscape(token.symbol)}</strong> — ${trenchEscape(token.reason)}; <a href="${trenchEscape(token.rugUrl)}" target="_blank" rel="noopener noreferrer">RugCheck</a> · <a href="${trenchEscape(token.dexUrl)}" target="_blank" rel="noopener noreferrer">DexScreener</a>${badges}</div>`;
+    return `<div class="trench-note"><strong>${trenchSymbolLink(token,'trench-note-symbol')}</strong> — ${trenchEscape(token.reason)}; <a href="${trenchEscape(token.rugUrl)}" target="_blank" rel="noopener noreferrer">RugCheck</a> · <a href="${trenchEscape(token.dexUrl)}" target="_blank" rel="noopener noreferrer">DexScreener</a>${badges}</div>`;
   }).join('');
   const reasons=(payload.eliminationReasons||[]).map(item=>`${trenchEscape(item.reason)} ${Number(item.count)||0}`).join(' · ');
   const eliminated=payload.eliminatedCount
@@ -1411,20 +1458,29 @@ const cachedCustomItems = cacheGet('cc_custom');
 const cachedCustomQuotes = cacheGet('cc_customq');
 const cachedCustomCoinQuotes = cacheGet('cc_custom_cgq');
 const cachedHiddenAssets = cacheGet('cc_hidden_assets');
+const cachedMarketOrder = cacheGet('cc_market_order_v1');
 let customItems  = Array.isArray(cachedCustomItems) ? cachedCustomItems : [];
 let customQuotes = cachedCustomQuotes && typeof cachedCustomQuotes === 'object' ? cachedCustomQuotes : {};
 let customCoinQuotes = cachedCustomCoinQuotes && typeof cachedCustomCoinQuotes === 'object' ? cachedCustomCoinQuotes : {};
 let hiddenAssets = Array.isArray(cachedHiddenAssets)
   ? [...new Set(cachedHiddenAssets.filter(id => typeof id === 'string'))]
   : [];
+let marketOrder = Array.isArray(cachedMarketOrder)
+  ? [...new Set(cachedMarketOrder.filter(id => typeof id === 'string' && id))]
+  : [];
 let prevPrices = {};
-let tableSort  = { key:'mcap', dir:-1 };           // default: market cap, descending
+let tableSort  = marketOrder.length ? { key:'manual', dir:1 } : { key:'mcap', dir:-1 };
+let draggedMarketId = null;
+let marketDragActive = false;
+let pendingMarketRender = false;
+let suppressAssetClick = false;
 const saveCustom = () => {
   cacheSet('cc_custom', customItems);
   cacheSet('cc_customq', customQuotes);
   cacheSet('cc_custom_cgq', customCoinQuotes);
 };
 const saveHiddenAssets = () => cacheSet('cc_hidden_assets', hiddenAssets);
+const saveMarketOrder = () => cacheSet('cc_market_order_v1', marketOrder);
 let activeAssetMenu = null;
 
 function customAssetSnapshot(c){
@@ -1545,6 +1601,37 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeAssetMenu();
 });
 
+const pageContextMenu = $('#pageContextMenu');
+
+function closePageContextMenu(){
+  pageContextMenu.hidden = true;
+}
+
+function openPageContextMenu(event){
+  if (event.target.closest?.('a, button, input, textarea, select, [contenteditable="true"]')) return;
+  event.preventDefault();
+  closeAssetMenu();
+  pageContextMenu.hidden = false;
+
+  const gap = 10;
+  const rect = pageContextMenu.getBoundingClientRect();
+  const left = Math.max(gap, Math.min(event.clientX, window.innerWidth - rect.width - gap));
+  const top = Math.max(gap, Math.min(event.clientY, window.innerHeight - rect.height - gap));
+  pageContextMenu.style.left = `${left}px`;
+  pageContextMenu.style.top = `${top}px`;
+}
+
+document.addEventListener('contextmenu', openPageContextMenu);
+document.addEventListener('pointerdown', event => {
+  if (!event.target.closest?.('#pageContextMenu')) closePageContextMenu();
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') closePageContextMenu();
+});
+window.addEventListener('resize', closePageContextMenu);
+document.addEventListener('scroll', closePageContextMenu, true);
+$('#pageReload').addEventListener('click', () => window.location.reload());
+
 const performanceCache = new Map();
 let performanceRequestId = 0;
 
@@ -1664,7 +1751,58 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && !$('#performanceModal').hidden) closePerformance();
 });
 
+function clearMarketDropStyles(){
+  document.querySelectorAll('#ticker-body .asset-row').forEach(row => {
+    row.classList.remove('dragging', 'drop-before', 'drop-after');
+  });
+}
+
+function visibleMarketIds(){
+  return [...document.querySelectorAll('#ticker-body .asset-row')].map(row => row.dataset.assetId);
+}
+
+function reorderedMarketIds(ids, draggedId, targetId, placeAfter){
+  const next = ids.filter(id => id !== draggedId);
+  const targetIndex = next.indexOf(targetId);
+  if (targetIndex < 0 || !ids.includes(draggedId)) return ids;
+  next.splice(targetIndex + (placeAfter ? 1 : 0), 0, draggedId);
+  return next;
+}
+
+function storeVisibleMarketOrder(visibleIds){
+  const visibleSet = new Set(visibleIds);
+  const unavailableIds = marketOrder.filter(id => !visibleSet.has(id));
+  marketOrder = [...visibleIds, ...unavailableIds];
+  tableSort = { key:'manual', dir:1 };
+  saveMarketOrder();
+}
+
+function focusMarketRow(assetId){
+  requestAnimationFrame(() => {
+    const row = [...document.querySelectorAll('#ticker-body .asset-row')]
+      .find(item => item.dataset.assetId === assetId);
+    row?.focus();
+  });
+}
+
+function moveMarketRowByStep(assetId, step){
+  const ids = visibleMarketIds();
+  const from = ids.indexOf(assetId);
+  const to = from + step;
+  if (from < 0 || to < 0 || to >= ids.length) return false;
+  [ids[from], ids[to]] = [ids[to], ids[from]];
+  storeVisibleMarketOrder(ids);
+  renderMarketTable();
+  focusMarketRow(assetId);
+  return true;
+}
+
 function renderMarketTable(){
+  if (marketDragActive){
+    pendingMarketRender = true;
+    return;
+  }
+  pendingMarketRender = false;
   const rows = [];
   CRYPTO_LIST.forEach(c => {
     if (isAssetHidden(c.base)) return;
@@ -1698,8 +1836,17 @@ function renderMarketTable(){
     if (row) rows.push(row);
   });
   const sk = tableSort.key, sd = tableSort.dir;
-  const num = v => (v==null || !isFinite(v)) ? -Infinity : v;
-  rows.sort((a,b) => (num(a[sk]) - num(b[sk])) * sd);
+  if (sk === 'manual'){
+    const manualIndex = new Map(marketOrder.map((id,index) => [id,index]));
+    rows.sort((a,b) => {
+      const ai = manualIndex.has(String(a.id)) ? manualIndex.get(String(a.id)) : Number.MAX_SAFE_INTEGER;
+      const bi = manualIndex.has(String(b.id)) ? manualIndex.get(String(b.id)) : Number.MAX_SAFE_INTEGER;
+      return ai - bi;
+    });
+  } else {
+    const num = v => (v==null || !isFinite(v)) ? -Infinity : v;
+    rows.sort((a,b) => (num(a[sk]) - num(b[sk])) * sd);
+  }
   updateSortIndicators();
 
   const rowMeta = new Map(rows.map(r => [String(r.id), r]));
@@ -1714,7 +1861,7 @@ function renderMarketTable(){
     const highStr  = fmtP(r.high)!=null ? fmtP(r.high) : '—';
     const lowStr   = fmtP(r.low) !=null ? fmtP(r.low)  : '—';
     const tag = r.cls ? `<span class="kind-tag t-${r.cls}">${r.cls}</span>` : '';
-    return `<tr class="asset-row" data-asset-id="${r.id}" tabindex="0" role="button" aria-label="${r.name} actions">
+    return `<tr class="asset-row" data-asset-id="${r.id}" draggable="true" tabindex="0" role="button" aria-label="${r.name} actions; drag to reorder">
       <td><div class="sym-cell"><span class="rank">${i+1}</span><span class="base">${r.name}</span><span class="quote">${r.sub}</span>${tag}</div></td>
       <td class="pricecell num ${flash}">${priceStr}</td>
       <td><button class="chgpill perf-trigger num ${r.chg>=0?'pos':'neg'}" type="button" data-performance-id="${r.id}" aria-label="Open ${r.name} extended performance">${r.chg>=0?'+':''}${(r.chg||0).toFixed(2)}%</button></td>
@@ -1731,9 +1878,82 @@ function renderMarketTable(){
       e.stopPropagation();
       openPerformance(asset);
     });
-    row.addEventListener('click', open);
+    row.addEventListener('dragstart', event => {
+      if (event.target.closest?.('.perf-trigger')){
+        event.preventDefault();
+        return;
+      }
+      draggedMarketId = row.dataset.assetId;
+      marketDragActive = true;
+      suppressAssetClick = true;
+      row.classList.add('dragging');
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', draggedMarketId);
+      closeAssetMenu();
+      closePageContextMenu();
+    });
+    row.addEventListener('dragover', event => {
+      if (!draggedMarketId || draggedMarketId === row.dataset.assetId) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      document.querySelectorAll('#ticker-body .drop-before, #ticker-body .drop-after').forEach(item => {
+        if (item !== row) item.classList.remove('drop-before', 'drop-after');
+      });
+      const rect = row.getBoundingClientRect();
+      const placeAfter = event.clientY > rect.top + rect.height / 2;
+      row.classList.toggle('drop-before', !placeAfter);
+      row.classList.toggle('drop-after', placeAfter);
+
+      const scroller = row.closest('.px-scroll');
+      const scrollRect = scroller?.getBoundingClientRect();
+      if (scroller && scrollRect){
+        if (event.clientY < scrollRect.top + 30) scroller.scrollTop -= 12;
+        else if (event.clientY > scrollRect.bottom - 30) scroller.scrollTop += 12;
+      }
+    });
+    row.addEventListener('dragleave', event => {
+      if (!row.contains(event.relatedTarget)) row.classList.remove('drop-before', 'drop-after');
+    });
+    row.addEventListener('drop', event => {
+      if (!draggedMarketId || draggedMarketId === row.dataset.assetId) return;
+      event.preventDefault();
+      const draggedId = draggedMarketId;
+      const rect = row.getBoundingClientRect();
+      const placeAfter = event.clientY > rect.top + rect.height / 2;
+      const nextOrder = reorderedMarketIds(visibleMarketIds(), draggedId, row.dataset.assetId, placeAfter);
+      marketDragActive = false;
+      draggedMarketId = null;
+      pendingMarketRender = false;
+      clearMarketDropStyles();
+      storeVisibleMarketOrder(nextOrder);
+      renderMarketTable();
+      focusMarketRow(draggedId);
+      window.setTimeout(() => { suppressAssetClick = false; }, 0);
+    });
+    row.addEventListener('dragend', () => {
+      const shouldRender = pendingMarketRender;
+      marketDragActive = false;
+      draggedMarketId = null;
+      pendingMarketRender = false;
+      clearMarketDropStyles();
+      window.setTimeout(() => { suppressAssetClick = false; }, 0);
+      if (shouldRender) renderMarketTable();
+    });
+    row.addEventListener('click', event => {
+      if (suppressAssetClick){
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      open();
+    });
     row.addEventListener('keydown', e => {
       if (e.target.closest('.perf-trigger')) return;
+      if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')){
+        e.preventDefault();
+        moveMarketRowByStep(row.dataset.assetId, e.key === 'ArrowUp' ? -1 : 1);
+        return;
+      }
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
     });
   });
