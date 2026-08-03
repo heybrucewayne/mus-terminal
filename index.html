@@ -326,7 +326,7 @@
     min-height: 0;
     height: auto;
     grid-template-columns: minmax(0, 1.55fr) minmax(360px, 1fr);
-    grid-template-rows: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1.08fr) minmax(260px, .92fr);
     gap: 12px;
   }
 
@@ -351,6 +351,7 @@
   .panel > .panel-body { position: relative; z-index: 1; }
 
   #panel-bubbles { border-color: rgba(141, 244, 182, 0.26); }
+  #panel-bubbles { grid-row: 1 / span 2; }
   #panel-bubbles .panel-body {
     background:
       linear-gradient(135deg, rgba(4, 19, 20, 0.07), rgba(4, 10, 14, 0.04)),
@@ -361,6 +362,68 @@
   }
   #panel-table .sym-cell { min-width:0; flex-wrap:nowrap; }
   #bubbleCanvas { position: relative; z-index: 1; }
+
+  /* ===== SOL MEME TRENCHES ===== */
+  #panel-trenches { border-color:rgba(120,213,255,.24); }
+  #panel-trenches .panel-body {
+    display:flex; flex-direction:column;
+    background:linear-gradient(135deg,rgba(5,18,22,.08),rgba(5,12,16,.035));
+  }
+  .trench-head {
+    display:flex; align-items:center; gap:9px; min-height:38px; padding:7px 10px;
+    border-bottom:1px solid rgba(214,255,240,.10); background:rgba(255,255,255,.025);
+  }
+  .trench-title {
+    color:var(--text-bright); font:700 9px 'Space Grotesk',sans-serif;
+    letter-spacing:.16em; white-space:nowrap;
+  }
+  .trench-title::before {
+    content:''; display:inline-block; width:6px; height:6px; margin-right:7px;
+    border-radius:50%; background:#50d7ff; box-shadow:0 0 10px rgba(80,215,255,.85);
+  }
+  .trench-time { margin-left:auto; color:var(--muted); font:500 8px 'JetBrains Mono',monospace; white-space:nowrap; }
+  .trench-refresh {
+    width:25px; height:25px; padding:0; border:1px solid rgba(80,215,255,.25); border-radius:7px;
+    background:rgba(80,215,255,.07); color:#76dcff; cursor:pointer; font-size:13px;
+  }
+  .trench-refresh:hover { border-color:rgba(80,215,255,.65); background:rgba(80,215,255,.15); }
+  .trench-refresh:disabled { opacity:.45; cursor:wait; }
+  .trench-scroll { flex:1 1 auto; min-height:0; overflow:auto; }
+  table.trenches { width:100%; border-collapse:collapse; table-layout:fixed; }
+  table.trenches th {
+    position:sticky; top:0; z-index:2; padding:7px 5px; border-bottom:1px solid rgba(214,255,240,.09);
+    background:rgba(8,18,21,.78); color:var(--muted); font:600 7px 'Space Grotesk',sans-serif;
+    letter-spacing:.08em; text-align:right; white-space:nowrap;
+  }
+  table.trenches th:first-child, table.trenches td:first-child { text-align:left; padding-left:10px; width:14%; }
+  table.trenches th:nth-child(2), table.trenches td:nth-child(2) { width:12%; }
+  table.trenches th:nth-child(3), table.trenches td:nth-child(3) { width:12%; }
+  table.trenches th:nth-child(4), table.trenches td:nth-child(4) { width:28%; }
+  table.trenches th:nth-child(5), table.trenches td:nth-child(5) { width:20%; }
+  table.trenches th:nth-child(6), table.trenches td:nth-child(6) { width:14%; padding-right:10px; }
+  table.trenches td {
+    padding:7px 5px; border-bottom:1px solid rgba(255,255,255,.055); color:var(--text);
+    font:600 8px 'JetBrains Mono',monospace; text-align:right; white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis;
+  }
+  .trench-symbol { color:var(--text-bright); }
+  .trench-score { display:block; margin-top:2px; color:var(--muted2); font-size:6px; }
+  .trench-decision { font-size:9px; }
+  .trench-note {
+    padding:6px 10px; border-bottom:1px solid rgba(255,255,255,.045); color:rgba(228,240,238,.72);
+    font:500 7.5px/1.45 'JetBrains Mono',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .trench-note strong { color:var(--text-bright); }
+  .trench-note a { color:#6bdcff; text-decoration:none; }
+  .trench-note a:hover { text-decoration:underline; }
+  .trench-change { color:#ffd66b; margin-left:5px; }
+  .trench-eliminated, .trench-state {
+    padding:7px 10px; color:var(--muted); font:500 7.5px/1.4 'JetBrains Mono',monospace;
+  }
+  .trench-eliminated { color:rgba(255,137,157,.78); }
+  .trench-state.err { color:var(--red); }
+  #panel-trenches.command-focus { animation:trenchFocus .8s ease-out; }
+  @keyframes trenchFocus { 0%,45%{box-shadow:0 0 0 2px rgba(80,215,255,.65),0 18px 42px rgba(0,0,0,.3)} 100%{box-shadow:0 18px 42px rgba(0,0,0,.3)} }
 
   table.ticker thead th,
   .btn {
@@ -490,7 +553,7 @@
     .grid {
       min-height: 0;
       grid-template-columns: 1fr 1fr;
-      grid-template-rows: minmax(420px, 1fr);
+      grid-template-rows: minmax(360px, 1fr) minmax(300px, .85fr);
     }
   }
 
@@ -498,8 +561,9 @@
     #app { min-height: 100vh; }
     .grid {
       grid-template-columns: 1fr;
-      grid-template-rows: minmax(360px, 1fr) minmax(360px, 1fr);
+      grid-template-rows: minmax(360px, 1fr) minmax(360px, 1fr) minmax(320px, 1fr);
     }
+    #panel-bubbles { grid-row:auto; }
     .panel { min-height: 360px; }
   }
 
@@ -547,6 +611,19 @@
       </div>
     </section>
 
+    <section class="panel" id="panel-trenches" aria-label="SOL Meme Trenches">
+      <div class="panel-body">
+        <div class="trench-head">
+          <div class="trench-title">SOL MEME TRENCHES</div>
+          <time id="trench-time" class="trench-time">—</time>
+          <button id="trench-refresh" class="trench-refresh" type="button" title="Refresh scan" aria-label="Refresh SOL Meme Trenches">↻</button>
+        </div>
+        <div id="trench-scroll" class="trench-scroll scroll">
+          <div id="trench-content" class="trench-state">Tarama hazırlanıyor…</div>
+        </div>
+      </div>
+    </section>
+
   </div>
 </div>
 
@@ -590,6 +667,118 @@ function compact(n){
 }
 const cacheGet = k => { try { return JSON.parse(localStorage.getItem(k)); } catch(e){ return null; } };
 const cacheSet = (k,v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} };
+
+/* ============================================================
+   SOL MEME TRENCHES
+   ============================================================ */
+const TRENCH_CACHE_KEY = 'mus_trenches_cache_v1';
+const TRENCH_PREVIOUS_KEY = 'mus_trenches_previous_v1';
+const TRENCH_AUTO_MS = 3 * 60 * 60 * 1000;
+let trenchesLoading = false;
+
+function trenchEscape(value){
+  return String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+}
+function trenchMoney(value){
+  const n=Number(value);
+  if (!isFinite(n) || n<=0) return '—';
+  if (n>=1e9) return '$'+(n/1e9).toFixed(1)+'B';
+  if (n>=1e6) return '$'+(n/1e6).toFixed(1)+'M';
+  if (n>=1e3) return '$'+(n/1e3).toFixed(n>=1e5?0:1)+'K';
+  return '$'+n.toFixed(0);
+}
+function trenchPercent(value){
+  const n=Number(value);
+  if (!isFinite(n)) return '—';
+  return `${n>=0?'+':''}${n.toFixed(Math.abs(n)>=100?0:1)}%`;
+}
+function trenchChanges(token, previous){
+  if (!previous) return ['YENİ'];
+  const changes=[];
+  const currentH1=Number(token?.volume?.h1)||0;
+  const previousH1=Number(previous?.volume?.h1)||0;
+  if (currentH1>Math.max(1000,previousH1*1.4)) changes.push('HACİM+');
+  if (token?.volume?.trend==='rising' && previous?.volume?.trend!=='rising') changes.push('İVME');
+  if (token?.priceVolumeDivergence && !previous?.priceVolumeDivergence) changes.push('F/H!');
+  if (Number(previous?.liquidity)>0 && Number(token?.liquidity)<Number(previous.liquidity)*.8) changes.push('LP↓');
+  const securityFields=['mint','freeze','lpLockedPct','riskScore'];
+  if (securityFields.some(key => String(token?.security?.[key])!==String(previous?.security?.[key]))) changes.push('GÜVENLİK Δ');
+  if (token.decision!==previous.decision) changes.push('KARAR Δ');
+  return changes;
+}
+function renderTrenches(payload){
+  const content=$('#trench-content');
+  const time=$('#trench-time');
+  if (!content || !payload) return;
+  const previousPayload=cacheGet(TRENCH_PREVIOUS_KEY);
+  const previousMap=new Map((previousPayload?.tokens||[]).map(token=>[token.address,token]));
+  const tokens=Array.isArray(payload.tokens)?payload.tokens:[];
+  const rows=tokens.map(token=>{
+    const changes=trenchChanges(token,previousMap.get(token.address));
+    token._changes=changes;
+    const decisionIcon=token.decision==='green'?'🟢':'🟡';
+    return `<tr title="${trenchEscape(token.decisionLabel)}">
+      <td><span class="trench-symbol">${trenchEscape(token.symbol)}</span><span class="trench-score">${Number(token.score)||0}/100</span></td>
+      <td>${trenchMoney(token.marketCap)}</td>
+      <td>${trenchMoney(token.liquidity)}</td>
+      <td>${trenchMoney(token.volume?.h1)} / ${trenchMoney(token.volume?.h6)} / ${trenchMoney(token.volume?.h24)}</td>
+      <td><span class="${Number(token.price?.h6)>=0?'pos':'neg'}">${trenchPercent(token.price?.h6)}</span> / <span class="${Number(token.price?.h24)>=0?'pos':'neg'}">${trenchPercent(token.price?.h24)}</span></td>
+      <td class="trench-decision">${decisionIcon}</td>
+    </tr>`;
+  }).join('');
+  const notes=tokens.map(token=>{
+    const badges=token._changes?.length?`<span class="trench-change">${token._changes.map(trenchEscape).join(' · ')}</span>`:'';
+    return `<div class="trench-note"><strong>${trenchEscape(token.symbol)}</strong> — ${trenchEscape(token.reason)}; <a href="${trenchEscape(token.rugUrl)}" target="_blank" rel="noopener noreferrer">RugCheck</a> · <a href="${trenchEscape(token.dexUrl)}" target="_blank" rel="noopener noreferrer">DexScreener</a>${badges}</div>`;
+  }).join('');
+  const reasons=(payload.eliminationReasons||[]).map(item=>`${trenchEscape(item.reason)} ${Number(item.count)||0}`).join(' · ');
+  const eliminated=payload.eliminatedCount
+    ? `<div class="trench-eliminated">🔴 ${Number(payload.eliminatedCount)} elendi${reasons?` — ${reasons}`:''}</div>`:'';
+  const warning=payload.warning?`<div class="trench-state">${trenchEscape(payload.warning)}</div>`:'';
+  const empty=!tokens.length?'<div class="trench-state">Uygun 🟢 veya 🟡 sonuç bulunamadı.</div>':'';
+  content.outerHTML=`<div id="trench-content">
+    <table class="trenches" aria-label="SOL Meme Trenches results"><thead><tr><th>Token</th><th>MC</th><th>LP</th><th>Hacim 1s / 6s / 24s</th><th>Fiyat 6s / 24s</th><th>Karar</th></tr></thead><tbody>${rows}</tbody></table>
+    ${empty}${notes}${eliminated}${warning}
+  </div>`;
+  const date=new Date(payload.generatedAt);
+  time.textContent=isNaN(date)?'—':date.toLocaleString('tr-TR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+  cacheSet(TRENCH_CACHE_KEY,payload);
+  if (previousPayload?.generatedAt!==payload.generatedAt) cacheSet(TRENCH_PREVIOUS_KEY,payload);
+}
+function trenchState(message,isError=false){
+  const content=$('#trench-content');
+  if (content) content.outerHTML=`<div id="trench-content" class="trench-state${isError?' err':''}">${trenchEscape(message)}</div>`;
+}
+async function loadTrenches(force=false){
+  if (trenchesLoading) return;
+  trenchesLoading=true;
+  const button=$('#trench-refresh');
+  if (button) button.disabled=true;
+  const cached=cacheGet(TRENCH_CACHE_KEY);
+  if (!force && cached) renderTrenches(cached);
+  else trenchState('Solana tokenleri taranıyor…');
+  try {
+    const response=await fetch(`/api/trenches${force?'?refresh=1':''}`,{cache:force?'no-store':'default'});
+    const payload=await response.json().catch(()=>({}));
+    if (!response.ok) throw new Error(payload.error||`HTTP ${response.status}`);
+    renderTrenches(payload);
+  } catch(error){
+    console.warn('trenches scan failed',error);
+    if (!cached) trenchState(`Tarama kullanılamıyor — ${error.message||'API hatası'}`,true);
+  } finally {
+    trenchesLoading=false;
+    if (button) button.disabled=false;
+  }
+}
+function focusTrenches(force=false){
+  const panel=$('#panel-trenches');
+  if (!panel) return;
+  panel.classList.remove('command-focus');
+  void panel.offsetWidth;
+  panel.classList.add('command-focus');
+  setTimeout(()=>panel.classList.remove('command-focus'),900);
+  if (matchMedia('(max-width:700px)').matches) panel.scrollIntoView({behavior:'smooth',block:'start'});
+  loadTrenches(force);
+}
 
 /* ---------- Global state ---------- */
 let tickerMap = {};        // BASE -> ticker obj (USDT pairs)
@@ -1409,7 +1598,14 @@ async function fetchCustomCoinGecko(){
 }
 
 async function addCustom(){
-  const rawSym = ($('#px-q').value||'').trim().toUpperCase().replace(/[^A-Z0-9.\-]/g,'');
+  const rawInput=($('#px-q').value||'').trim();
+  const command=rawInput.toLowerCase().replace(/\s+/g,' ');
+  if (command==='trenches' || command==='trenches refresh'){
+    $('#px-q').value='';
+    focusTrenches(command.endsWith(' refresh'));
+    return;
+  }
+  const rawSym = rawInput.toUpperCase().replace(/[^A-Z0-9.\-]/g,'');
   const sym = rawSym === 'BACKPACK' ? 'BP' : rawSym;
   if (!sym){ $('#px-q').focus(); return; }
   const defaultId=defaultAssetIdForSymbol(sym);
@@ -1612,6 +1808,7 @@ $('#ticker-body').innerHTML = Array.from({length:8}).map(()=>
 // prices watchlist: add a coin or stock by symbol
 $('#px-add').onclick = addCustom;
 $('#px-q').addEventListener('keydown', e => { if (e.key === 'Enter') addCustom(); });
+$('#trench-refresh').onclick = () => focusTrenches(true);
 renderWatchlist();
 
 // click a column header to sort by it (toggles asc/desc)
@@ -1628,6 +1825,7 @@ fetchTickers();
 fetchHype();
 fetchTradFi();
 fetchCustomCoinGecko();
+loadTrenches(false);
 
 // early retries: if no TradFi loaded yet (a proxy was briefly down), try again soon
 setTimeout(() => { if (!Object.keys(tradfiRows).length) fetchTradFi(); }, 5000);
@@ -1637,6 +1835,7 @@ setInterval(fetchTickers, 5000);      // 5s price refresh (Binance)
 setInterval(fetchHype, 60*1000);      // 60s (CoinGecko — HYPE)
 setInterval(fetchCustomCoinGecko, 60*1000); // 60s (added CoinGecko coins)
 setInterval(fetchTradFi, 60*1000);    // 60s (CNBC — S&P/NASDAQ/Gold/Oil)
+setInterval(() => loadTrenches(false), TRENCH_AUTO_MS); // 3h SOL Meme Trenches scan
 </script>
 </body>
 </html>
