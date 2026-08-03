@@ -108,37 +108,6 @@
     background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0) 42%);
   }
 
-  .panel-head {
-    flex: 0 0 auto;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 9px 12px;
-    border-bottom: 1px solid var(--border-soft);
-    background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0));
-  }
-  .panel-head h2 {
-    font-size: 11px;
-    letter-spacing: 2.5px;
-    text-transform: uppercase;
-    font-weight: 600;
-    color: var(--text-bright);
-    display: flex; align-items: center; gap: 7px;
-  }
-  .panel-head h2 .ico { color: var(--green); font-size: 12px; }
-  .panel-head .head-right { margin-left: auto; display:flex; align-items:center; gap:8px; }
-  .panel-head .meta { font-size: 9.5px; letter-spacing: 1px; color: var(--muted); text-transform: uppercase; }
-  .warn-badge {
-    display:none;
-    font-size: 9px; letter-spacing:.5px;
-    color: var(--orange);
-    background: rgba(255,159,67,0.1);
-    border:1px solid rgba(255,159,67,0.3);
-    padding: 2px 8px; border-radius: 999px;
-    white-space: nowrap;
-  }
-  .warn-badge.show { display:inline-block; }
-
   .panel-body { flex: 1 1 auto; min-height: 0; position: relative; }
   .scroll { overflow-y: auto; overflow-x: hidden; height: 100%; }
 
@@ -367,19 +336,7 @@
     background: linear-gradient(145deg, rgba(255,255,255,0.05), transparent 34%);
   }
 
-  .panel > .panel-head,
   .panel > .panel-body { position: relative; z-index: 1; }
-
-  .panel-head {
-    min-height: 45px;
-    padding: 10px 13px;
-    background: rgba(255, 255, 255, 0.035);
-    border-bottom-color: rgba(214, 255, 240, 0.09);
-  }
-
-  .panel-head h2 { font-size: 0.62rem; letter-spacing: 0.16em; }
-  .panel-head h2 .ico { font-size: 0.76rem; }
-  .panel-head .meta { font-size: 0.48rem; letter-spacing: 0.08em; }
 
   #panel-bubbles { border-color: rgba(141, 244, 182, 0.26); }
   #panel-bubbles .panel-body {
@@ -504,28 +461,14 @@
 <div id="app">
   <div class="grid">
     <!-- BUBBLES -->
-    <section class="panel" id="panel-bubbles">
-      <div class="panel-head">
-        <h2><span class="ico">●</span> BUBBLES</h2>
-        <div class="head-right">
-          <span class="warn-badge" id="warn-bubbles">⚠ LIVE DATA UNAVAILABLE</span>
-          <span class="meta">SIZE = 24H % MOVE</span>
-        </div>
-      </div>
+    <section class="panel" id="panel-bubbles" aria-label="Market bubbles">
       <div class="panel-body">
         <canvas id="bubbleCanvas"></canvas>
       </div>
     </section>
 
     <!-- PRICE TABLE -->
-    <section class="panel" id="panel-table">
-      <div class="panel-head">
-        <h2><span class="ico">▤</span> PRICES</h2>
-        <div class="head-right">
-          <span class="warn-badge" id="warn-table">⚠ LIVE DATA UNAVAILABLE</span>
-          <span class="meta">SORTABLE ↕</span>
-        </div>
-      </div>
+    <section class="panel" id="panel-table" aria-label="Market prices">
       <div class="panel-body">
         <div class="px-search">
           <input id="px-q" placeholder="Add coin or stock — e.g. TSLA, AAPL, ADA" autocomplete="off" spellcheck="false" />
@@ -582,7 +525,6 @@ function compact(n){
 }
 const cacheGet = k => { try { return JSON.parse(localStorage.getItem(k)); } catch(e){ return null; } };
 const cacheSet = (k,v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} };
-function setWarn(id, on){ const el = $(id); if(el) el.classList.toggle('show', on); }
 
 /* ---------- Global state ---------- */
 let tickerMap = {};        // BASE -> ticker obj (USDT pairs)
@@ -602,15 +544,11 @@ async function fetchTickers(){
     tickerMap = {};
     usdt.forEach(t => { tickerMap[t.symbol.replace(/USDT$/,'')] = t; });
     cacheSet('cc_tickers', usdt);
-    setWarn('#warn-bubbles', false);
-    setWarn('#warn-table', false);
     renderAll();
     return true;
   } catch (e) {
     console.warn('ticker fetch failed', e);
     const cached = cacheGet('cc_tickers');
-    setWarn('#warn-bubbles', true);
-    setWarn('#warn-table', true);
     if (cached && Object.keys(tickerMap).length === 0){
       tickerMap = {};
       cached.forEach(t => { tickerMap[t.symbol.replace(/USDT$/,'')] = t; });
