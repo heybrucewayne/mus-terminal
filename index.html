@@ -369,24 +369,29 @@
   .panel {
     min-width: 0;
     min-height: 0;
+    isolation: isolate;
     border: 1px solid rgba(214, 255, 240, 0.2);
     border-radius: 14px;
-    background: linear-gradient(145deg, rgba(18, 38, 36, 0.22), rgba(5, 17, 20, 0.15));
+    background: linear-gradient(145deg, rgba(12, 30, 29, 0.28), rgba(5, 14, 18, 0.22));
     box-shadow: 0 18px 42px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.12);
     -webkit-backdrop-filter: blur(7px) saturate(125%);
     backdrop-filter: blur(7px) saturate(125%);
   }
 
   .panel::before {
+    z-index: 0;
     border-radius: 14px;
-    background: linear-gradient(145deg, rgba(255,255,255,0.065), transparent 36%);
+    background: linear-gradient(145deg, rgba(255,255,255,0.05), transparent 34%);
   }
+
+  .panel > .panel-head,
+  .panel > .panel-body { position: relative; z-index: 1; }
 
   .panel-head {
     min-height: 45px;
     padding: 10px 13px;
-    background: rgba(255, 255, 255, 0.075);
-    border-bottom-color: rgba(214, 255, 240, 0.14);
+    background: rgba(255, 255, 255, 0.035);
+    border-bottom-color: rgba(214, 255, 240, 0.09);
   }
 
   .panel-head h2 { font-size: 0.62rem; letter-spacing: 0.16em; }
@@ -396,13 +401,13 @@
   #panel-bubbles { border-color: rgba(141, 244, 182, 0.26); }
   #panel-bubbles .panel-body {
     background:
-      linear-gradient(135deg, rgba(4, 19, 20, 0.15), rgba(4, 10, 14, 0.09)),
-      radial-gradient(circle at 48% 48%, rgba(57, 220, 134, 0.07), transparent 58%);
+      linear-gradient(135deg, rgba(4, 19, 20, 0.07), rgba(4, 10, 14, 0.04)),
+      radial-gradient(circle at 48% 48%, rgba(57, 220, 134, 0.045), transparent 58%);
   }
   #panel-table .panel-body {
-    background: linear-gradient(135deg, rgba(4, 16, 18, 0.10), rgba(4, 10, 14, 0.06));
+    background: linear-gradient(135deg, rgba(4, 16, 18, 0.07), rgba(4, 10, 14, 0.04));
   }
-  #panel-table .sym-cell { flex-wrap: wrap; row-gap: 4px; }
+  #panel-table .sym-cell { min-width:0; flex-wrap:nowrap; }
   #bubbleCanvas { position: relative; z-index: 1; }
 
   .bubble-legend {
@@ -412,6 +417,13 @@
     padding: 5px 10px;
     border-color: rgba(174, 220, 198, 0.14);
     background: rgba(5, 14, 15, 0.66);
+  }
+
+  .bubble-legend,
+  table.ticker thead th,
+  .btn {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 
   .asset-menu {
@@ -456,13 +468,34 @@
 
   .px-search {
     padding: 9px 10px;
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.025);
+    border-bottom-color: rgba(214, 255, 240, 0.08);
   }
 
   .px-search input { min-width: 0; }
   .px-search .btn { white-space: nowrap; }
-  table.ticker thead th { padding-top: 9px; padding-bottom: 8px; }
+  table.ticker { table-layout: fixed; }
+  table.ticker thead th,
+  table.ticker tbody td { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  table.ticker thead th:first-child,
+  table.ticker tbody td:first-child { width:34%; }
+  table.ticker thead th:not(:first-child),
+  table.ticker tbody td:not(:first-child) { width:16.5%; }
+  table.ticker thead th {
+    padding-top: 9px;
+    padding-bottom: 8px;
+    background: rgba(6, 15, 19, 0.54);
+  }
   table.ticker tbody td { padding-top: 8px; padding-bottom: 8px; }
+
+  @media (max-width: 1380px) {
+    .grid { grid-template-columns: minmax(0, 1.15fr) minmax(500px, 1fr); }
+    table.ticker thead th,
+    table.ticker tbody td { padding-left:7px; padding-right:7px; }
+    .sym-cell { gap:5px; }
+    .sym-cell .quote { display:none; }
+    .kind-tag { margin-left:1px; padding-left:5px; padding-right:5px; }
+  }
 
   @media (max-width: 900px) {
     html, body { overflow-y: auto; }
@@ -659,7 +692,7 @@ const bubbles = (function(){
   let nodes = [];
   let mouse = { x:-999, y:-999, over:false };
   let drag = null;   // { node, dx, dy, lastX, lastY } while a bubble is being dragged
-  const EDGE = 11, EDGE_TOP = 24;   // keep bubbles off the panel border / legend
+  const EDGE = 12, EDGE_TOP = 44;   // reserve the legend area and keep bubbles inside the canvas
 
   function resize(){
     const r = canvas.parentElement.getBoundingClientRect();
@@ -682,8 +715,8 @@ const bubbles = (function(){
     const sizes = raw.map(c => c.size);
     const maxV = Math.max(...sizes), minV = Math.min(...sizes);
     const area = W * H;
-    // scale radii so total bubble area ~ 31% of canvas (leaves breathing room)
-    const target = area * 0.31;
+    // scale radii so total bubble area leaves enough room for stable collision resolution
+    const target = area * 0.28;
     let rawAreas = raw.map(c => {
       const t = (Math.sqrt(c.size) - Math.sqrt(minV)) / (Math.sqrt(maxV) - Math.sqrt(minV) || 1);
       return 0.3 + t; // weight (floor so a flat coin is still visible)
@@ -729,28 +762,35 @@ const bubbles = (function(){
       if (a.y < minY){ a.y = minY; a.vy = Math.abs(a.vy)*0.7; }
       if (a.y > maxY){ a.y = maxY; a.vy = -Math.abs(a.vy)*0.7; }
     }
-    // collisions
-    for (let i=0;i<nodes.length;i++){
-      for (let j=i+1;j<nodes.length;j++){
-        const a=nodes[i], b=nodes[j];
-        let dx=b.x-a.x, dy=b.y-a.y;
-        let dist=Math.hypot(dx,dy);
-        const min=a.r+b.r+8;   // keep a clear gap between bubbles
-        if (dist < min && dist > 0){
-          const ov=(min-dist)/2;
-          const nx=dx/dist, ny=dy/dist;
-          const aDrag = drag && a === drag.node, bDrag = drag && b === drag.node;
-          if (aDrag){              // a is held: shove b out of the way, leave a put
-            b.x += nx*ov*2; b.y += ny*ov*2;
-          } else if (bDrag){
-            a.x -= nx*ov*2; a.y -= ny*ov*2;
-          } else {
-            a.x-=nx*ov; a.y-=ny*ov;
-            b.x+=nx*ov; b.y+=ny*ov;
-            // exchange a little velocity
-            const p = (a.vx*nx + a.vy*ny) - (b.vx*nx + b.vy*ny);
-            a.vx -= p*nx*0.5; a.vy -= p*ny*0.5;
-            b.vx += p*nx*0.5; b.vy += p*ny*0.5;
+    // Two relaxation passes prevent persistent overlap after resize or rapid data updates.
+    for (let pass=0; pass<2; pass++){
+      for (let i=0;i<nodes.length;i++){
+        for (let j=i+1;j<nodes.length;j++){
+          const a=nodes[i], b=nodes[j];
+          let dx=b.x-a.x, dy=b.y-a.y;
+          let dist=Math.hypot(dx,dy);
+          if (dist < 0.001){
+            const angle = ((i+1)*31 + (j+1)*17) % 360 * Math.PI / 180;
+            dx=Math.cos(angle)*0.01; dy=Math.sin(angle)*0.01; dist=0.01;
+          }
+          const min=a.r+b.r+9;
+          if (dist < min){
+            const ov=(min-dist)/2;
+            const nx=dx/dist, ny=dy/dist;
+            const aDrag = drag && a === drag.node, bDrag = drag && b === drag.node;
+            if (aDrag){
+              b.x += nx*ov*2; b.y += ny*ov*2;
+            } else if (bDrag){
+              a.x -= nx*ov*2; a.y -= ny*ov*2;
+            } else {
+              a.x-=nx*ov; a.y-=ny*ov;
+              b.x+=nx*ov; b.y+=ny*ov;
+              if (pass === 0){
+                const p = (a.vx*nx + a.vy*ny) - (b.vx*nx + b.vy*ny);
+                a.vx -= p*nx*0.5; a.vy -= p*ny*0.5;
+                b.vx += p*nx*0.5; b.vy += p*ny*0.5;
+              }
+            }
           }
         }
       }
