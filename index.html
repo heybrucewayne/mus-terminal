@@ -164,11 +164,17 @@
   table.ticker tbody tr:hover { background: rgba(255,255,255,0.05); }
   table.ticker tbody tr.asset-row { cursor: pointer; }
   table.ticker tbody tr.asset-row:focus-visible { outline: 1px solid rgba(0,255,136,.7); outline-offset: -1px; }
-  .sym-cell { display:flex; align-items:center; gap:8px; }
-  .sym-cell .base { font-weight: 600; color: var(--text-bright); letter-spacing:.5px; }
-  .sym-cell .quote { font-size: 9px; color: var(--muted2); }
-  .rank { color: var(--muted2); font-size: 10px; width: 16px; display:inline-block; text-align:right; }
-  .kind-tag { font-size:8px; letter-spacing:.5px; padding:1px 7px; border-radius:999px; margin-left:4px; font-family:'Space Grotesk',sans-serif; font-weight:600; border:1px solid; white-space:nowrap; }
+  .sym-cell { display:flex; align-items:center; gap:8px; min-width:0; }
+  .sym-cell .base {
+    flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis;
+    font-weight:600; color:var(--text-bright); letter-spacing:.5px;
+  }
+  .sym-cell .quote {
+    flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis;
+    font-size:9px; color:var(--muted2);
+  }
+  .rank { flex:0 0 16px; color:var(--muted2); font-size:10px; width:16px; display:inline-block; text-align:right; }
+  .kind-tag { flex:0 0 auto; font-size:8px; letter-spacing:.5px; padding:1px 7px; border-radius:999px; margin-left:auto; font-family:'Space Grotesk',sans-serif; font-weight:600; border:1px solid; white-space:nowrap; }
   .kind-tag.t-COIN      { color:#2dd4bf; border-color:rgba(45,212,191,.34); background:rgba(45,212,191,.10); }
   .kind-tag.t-STOCK     { color:#3fb6ff; border-color:rgba(63,182,255,.34); background:rgba(63,182,255,.10); }
   .kind-tag.t-INDEX     { color:#c77dff; border-color:rgba(199,125,255,.34); background:rgba(199,125,255,.10); }
@@ -209,6 +215,12 @@
   .chgpill { display:inline-block; padding: 1px 8px; border-radius: 999px; font-weight: 600; font-size: 11px; min-width: 58px; border:1px solid transparent; }
   .chgpill.pos { background: rgba(0,255,136,0.12); border-color: rgba(0,255,136,0.28); }
   .chgpill.neg { background: rgba(255,68,102,0.12); border-color: rgba(255,68,102,0.28); }
+  .perf-trigger {
+    appearance:none; font-family:'JetBrains Mono',monospace; line-height:1.35;
+    color:inherit; cursor:pointer; transition:transform .12s, filter .12s, box-shadow .12s;
+  }
+  .perf-trigger:hover { transform:translateY(-1px); filter:brightness(1.18); }
+  .perf-trigger:focus-visible { outline:1px solid currentColor; outline-offset:2px; }
 
   /* ===== INPUTS / BUTTONS ===== */
   input, select {
@@ -397,6 +409,48 @@
   .asset-menu-action.danger { color:var(--red); border-color:rgba(255,68,102,.28); background:rgba(255,68,102,.08); }
   .asset-menu-action.danger:hover { background:rgba(255,68,102,.22); border-color:var(--red); color:#fff; }
 
+  .perf-overlay {
+    position:fixed; inset:0; z-index:140; display:grid; place-items:center; padding:20px;
+    background:rgba(2,8,10,.48); -webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px);
+  }
+  .perf-overlay[hidden] { display:none; }
+  .perf-modal {
+    position:relative; width:min(520px,100%); padding:22px;
+    border:1px solid rgba(214,255,240,.28); border-radius:18px;
+    background:linear-gradient(145deg,rgba(24,42,40,.86),rgba(11,19,23,.78));
+    -webkit-backdrop-filter:blur(18px) saturate(145%); backdrop-filter:blur(18px) saturate(145%);
+    box-shadow:0 28px 80px rgba(0,0,0,.58),inset 0 1px 0 rgba(255,255,255,.16);
+  }
+  .perf-close {
+    position:absolute; top:12px; right:12px; width:30px; height:30px; border-radius:50%;
+    border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.06);
+    color:var(--text-bright); font-size:18px; line-height:1; cursor:pointer;
+  }
+  .perf-close:hover { border-color:rgba(0,255,136,.5); color:var(--green); }
+  .perf-kicker { color:var(--green); font:600 8px 'Space Grotesk',sans-serif; letter-spacing:.2em; margin-bottom:7px; }
+  .perf-title { color:var(--text-bright); font:700 21px 'Space Grotesk',sans-serif; letter-spacing:.03em; }
+  .perf-sub { min-height:17px; margin-top:4px; color:var(--muted); font-size:10px; }
+  .perf-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:9px; margin-top:18px; }
+  .perf-card {
+    min-width:0; padding:14px 11px; border:1px solid rgba(255,255,255,.1); border-radius:12px;
+    background:rgba(255,255,255,.045); box-shadow:inset 0 1px 0 rgba(255,255,255,.06);
+  }
+  .perf-label { color:var(--muted); font:600 8px 'Space Grotesk',sans-serif; letter-spacing:.12em; white-space:nowrap; }
+  .perf-value { margin-top:8px; font:700 17px 'JetBrains Mono',monospace; color:var(--text-bright); }
+  .perf-value.pos { color:var(--green); } .perf-value.neg { color:var(--red); }
+  .perf-value.na { color:var(--muted2); font-size:10px; line-height:23px; }
+  .perf-status { min-height:16px; margin-top:12px; color:var(--muted2); font-size:9px; }
+  .perf-status.err { color:var(--red); }
+  .perf-loading { height:23px; margin-top:8px; border-radius:6px; background:linear-gradient(90deg,rgba(255,255,255,.04),rgba(255,255,255,.11),rgba(255,255,255,.04)); background-size:200% 100%; animation:shimmer 1.1s linear infinite; }
+
+  @media (max-width:560px) {
+    .perf-modal { padding:19px 15px; }
+    .perf-grid { gap:6px; }
+    .perf-card { padding:12px 7px; }
+    .perf-label { font-size:7px; }
+    .perf-value { font-size:14px; }
+  }
+
   .px-search {
     padding: 9px 10px;
     background: rgba(255, 255, 255, 0.025);
@@ -427,7 +481,7 @@
     table.ticker tbody td { padding-left:7px; padding-right:7px; }
     .sym-cell { gap:5px; }
     .sym-cell .quote { display:none; }
-    .kind-tag { margin-left:1px; padding-left:5px; padding-right:5px; }
+    .kind-tag { margin-left:auto; padding-left:5px; padding-right:5px; }
   }
 
   @media (max-width: 900px) {
@@ -501,6 +555,17 @@
   <div id="assetMenuTitle" class="asset-menu-title"></div>
   <a id="assetMenuTradingView" class="asset-menu-action" target="_blank" rel="noopener noreferrer" role="menuitem">VIEW IN TRADINGVIEW</a>
   <button id="assetMenuRemove" class="asset-menu-action danger" type="button" role="menuitem">REMOVE FROM LIST</button>
+</div>
+
+<div id="performanceModal" class="perf-overlay" hidden>
+  <section class="perf-modal" role="dialog" aria-modal="true" aria-labelledby="performanceTitle">
+    <button id="performanceClose" class="perf-close" type="button" aria-label="Close performance window">×</button>
+    <div class="perf-kicker">PERFORMANCE</div>
+    <div id="performanceTitle" class="perf-title"></div>
+    <div id="performanceSub" class="perf-sub"></div>
+    <div id="performanceGrid" class="perf-grid"></div>
+    <div id="performanceStatus" class="perf-status" aria-live="polite"></div>
+  </section>
 </div>
 
 <script>
@@ -589,6 +654,18 @@ function refreshBubbles(){
     items.push({ id:f.key, base:TRADFI_BUBBLE[f.key]||f.name, name:f.name, full:f.name, kind:'tradfi', cls:f.cls, usd:f.usd, pct,
       price:d.price, vol:d.vol, high:d.high, low:d.low, size:Math.abs(pct) });
   });
+  customItems.forEach(c => {
+    const d = customAssetSnapshot(c);
+    if (!d || !isFinite(+d.price)) return;
+    const pct = isFinite(+d.chg) ? +d.chg : 0;
+    items.push({
+      ...d,
+      base:d.name,
+      pair:d.sub,
+      pct,
+      size:Math.abs(pct)
+    });
+  });
   bubbles.setData(items);
 }
 
@@ -663,6 +740,8 @@ const bubbles = (function(){
       return {
         id:c.id||base, base, name:c.name||c.full||base, cls:c.cls,
         pair:c.pair, pct:c.pct, kind:c.kind, usd:c.usd, full:c.full,
+        custom:Boolean(c.custom), rmsym:c.rmsym, source:c.source, cgId:c.cgId,
+        tvSymbol:c.tvSymbol, tvExchange:c.tvExchange,
         price: c.price, vol: c.vol,
         high: c.high, low: c.low,
         r,
@@ -780,7 +859,7 @@ const bubbles = (function(){
       canvas.style.cursor='grabbing';
     } else if (hover && mouse.over){
       tip.style.display='block';
-      const isT = hover.kind === 'tradfi';
+      const isT = hover.kind === 'tradfi' || hover.kind === 'stock';
       const cur = isT ? (hover.usd ? '$' : '') : '$';
       const priceTxt = isT ? cur+fmtNum(hover.price,2) : '$'+smartPrice(hover.price);
       const hiloTxt = isT
@@ -852,7 +931,11 @@ const bubbles = (function(){
     drag=null;
     if (released && !released.moved){
       const n=released.node;
-      openAssetMenu({ id:n.id, name:n.name, kind:n.kind, cls:n.cls, custom:false },
+      openAssetMenu({
+        id:n.id, name:n.name, kind:n.kind, cls:n.cls,
+        custom:n.custom, rmsym:n.rmsym, source:n.source, cgId:n.cgId,
+        tvSymbol:n.tvSymbol, tvExchange:n.tvExchange
+      },
         { clientX:e.clientX, clientY:e.clientY });
     }
   });
@@ -911,6 +994,42 @@ const saveCustom = () => {
 };
 const saveHiddenAssets = () => cacheSet('cc_hidden_assets', hiddenAssets);
 let activeAssetMenu = null;
+
+function customAssetSnapshot(c){
+  const common = {
+    id:'c:'+c.sym,
+    rmsym:c.sym,
+    custom:true,
+    name:c.sym,
+    source:c.source,
+    cgId:c.cgId,
+    tvSymbol:c.tvSymbol,
+    tvExchange:c.tvExchange,
+    usd:true
+  };
+  if (c.type === 'crypto'){
+    if (c.source === 'coingecko'){
+      const d = customCoinQuotes[c.sym];
+      return { ...common, sub:'/USD', kind:'crypto', cls:'COIN',
+        historyProvider:'coingecko', historySymbol:c.cgId,
+        price:d ? d.price : null, chg:d ? d.chg : 0,
+        high:d ? d.high : null, low:d ? d.low : null,
+        vol:d ? d.vol : null, mcap:d ? d.mcap : 0 };
+    }
+    const t = tickerMap[c.sym];
+    if (!t) return null;
+    return { ...common, sub:'/USDT', kind:'crypto', cls:'COIN',
+      historyProvider:'binance', historySymbol:c.sym+'USDT',
+      price:+t.lastPrice, chg:+t.priceChangePercent,
+      high:+t.highPrice, low:+t.lowPrice, vol:+t.quoteVolume, mcap:0 };
+  }
+  const d = customQuotes[c.sym];
+  return { ...common, sub:'', kind:'stock', cls:'STOCK',
+    historyProvider:'yahoo', historySymbol:c.sym.replace(/\./g,'-'),
+    price:d ? d.price : null, chg:d ? d.chgPct : 0,
+    high:d ? d.high : null, low:d ? d.low : null,
+    vol:d ? d.vol : null, mcap:0 };
+}
 
 function isAssetHidden(id){ return hiddenAssets.includes(String(id)); }
 function defaultAssetIdForSymbol(sym){
@@ -994,6 +1113,125 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeAssetMenu();
 });
 
+const performanceCache = new Map();
+let performanceRequestId = 0;
+
+function closePerformance(){
+  const modal = $('#performanceModal');
+  if (modal) modal.hidden = true;
+  performanceRequestId++;
+}
+
+function performanceLoadingCards(){
+  return ['1 MONTH','1 YEAR','YTD'].map(label =>
+    `<div class="perf-card"><div class="perf-label">${label}</div><div class="perf-loading"></div></div>`
+  ).join('');
+}
+
+function performanceBaseline(points, target){
+  let found = null;
+  for (const point of points){
+    if (point[0] <= target) found = point;
+    else break;
+  }
+  const maxGap = 10 * 24 * 60 * 60 * 1000;
+  return found && target - found[0] <= maxGap ? found[1] : null;
+}
+
+function performancePct(current, baseline){
+  return isFinite(+current) && isFinite(+baseline) && +baseline > 0
+    ? ((+current - +baseline) / +baseline) * 100
+    : null;
+}
+
+function performanceTargets(now=Date.now()){
+  const d = new Date(now);
+  return [
+    { label:'1 MONTH', at:now - 30*24*60*60*1000 },
+    { label:'1 YEAR', at:now - 365*24*60*60*1000 },
+    { label:'YTD', at:Date.UTC(d.getUTCFullYear(),0,1) }
+  ];
+}
+
+async function loadPerformanceHistory(asset){
+  const provider = asset.historyProvider;
+  const symbol = asset.historySymbol;
+  if (!provider || !symbol) throw new Error('Historical source is unavailable');
+  const key = `${provider}:${symbol}`;
+  const cached = performanceCache.get(key);
+  if (cached && Date.now() - cached.time < 10*60*1000) return cached.points;
+
+  let points = [];
+  if (provider === 'binance'){
+    const r = await fetch(`https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(symbol)}&interval=1d&limit=400`);
+    if (!r.ok) throw new Error('Binance history '+r.status);
+    const data = await r.json();
+    points = (Array.isArray(data) ? data : []).map(k => [+k[0], +k[4]]);
+  } else if (provider === 'coingecko'){
+    const r = await fetch(`${COINGECKO_BASE}/coins/${encodeURIComponent(symbol)}/market_chart?vs_currency=usd&days=365`);
+    if (!r.ok) throw new Error('CoinGecko history '+r.status);
+    const data = await r.json();
+    points = Array.isArray(data.prices) ? data.prices.map(p => [+p[0], +p[1]]) : [];
+  } else if (provider === 'yahoo'){
+    const r = await fetch(`/api/history?symbol=${encodeURIComponent(symbol)}`);
+    if (!r.ok) throw new Error('Market history '+r.status);
+    const data = await r.json();
+    points = Array.isArray(data.points) ? data.points.map(p => [+p[0], +p[1]]) : [];
+  }
+  points = points.filter(p => isFinite(p[0]) && isFinite(p[1]) && p[1] > 0).sort((a,b) => a[0]-b[0]);
+  if (!points.length) throw new Error('Historical prices are empty');
+  performanceCache.set(key, { time:Date.now(), points });
+  return points;
+}
+
+async function openPerformance(asset){
+  if (!asset) return;
+  closeAssetMenu();
+  const modal = $('#performanceModal');
+  const title = $('#performanceTitle');
+  const sub = $('#performanceSub');
+  const grid = $('#performanceGrid');
+  const status = $('#performanceStatus');
+  const requestId = ++performanceRequestId;
+  title.textContent = asset.name;
+  sub.textContent = `24H ${asset.chg>=0?'+':''}${(+asset.chg||0).toFixed(2)}% · extended performance`;
+  grid.innerHTML = performanceLoadingCards();
+  status.textContent = 'Loading historical closes…';
+  status.className = 'perf-status';
+  modal.hidden = false;
+  $('#performanceClose').focus();
+  try {
+    const points = await loadPerformanceHistory(asset);
+    if (requestId !== performanceRequestId) return;
+    const cards = performanceTargets().map(period => {
+      const baseline = performanceBaseline(points, period.at);
+      const value = performancePct(asset.price, baseline);
+      if (value == null){
+        return `<div class="perf-card"><div class="perf-label">${period.label}</div><div class="perf-value na">NO DATA</div></div>`;
+      }
+      return `<div class="perf-card"><div class="perf-label">${period.label}</div><div class="perf-value ${value>=0?'pos':'neg'}">${value>=0?'+':''}${value.toFixed(2)}%</div></div>`;
+    });
+    grid.innerHTML = cards.join('');
+    status.textContent = 'Calculated from historical closing prices.';
+  } catch(e){
+    if (requestId !== performanceRequestId) return;
+    grid.innerHTML = ['1 MONTH','1 YEAR','YTD'].map(label =>
+      `<div class="perf-card"><div class="perf-label">${label}</div><div class="perf-value na">UNAVAILABLE</div></div>`
+    ).join('');
+    status.textContent = 'Historical performance could not be loaded right now.';
+    status.className = 'perf-status err';
+    console.warn('performance history failed', e);
+  }
+}
+
+$('#performanceClose').addEventListener('click', closePerformance);
+$('#performanceModal').addEventListener('click', e => {
+  if (e.target === $('#performanceModal')) closePerformance();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !$('#performanceModal').hidden) closePerformance();
+});
+
 function renderMarketTable(){
   const rows = [];
   CRYPTO_LIST.forEach(c => {
@@ -1002,11 +1240,13 @@ function renderMarketTable(){
     if (!t) return;
     const price = +t.lastPrice;
     rows.push({ id:c.base, name:c.base, sub:'/USDT', kind:'crypto', cls:'COIN', usd:true,
+      historyProvider:'binance', historySymbol:c.base+'USDT',
       price, chg:+t.priceChangePercent, high:+t.highPrice, low:+t.lowPrice,
       vol:+t.quoteVolume, volUsd:true, mcap:price*c.supply });
   });
   if (hypeRow && !isAssetHidden('HYPE')){
     rows.push({ id:'HYPE', name:'HYPE', sub:'/USD', kind:'crypto', cls:'COIN', usd:true,
+      source:'coingecko', cgId:'hyperliquid', historyProvider:'coingecko', historySymbol:'hyperliquid',
       price:hypeRow.price, chg:hypeRow.chg, high:hypeRow.high, low:hypeRow.low,
       vol:hypeRow.vol, volUsd:true, mcap:hypeRow.mcap });
   }
@@ -1015,31 +1255,15 @@ function renderMarketTable(){
     const d = tradfiRows[f.key];
     if (!d) return;
     rows.push({ id:f.key, name:f.name, sub:f.sub, kind:'tradfi', cls:f.cls, usd:f.usd,
+      historyProvider:'yahoo', historySymbol:f.ysym,
       price:d.price,
       chg:(d.chgPct!=null && isFinite(d.chgPct)) ? d.chgPct : (d.prev ? (d.price-d.prev)/d.prev*100 : 0),
       high:d.high, low:d.low, vol:d.vol, volUsd:false, mcap:f.mcap });
   });
-  // user-added watchlist items (kept out of the bubbles; mcap:0 → sorts to the bottom by default)
+  // user-added items share one normalized data model with the bubble panel.
   customItems.forEach(c => {
-    if (c.type === 'crypto'){
-      if (c.source === 'coingecko'){
-        const d = customCoinQuotes[c.sym];
-        rows.push({ id:'c:'+c.sym, rmsym:c.sym, custom:true, name:c.sym, sub:'/USD', kind:'crypto', cls:'COIN', usd:true,
-          source:c.source, cgId:c.cgId, tvSymbol:c.tvSymbol, tvExchange:c.tvExchange,
-          price:d ? d.price : null, chg:d ? d.chg : 0, high:d ? d.high : null, low:d ? d.low : null,
-          vol:d ? d.vol : null, mcap:d ? d.mcap : 0 });
-      } else {
-        const t = tickerMap[c.sym]; if (!t) return;
-        const price = +t.lastPrice;
-        rows.push({ id:'c:'+c.sym, rmsym:c.sym, custom:true, name:c.sym, sub:'/USDT', kind:'crypto', cls:'COIN', usd:true,
-          price, chg:+t.priceChangePercent, high:+t.highPrice, low:+t.lowPrice, vol:+t.quoteVolume, mcap:0 });
-      }
-    } else {
-      const d = customQuotes[c.sym];
-      rows.push({ id:'c:'+c.sym, rmsym:c.sym, custom:true, name:c.sym, sub:'', kind:'stock', cls:'STOCK', usd:true,
-        price: d? d.price : null, chg: d? d.chgPct : 0,
-        high: d? d.high : null, low: d? d.low : null, vol: d? d.vol : null, mcap:0 });
-    }
+    const row = customAssetSnapshot(c);
+    if (row) rows.push(row);
   });
   const sk = tableSort.key, sd = tableSort.dir;
   const num = v => (v==null || !isFinite(v)) ? -Infinity : v;
@@ -1061,7 +1285,7 @@ function renderMarketTable(){
     return `<tr class="asset-row" data-asset-id="${r.id}" tabindex="0" role="button" aria-label="${r.name} actions">
       <td><div class="sym-cell"><span class="rank">${i+1}</span><span class="base">${r.name}</span><span class="quote">${r.sub}</span>${tag}</div></td>
       <td class="pricecell num ${flash}">${priceStr}</td>
-      <td><span class="chgpill num ${r.chg>=0?'pos':'neg'}">${r.chg>=0?'+':''}${(r.chg||0).toFixed(2)}%</span></td>
+      <td><button class="chgpill perf-trigger num ${r.chg>=0?'pos':'neg'}" type="button" data-performance-id="${r.id}" aria-label="Open ${r.name} extended performance">${r.chg>=0?'+':''}${(r.chg||0).toFixed(2)}%</button></td>
       <td class="num">${highStr}</td>
       <td class="num">${lowStr}</td>
     </tr>`;
@@ -1069,8 +1293,15 @@ function renderMarketTable(){
   $('#ticker-body').querySelectorAll('.asset-row').forEach(row => {
     const asset = rowMeta.get(row.dataset.assetId);
     const open = () => openAssetMenu(asset, row);
+    const performanceButton = row.querySelector('.perf-trigger');
+    performanceButton.addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      openPerformance(asset);
+    });
     row.addEventListener('click', open);
     row.addEventListener('keydown', e => {
+      if (e.target.closest('.perf-trigger')) return;
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
     });
   });
@@ -1173,7 +1404,7 @@ async function fetchCustomCoinGecko(){
       if (quote) customCoinQuotes[item.sym] = quote;
     });
     saveCustom();
-    renderMarketTable();
+    renderAll();
   } catch(e){ console.warn('custom CoinGecko refresh failed', e); }
 }
 
@@ -1204,7 +1435,7 @@ async function addCustom(){
   // 1) crypto on Binance?
   if (tickerMap[sym]){
     customItems.push({ sym, type:'crypto' }); saveCustom();
-    $('#px-q').value=''; pxMsg(`Added ${sym} · crypto`, 'ok'); renderWatchlist(); renderMarketTable(); return;
+    $('#px-q').value=''; pxMsg(`Added ${sym} · crypto`, 'ok'); renderWatchlist(); renderAll(); return;
   }
   // 2) coins not listed on Binance (including Backpack/BP)
   pxMsg(`Searching “${sym}”…`);
@@ -1220,7 +1451,7 @@ async function addCustom(){
     $('#px-q').value='';
     pxMsg(`Added ${coin.item.name} (${sym}) · crypto`, 'ok');
     renderWatchlist();
-    renderMarketTable();
+    renderAll();
     return;
   }
   if (replaceExistingStock){
@@ -1231,7 +1462,7 @@ async function addCustom(){
   const quote = await cnbcQuoteOne(sym);
   if (quote){
     customItems.push({ sym, type:'stock', name:quote.name }); customQuotes[sym] = quote; saveCustom();
-    $('#px-q').value=''; pxMsg(`Added ${quote.name} (${sym})`, 'ok'); renderWatchlist(); renderMarketTable();
+    $('#px-q').value=''; pxMsg(`Added ${quote.name} (${sym})`, 'ok'); renderWatchlist(); renderAll();
   } else {
     pxMsg(`“${sym}” not found as a coin or stock`, 'err');
   }
@@ -1262,7 +1493,7 @@ function removeCustom(sym){
   delete customCoinQuotes[symbol];
   saveCustom();
   renderWatchlist();
-  renderMarketTable();
+  renderAll();
   pxMsg(`Removed ${symbol} from list`, 'ok');
   return true;
 }
