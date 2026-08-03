@@ -6,8 +6,28 @@
 <title>MUS Terminal</title>
 <meta name="theme-color" content="#071416" />
 <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+<script>
+  (() => {
+    const backgrounds = [
+      'backgrounds/bear-rooftop.jpeg',
+      'backgrounds/liquidation.jpeg',
+      'backgrounds/trader-room.jpeg',
+      'backgrounds/sola-na.jpeg',
+      'backgrounds/bear-slurpee.jpeg',
+      'backgrounds/bear-market.jpeg'
+    ];
+    const storageKey = 'mus_last_background_v1';
+    let previous = '';
+    try { previous = localStorage.getItem(storageKey) || ''; } catch (error) {}
+    const choices = backgrounds.filter(path => path !== previous);
+    const selected = choices[Math.floor(Math.random() * choices.length)] || backgrounds[0];
+    document.documentElement.style.setProperty('--terminal-background', `url("${selected}")`);
+    try { localStorage.setItem(storageKey, selected); } catch (error) {}
+  })();
+</script>
 <style>
   :root {
+    --terminal-background: url('backgrounds/bear-rooftop.jpeg');
     --bg: #05070e;
     --bg2: #04060c;
     --panel: linear-gradient(160deg, rgba(26,36,62,0.46) 0%, rgba(11,17,32,0.36) 100%);
@@ -285,7 +305,7 @@
     opacity: 0.94;
     background:
       linear-gradient(135deg, rgba(4, 14, 15, 0.18), rgba(3, 10, 15, 0.30)),
-      url('background.jpeg') center / cover no-repeat;
+      var(--terminal-background) center / cover no-repeat;
     filter: blur(1px) saturate(108%);
     animation: none;
     transform: none;
