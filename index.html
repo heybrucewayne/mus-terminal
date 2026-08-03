@@ -23,10 +23,38 @@
       'backgrounds/market-cycle.jpeg'
     ];
     const storageKey = 'mus_last_background_v1';
-    let previous = '';
-    try { previous = localStorage.getItem(storageKey) || ''; } catch (error) {}
-    const choices = backgrounds.filter(path => path !== previous);
-    const selected = choices[Math.floor(Math.random() * choices.length)] || backgrounds[0];
+    let stored = '';
+    try { stored = localStorage.getItem(storageKey) || ''; } catch (error) {}
+    let selected = backgrounds.includes(stored)
+      ? stored
+      : backgrounds[Math.floor(Math.random() * backgrounds.length)] || backgrounds[0];
+
+    const applyBackground = path => {
+      selected = path;
+      document.documentElement.style.setProperty('--terminal-background', `url("${path}")`);
+      try { localStorage.setItem(storageKey, path); } catch (error) {}
+    };
+
+    const loadBackground = path => {
+      const image = new Image();
+      image.fetchPriority = 'high';
+      image.src = path;
+      if (typeof image.decode === 'function') return image.decode();
+      return new Promise((resolve, reject) => {
+        image.addEventListener('load', resolve, { once: true });
+        image.addEventListener('error', reject, { once: true });
+      });
+    };
+
+    window.MusTerminalBackground = {
+      async change(){
+        const choices = backgrounds.filter(path => path !== selected);
+        const next = choices[Math.floor(Math.random() * choices.length)] || backgrounds[0];
+        await loadBackground(next);
+        applyBackground(next);
+        return next;
+      }
+    };
 
     // Start the selected image request before the stylesheet is parsed.
     const preload = document.createElement('link');
@@ -36,8 +64,7 @@
     preload.fetchPriority = 'high';
     document.head.append(preload);
 
-    document.documentElement.style.setProperty('--terminal-background', `url("${selected}")`);
-    try { localStorage.setItem(storageKey, selected); } catch (error) {}
+    applyBackground(selected);
 
     // Warm the remaining images only after the visible page has loaded.
     window.addEventListener('load', () => {
@@ -825,6 +852,10 @@
 </div>
 
 <div id="pageContextMenu" class="asset-menu page-context-menu" hidden role="menu" aria-label="Page actions">
+  <button id="pageBackgroundChange" class="asset-menu-action" type="button" role="menuitem">
+    <span class="page-context-icon" aria-hidden="true">▧</span>
+    DUVAR KAĞIDINI DEĞİŞTİR
+  </button>
   <button id="pageReload" class="asset-menu-action" type="button" role="menuitem">
     <span class="page-context-icon" aria-hidden="true">↻</span>
     SAYFAYI YENİLE
@@ -1791,6 +1822,14 @@ document.addEventListener('keydown', event => {
 });
 window.addEventListener('resize', closePageContextMenu);
 document.addEventListener('scroll', closePageContextMenu, true);
+$('#pageBackgroundChange').addEventListener('click', async () => {
+  closePageContextMenu();
+  try {
+    await window.MusTerminalBackground.change();
+  } catch (error) {
+    console.warn('background change failed', error);
+  }
+});
 $('#pageReload').addEventListener('click', () => window.location.reload());
 
 const performanceCache = new Map();
