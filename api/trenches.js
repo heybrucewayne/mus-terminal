@@ -2,6 +2,9 @@ const CACHE_MS = 10 * 60 * 1000;
 const DISCOVERY_LIMIT = 27;
 const REPORT_LIMIT = 12;
 const REQUEST_TIMEOUT_MS = 8500;
+const GREEN_SCORE_MIN = 76;
+const MIN_GREEN_AGE_HOURS = 6;
+const HIGH_RUGCHECK_RISK = 70;
 
 let runtimeCache = { updatedAt: 0, payload: null };
 
@@ -124,7 +127,7 @@ function knownNonHolder(report, holder) {
   return /AMM|LOCKER|BURN|LIQUIDITY/.test(labels);
 }
 
-function securitySnapshot(report, pair) {
+function securitySnapshot(report) {
   if (!report) {
     return {
       verified: false,
@@ -139,6 +142,14 @@ function securitySnapshot(report, pair) {
       wash: "unknown",
       devSale: "unknown",
       riskScore: null,
+      riskWarningCount: 0,
+      riskDangerCount: 0,
+      creatorRugHistory: false,
+      copycat: false,
+      lowLiquidityWarning: false,
+      rugged: false,
+      graphInsiders: 0,
+      uniqueTraders: null,
       notableRisk: "Güvenlik verisi Doğrulanmadı"
     };
   }
@@ -151,8 +162,10 @@ function securitySnapshot(report, pair) {
   const top1Pct = holders.length ? number(holders[0]?.pct) : null;
   const top10Pct = holders.length ? holders.slice(0, 10).reduce((sum, holder) => sum + number(holder?.pct), 0) : null;
   const insiderPct = holders.length ? holders.filter((holder) => holder?.insider).reduce((sum, holder) => sum + number(holder?.pct), 0) : null;
-  const lockValues = (Array.isArray(report?.markets) ? report.markets : [])
-    .map((market) => Number(market?.lp?.lpLockedPct))
+  const lockValues = [
+    ...(report?.lpLockedPct === null || report?.lpLockedPct === undefined ? [] : [Number(report.lpLockedPct)]),
+    ...(Array.isArray(report?.markets) ? report.markets : []).map((market) => Number(market?.lp?.lpLockedPct))
+  ]
     .filter(Number.isFinite);
   const lpLockedPct = lockValues.length ? Math.max(...lockValues) : null;
   const risks = Array.isArray(report?.risks) ? report.risks : [];
@@ -160,12 +173,20 @@ function securitySnapshot(report, pair) {
   const bundled = /bundl/.test(riskText) ? "flagged" : "clear";
   const wash = /wash trad/.test(riskText) ? "flagged" : "clear";
   const devSale = /(creator|developer|dev).{0,30}(sell|sold|dump)/.test(riskText) ? "flagged" : "clear";
+  const creatorRugHistory = /(creator|developer|dev).{0,45}(rug|scam)|history.{0,45}(rug|scam)/.test(riskText);
+  const copycat = /copycat|impersonat/.test(riskText);
+  const lowLiquidityWarning = /low liquidity|low amount of lp|few lp provider/.test(riskText);
+  const riskDangerCount = risks.filter((risk) => String(risk?.level || "").toLowerCase() === "danger").length;
+  const normalizedRiskScore = report?.score_normalised === null || report?.score_normalised === undefined
+    ? Number.NaN
+    : Number(report.score_normalised);
+  const riskScore = Number.isFinite(normalizedRiskScore) ? clamp(normalizedRiskScore, 0, 100) : null;
   const notable = risks
     .slice()
     .sort((a, b) => number(b?.score) - number(a?.score))[0];
 
   return {
-    verified: mint !== "unknown" && freeze !== "unknown" && holders.length > 0 && Array.isArray(report?.risks),
+    verified: mint !== "unknown" && freeze !== "unknown" && holders.length > 0 && riskScore !== null,
     contradictory,
     mint,
     freeze,
@@ -176,7 +197,12 @@ function securitySnapshot(report, pair) {
     bundled,
     wash,
     devSale,
-    riskScore: Number.isFinite(Number(report?.score_normalised)) ? Number(report.score_normalised) : number(report?.score),
+    riskScore,
+    riskWarningCount: risks.length,
+    riskDangerCount,
+    creatorRugHistory,
+    copycat,
+    lowLiquidityWarning,
     rugged: report?.rugged === true,
     graphInsiders: number(report?.graphInsidersDetected),
     uniqueTraders: null,
@@ -184,7 +210,7 @@ function securitySnapshot(report, pair) {
   };
 }
 
-function volumeSnapshot(pair) {
+function volumeSnapshot(pair, ageHours = null) {
   const m5 = number(pair?.volume?.m5);
   const h1 = number(pair?.volume?.h1);
   const h6 = number(pair?.volume?.h6);
@@ -193,8 +219,16 @@ function volumeSnapshot(pair) {
   const previous5hPace = Math.max(h6 - h1, 0) / 5;
   const previous18hPace = Math.max(h24 - h6, 0) / 18;
   let trend = "steady";
-  if (pace5 > Math.max(h1, 1) * 1.12 && h1 > Math.max(previous5hPace, 1) * 1.08) trend = "rising";
-  else if (h1 < Math.max(previous5hPace, 1) * 0.68 || previous5hPace < Math.max(previous18hPace, 1) * 0.62) trend = "falling";
+  if (ageHours === null || ageHours < 1) {
+    trend = "unconfirmed";
+  } else if (ageHours < 6) {
+    if (pace5 > Math.max(h1, 1) * 1.2) trend = "rising";
+    else if (pace5 < Math.max(h1, 1) * 0.42) trend = "falling";
+  } else if (pace5 > Math.max(h1, 1) * 1.12 && h1 > Math.max(previous5hPace, 1) * 1.08) {
+    trend = "rising";
+  } else if (h1 < Math.max(previous5hPace, 1) * 0.68 || previous5hPace < Math.max(previous18hPace, 1) * 0.62) {
+    trend = "falling";
+  }
 
   return { m5, h1, h6, h24, pace5, previous5hPace, previous18hPace, trend };
 }
@@ -210,65 +244,180 @@ function transactionSnapshot(pair) {
   return txns;
 }
 
+function logarithmicScore(value, floor, ceiling, points) {
+  if (!Number.isFinite(value) || value <= floor) return 0;
+  if (value >= ceiling) return points;
+  const progress = (Math.log(value) - Math.log(floor)) / (Math.log(ceiling) - Math.log(floor));
+  return clamp(progress * points, 0, points);
+}
+
+function qualityMarketScore(marketCap) {
+  if (!marketCap) return 2;
+  return clamp(8 - Math.abs(Math.log10(Math.max(marketCap, 1)) - 6) * 1.8, 2, 8);
+}
+
+function qualityScore({ marketCap, liquidity, lpRatio, ageHours, volume, txns, price, security, priceVolumeDivergence }) {
+  const liquidityScore = logarithmicScore(liquidity, 5000, 200000, 12)
+    + clamp((lpRatio - 0.004) / (0.03 - 0.004) * 8, 0, 8);
+
+  const turnover24h = marketCap ? volume.h24 / marketCap : 0;
+  const recentLiquidityTurnover = liquidity ? volume.h1 / liquidity : 0;
+  const trendScore = volume.trend === "rising" ? 4 : volume.trend === "steady" ? 3 : 0;
+  const volumeScore = logarithmicScore(volume.h24, 5000, 1000000, 8)
+    + logarithmicScore(turnover24h, 0.03, 1.2, 8)
+    + logarithmicScore(recentLiquidityTurnover, 0.03, 1.2, 4)
+    + trendScore;
+
+  const buyRatio = txns.h1.buyRatio;
+  const balanceScore = txns.h1.total
+    ? clamp(6 - Math.max(0, Math.abs(buyRatio - 0.55) - 0.05) * 35, 0, 6)
+    : 0;
+  const transactionScore = logarithmicScore(txns.h1.total, 20, 1500, 8) + balanceScore;
+
+  const ageScore = ageHours === null ? 0
+    : ageHours < 1 ? 0
+      : ageHours < 6 ? 2
+        : ageHours < 24 ? 5
+          : ageHours < 720 ? 8
+            : 10;
+
+  let priceHealthScore = 10;
+  if (priceVolumeDivergence) priceHealthScore -= 6;
+  if (price.h6 <= -35) priceHealthScore -= 3;
+  if (price.h24 <= -50) priceHealthScore -= 3;
+  if (price.h6 >= 120) priceHealthScore -= 2;
+  if (price.h24 >= 250) priceHealthScore -= 2;
+  if (volume.trend === "falling") priceHealthScore -= 2;
+  priceHealthScore = clamp(priceHealthScore, 0, 10);
+
+  const riskQuality = security.riskScore === null ? 0
+    : security.riskScore <= 20 ? 3
+      : security.riskScore <= 40 ? 2
+        : security.riskScore <= 60 ? 1
+          : 0;
+  let securityScore = (security.verified ? 4 : 0)
+    + (security.mint === "revoked" ? 2 : 0)
+    + (security.freeze === "revoked" ? 2 : 0)
+    + (security.lpLockedPct !== null && security.lpLockedPct >= 80 ? 3 : 0)
+    + riskQuality;
+  securityScore -= Math.min(4, security.riskWarningCount * 2);
+  if (security.copycat) securityScore -= 3;
+  if (security.lowLiquidityWarning) securityScore -= 2;
+  if (security.creatorRugHistory) securityScore -= 6;
+  if (security.graphInsiders > 10) securityScore -= clamp(security.graphInsiders / 20, 1, 5);
+  if (security.top1Pct !== null && security.top1Pct > 12) securityScore -= 2;
+  if (security.top10Pct !== null && security.top10Pct > 45) securityScore -= 2;
+  if (security.insiderPct !== null && security.insiderPct > 5) securityScore -= 3;
+  securityScore = clamp(securityScore, 0, 14);
+
+  const components = {
+    liquidity: liquidityScore,
+    volume: volumeScore,
+    transactions: transactionScore,
+    market: qualityMarketScore(marketCap),
+    age: ageScore,
+    priceHealth: priceHealthScore,
+    security: securityScore
+  };
+  const score = Math.round(clamp(Object.values(components).reduce((sum, value) => sum + value, 0), 0, 100));
+  return {
+    score,
+    components: Object.fromEntries(Object.entries(components).map(([key, value]) => [key, Math.round(value)]))
+  };
+}
+
 function classifyPair(pair, report, discovery) {
   const marketCap = number(pair?.marketCap) || number(pair?.fdv);
   const liquidity = number(pair?.liquidity?.usd) || number(report?.totalMarketLiquidity);
   const ageHours = pair?.pairCreatedAt ? Math.max(0, (Date.now() - number(pair.pairCreatedAt)) / 3600000) : null;
-  const volume = volumeSnapshot(pair);
+  const volume = volumeSnapshot(pair, ageHours);
   const txns = transactionSnapshot(pair);
   const price = {
     h1: number(pair?.priceChange?.h1),
     h6: number(pair?.priceChange?.h6),
     h24: number(pair?.priceChange?.h24)
   };
-  const security = securitySnapshot(report, pair);
+  const security = securitySnapshot(report);
   const lpRatio = marketCap ? liquidity / marketCap : 0;
-  const lowLpFloor = marketCap ? Math.max(4500, Math.min(28000, marketCap * 0.006)) : 6000;
+  const criticalLpFloor = marketCap ? Math.max(5000, Math.min(30000, marketCap * 0.005)) : 6000;
+  const greenLpFloor = marketCap ? Math.max(15000, Math.min(120000, marketCap * 0.015)) : 20000;
   const unsupportedSpike = price.h6 > 100 && (volume.trend === "falling" || (marketCap && volume.h6 / marketCap < 0.12));
   const priceVolumeDivergence = (price.h6 > 35 && volume.trend === "falling")
+    || (price.h6 < -30 && volume.trend === "falling")
     || (Math.abs(price.h24) > 90 && marketCap && volume.h24 / marketCap < 0.18);
+  const severeSelloff = price.h6 <= -65 || price.h24 <= -80;
   const hardReasons = [];
 
   if (security.rugged) hardReasons.push("RugCheck rugged işareti");
   if (security.contradictory) hardReasons.push("Çelişkili güvenlik verisi");
   if (security.mint === "open") hardReasons.push("Mint authority açık");
   if (security.freeze === "open") hardReasons.push("Freeze authority açık");
-  if (liquidity < lowLpFloor || lpRatio > 0 && lpRatio < 0.004) hardReasons.push("Likidite çok düşük");
-  if (security.top1Pct !== null && security.top1Pct > 25) hardReasons.push("Tek holder yoğunluğu aşırı");
-  if (security.top10Pct !== null && security.top10Pct > 72) hardReasons.push("Top holder yoğunluğu aşırı");
-  if (security.insiderPct !== null && security.insiderPct > 20) hardReasons.push("Insider yoğunluğu yüksek");
+  if (liquidity < criticalLpFloor || lpRatio > 0 && lpRatio < 0.003) hardReasons.push("Likidite çok düşük");
+  if (security.top1Pct !== null && security.top1Pct > 22) hardReasons.push("Tek holder yoğunluğu aşırı");
+  if (security.top10Pct !== null && security.top10Pct > 65) hardReasons.push("Top holder yoğunluğu aşırı");
+  if (security.insiderPct !== null && security.insiderPct > 15) hardReasons.push("Insider yoğunluğu yüksek");
   if (security.bundled === "flagged") hardReasons.push("Bundled buy işareti");
   if (security.wash === "flagged") hardReasons.push("Wash trading işareti");
   if (security.devSale === "flagged") hardReasons.push("Geliştirici satışı işareti");
+  if (security.creatorRugHistory) hardReasons.push("Geliştiricinin rug geçmişi");
+  if (security.graphInsiders >= 100) hardReasons.push("Cluster/insider yoğunluğu aşırı");
   if (unsupportedSpike) hardReasons.push("Hacimsiz dik fiyat hareketi");
-  if (security.riskScore !== null && security.riskScore >= 75) hardReasons.push("Yüksek RugCheck risk skoru");
+  if (severeSelloff) hardReasons.push("Şiddetli fiyat çöküşü");
+  if (security.riskScore !== null && security.riskScore >= HIGH_RUGCHECK_RISK) hardReasons.push("Yüksek RugCheck risk skoru");
 
-  let score = preScore(pair);
-  score += volume.trend === "rising" ? 14 : volume.trend === "steady" ? 6 : -8;
-  score += txns.h1.buyRatio >= 0.44 && txns.h1.buyRatio <= 0.68 ? 6 : -5;
-  score += clamp(lpRatio * 90, 0, 12);
-  score += security.lpLockedPct !== null && security.lpLockedPct >= 80 ? 7 : 0;
-  score += ageHours !== null && ageHours >= 12 && ageHours <= 720 ? 4 : 0;
-  score -= priceVolumeDivergence ? 10 : 0;
-  score -= security.top10Pct !== null && security.top10Pct > 50 ? 8 : 0;
-  score = Math.round(clamp(score, 0, 100));
+  const cautionReasons = [];
+  if (!security.verified) cautionReasons.push("Güvenlik verisi Doğrulanmadı");
+  if (security.lpLockedPct === null) cautionReasons.push("LP kilidi Doğrulanmadı");
+  else if (security.lpLockedPct < 80) cautionReasons.push("LP kilidi yetersiz");
+  if (ageHours === null) cautionReasons.push("Token yaşı Doğrulanmadı");
+  else if (ageHours < MIN_GREEN_AGE_HOURS) cautionReasons.push("Token çok yeni");
+  if (liquidity < greenLpFloor || lpRatio > 0 && lpRatio < 0.01) cautionReasons.push("Yeşil için likidite yetersiz");
+  if (volume.trend === "falling") cautionReasons.push("Kısa vadeli hacim zayıflıyor");
+  if (volume.trend === "unconfirmed") cautionReasons.push("Hacim geçmişi yetersiz");
+  if (txns.h1.total < 30) cautionReasons.push("İşlem sayısı yetersiz");
+  if (txns.h1.total && (txns.h1.buyRatio < 0.42 || txns.h1.buyRatio > 0.70)) cautionReasons.push("Alış/satış dengesi zayıf");
+  if (priceVolumeDivergence) cautionReasons.push("Fiyat/hacim uyumsuzluğu");
+  if (price.h6 <= -25 || price.h24 <= -40) cautionReasons.push("Sert fiyat kaybı");
+  if (price.h6 >= 100 || price.h24 >= 200) cautionReasons.push("Aşırı fiyat oynaklığı");
+  if (security.riskScore === null) cautionReasons.push("RugCheck puanı Doğrulanmadı");
+  else if (security.riskScore > 30) cautionReasons.push("RugCheck riski düşük değil");
+  if (security.riskWarningCount > 0) cautionReasons.push(`RugCheck: ${security.notableRisk}`);
+  if (security.top1Pct !== null && security.top1Pct > 12) cautionReasons.push("Tek holder yoğunluğu yüksek");
+  if (security.top10Pct !== null && security.top10Pct > 45) cautionReasons.push("Top holder yoğunluğu yüksek");
+  if (security.insiderPct !== null && security.insiderPct > 5) cautionReasons.push("Insider yoğunluğu dikkat istiyor");
+  if (security.graphInsiders > 10) cautionReasons.push("Cluster/insider sayısı yüksek");
+
+  const quality = qualityScore({
+    marketCap,
+    liquidity,
+    lpRatio,
+    ageHours,
+    volume,
+    txns,
+    price,
+    security,
+    priceVolumeDivergence
+  });
+  const hardPenalty = Math.min(36, hardReasons.length * 12);
+  const score = Math.round(clamp(quality.score - hardPenalty, 0, 100));
 
   let decision = "yellow";
   if (hardReasons.length) decision = "red";
-  else if (security.verified && !security.contradictory && score >= 69 && security.lpLockedPct !== null) decision = "green";
+  else if (score >= GREEN_SCORE_MIN && cautionReasons.length === 0) decision = "green";
 
   const volumeComment = volume.trend === "rising"
     ? "hacim kademeli ivmeleniyor"
     : volume.trend === "falling"
       ? "kısa vadeli hacim zayıflıyor"
-      : "hacim dengeli seyrediyor";
+      : volume.trend === "unconfirmed"
+        ? "hacim geçmişi henüz yetersiz"
+        : "hacim dengeli seyrediyor";
   const importantRisk = !security.verified
     ? "güvenlik verisi Doğrulanmadı"
-    : priceVolumeDivergence
-      ? "fiyat/hacim uyumsuzluğu"
-      : security.notableRisk === "Belirgin RugCheck uyarısı yok"
+    : cautionReasons[0]
+      || (security.notableRisk === "Belirgin RugCheck uyarısı yok"
         ? "benzersiz trader sayısı Doğrulanmadı"
-        : security.notableRisk;
+        : security.notableRisk);
 
   return {
     address: pair.baseToken.address,
@@ -281,10 +430,12 @@ function classifyPair(pair, report, discovery) {
     txns,
     ageHours,
     score,
+    scoreBreakdown: { ...quality.components, hardPenalty: -hardPenalty },
     decision,
     decisionLabel: decision === "green" ? "🟢 İzlemeye değer" : decision === "yellow" ? "🟡 Şartlı izleme" : "🔴 Elendi",
-    reason: `${volumeComment}; Mint ${security.mint === "revoked" ? "✅" : "⚠️"} Freeze ${security.freeze === "revoked" ? "✅" : "⚠️"} LP ${security.lpLockedPct !== null && security.lpLockedPct >= 80 && liquidity >= lowLpFloor ? "✅" : "⚠️"}; ${importantRisk}`,
+    reason: `${volumeComment}; Mint ${security.mint === "revoked" ? "✅" : "⚠️"} Freeze ${security.freeze === "revoked" ? "✅" : "⚠️"} LP ${security.lpLockedPct !== null && security.lpLockedPct >= 80 && liquidity >= greenLpFloor ? "✅" : "⚠️"}; ${importantRisk}`,
     hardReasons,
+    cautionReasons,
     security,
     priceVolumeDivergence,
     dexUrl: pair?.url || `https://dexscreener.com/solana/${pair?.pairAddress || pair.baseToken.address}`,
@@ -358,6 +509,7 @@ async function buildScan() {
   const eliminated = classified.filter((token) => token.decision === "red");
 
   return {
+    modelVersion: 2,
     generatedAt: new Date().toISOString(),
     autoRefreshMs: 16 * 60 * 1000,
     scannedCount: classified.length,
@@ -396,4 +548,4 @@ export default async function handler(request, response) {
   }
 }
 
-export { classifyPair, preScore, securitySnapshot, volumeSnapshot };
+export { classifyPair, preScore, qualityScore, securitySnapshot, volumeSnapshot };
