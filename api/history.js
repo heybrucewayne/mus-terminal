@@ -1,6 +1,24 @@
 const ALLOWED_SYMBOL = /^[A-Z0-9.^=@-]{1,24}$/i;
+const REQUEST_TIMEOUT_MS = 8000;
+
+async function fetchWithTimeout(url) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'Mozilla/5.0 (compatible; MUS-Terminal/1.0)'
+      }
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export default async function handler(request, response) {
+  response.setHeader('Access-Control-Allow-Origin', '*');
   if (request.method !== 'GET') {
     response.setHeader('Allow', 'GET');
     return response.status(405).json({ error: 'Method not allowed' });
@@ -15,13 +33,12 @@ export default async function handler(request, response) {
     let upstream = null;
     for (const host of ['query1.finance.yahoo.com', 'query2.finance.yahoo.com']) {
       const url = `https://${host}/v8/finance/chart/${encodeURIComponent(symbol)}?range=2y&interval=1d&events=history`;
-      const candidate = await fetch(url, {
-        headers: {
-          Accept: 'application/json',
-          'User-Agent': 'Mozilla/5.0 (compatible; MUS-Terminal/1.0)'
-        }
-      });
-      if (candidate.ok) { upstream = candidate; break; }
+      try {
+        const candidate = await fetchWithTimeout(url);
+        if (candidate.ok) { upstream = candidate; break; }
+      } catch (error) {
+        console.warn('[history] upstream failed', { host, error: String(error) });
+      }
     }
     if (!upstream) {
       return response.status(502).json({ error: 'History provider is unavailable' });

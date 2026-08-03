@@ -118,7 +118,7 @@
   .scroll::-webkit-scrollbar-track { background: transparent; }
 
   /* ===== BUBBLES ===== */
-  #bubbleCanvas { display:block; width:100%; height:100%; cursor: crosshair; }
+  #bubbleCanvas { display:block; width:100%; height:100%; cursor: default; }
   #bubbleTip {
     position: fixed;
     z-index: 50;
@@ -186,24 +186,6 @@
   .px-search { display:flex; gap:6px; padding:8px 10px; border-bottom:1px solid var(--border-soft); }
   .px-search input { flex:1; }
   .px-search .btn { padding:6px 10px; font-size:11px; }
-  .px-watchlist {
-    display:flex; align-items:center; flex-wrap:wrap; gap:5px;
-    min-height:34px; padding:6px 10px; border-bottom:1px solid var(--border-soft);
-    background:rgba(255,255,255,0.018);
-  }
-  .px-watchlist:empty { display:none; }
-  .px-watchlist-label {
-    color:var(--muted); font-size:8px; letter-spacing:1px;
-    text-transform:uppercase; margin-right:2px;
-  }
-  .watch-chip {
-    display:inline-flex; align-items:center; gap:4px;
-    padding:5px 10px; border:1px solid rgba(0,255,136,.30);
-    border-radius:999px; background:rgba(0,255,136,.08);
-    color:var(--text-bright); font:600 9px 'JetBrains Mono',monospace;
-    cursor:pointer; transition:background .12s, border-color .12s, transform .12s;
-  }
-  .watch-chip:hover { background:rgba(0,255,136,.18); border-color:rgba(0,255,136,.65); transform:translateY(-1px); }
   .px-msg { font-size:10px; padding:0 12px; height:0; overflow:hidden; color:var(--muted); transition:height .15s, padding .15s; }
   .px-msg.show { height:auto; padding:5px 12px; }
   .px-msg.ok { color:var(--green); } .px-msg.err { color:var(--red); }
@@ -321,14 +303,51 @@
   }
 
   .grid {
+    --bubble-width: 61%;
+    --prices-height: 54%;
     display: grid;
+    position: relative;
     flex: 1 1 auto;
     min-height: 0;
     height: auto;
-    grid-template-columns: minmax(0, 1.55fr) minmax(360px, 1fr);
-    grid-template-rows: minmax(0, 1.08fr) minmax(260px, .92fr);
+    grid-template-columns: minmax(340px, var(--bubble-width)) minmax(360px, 1fr);
+    grid-template-rows: minmax(220px, var(--prices-height)) minmax(220px, 1fr);
     gap: 12px;
   }
+
+  .panel-resizer {
+    position:absolute; z-index:30; border:0; padding:0; background:transparent;
+    touch-action:none; user-select:none; -webkit-user-select:none;
+  }
+  .panel-resizer::before {
+    content:''; position:absolute; border-radius:999px;
+    background:rgba(210,255,242,.32); box-shadow:0 0 10px rgba(0,255,136,.12);
+    transition:background .14s, box-shadow .14s, transform .14s;
+  }
+  .panel-resizer:hover::before,
+  .panel-resizer:focus-visible::before,
+  .panel-resizer.active::before {
+    background:rgba(0,255,136,.82); box-shadow:0 0 13px rgba(0,255,136,.52); transform:scale(1.08);
+  }
+  .panel-resizer:focus-visible { outline:none; }
+  .resizer-columns {
+    top:0; bottom:0; left:calc(var(--bubble-width) + 6px); width:12px;
+    transform:translateX(-50%); cursor:col-resize;
+  }
+  .resizer-columns::before { width:2px; height:46px; left:5px; top:50%; transform:translateY(-50%); }
+  .resizer-columns:hover::before,
+  .resizer-columns:focus-visible::before,
+  .resizer-columns.active::before { transform:translateY(-50%) scale(1.08); }
+  .resizer-rows {
+    left:calc(var(--bubble-width) + 12px); right:0; top:calc(var(--prices-height) + 6px); height:12px;
+    transform:translateY(-50%); cursor:row-resize;
+  }
+  .resizer-rows::before { width:46px; height:2px; left:50%; top:5px; transform:translateX(-50%); }
+  .resizer-rows:hover::before,
+  .resizer-rows:focus-visible::before,
+  .resizer-rows.active::before { transform:translateX(-50%) scale(1.08); }
+  body.panel-resizing { cursor:grabbing; user-select:none; -webkit-user-select:none; }
+  body.panel-resizing .panel { pointer-events:none; }
 
   .panel {
     min-width: 0;
@@ -360,6 +379,27 @@
   #panel-table .panel-body {
     background: linear-gradient(135deg, rgba(4, 16, 18, 0.07), rgba(4, 10, 14, 0.04));
   }
+  #panel-table table.ticker thead th {
+    color:rgba(229,241,239,.76);
+    text-shadow:0 1px 3px rgba(0,0,0,.78);
+  }
+  #panel-table table.ticker tbody td {
+    color:rgba(237,246,244,.9);
+    text-shadow:0 1px 3px rgba(0,0,0,.72);
+  }
+  #panel-table .sym-cell .base,
+  #panel-table .pricecell { color:#f2faf8; }
+  #panel-table .sym-cell .quote {
+    color:rgba(210,226,223,.62);
+    font-weight:600;
+  }
+  #panel-table .rank { color:rgba(202,220,216,.62); }
+  #panel-table .px-search input {
+    color:#eff9f7;
+    background:rgba(5,14,17,.16);
+    text-shadow:0 1px 2px rgba(0,0,0,.65);
+  }
+  #panel-table .px-search input::placeholder { color:rgba(204,221,218,.64); opacity:1; }
   #panel-table .sym-cell { min-width:0; flex-wrap:nowrap; }
   #bubbleCanvas { position: relative; z-index: 1; }
 
@@ -389,10 +429,10 @@
   .trench-refresh:hover { border-color:rgba(80,215,255,.65); background:rgba(80,215,255,.15); }
   .trench-refresh:disabled { opacity:.45; cursor:wait; }
   .trench-scroll { flex:1 1 auto; min-height:0; overflow:auto; }
-  table.trenches { width:100%; border-collapse:collapse; table-layout:fixed; }
+  table.trenches { width:100%; min-width:560px; border-collapse:collapse; table-layout:fixed; }
   table.trenches th {
-    position:sticky; top:0; z-index:2; padding:7px 5px; border-bottom:1px solid rgba(214,255,240,.09);
-    background:transparent; color:var(--muted); font:600 7px 'Space Grotesk',sans-serif;
+    position:sticky; top:0; z-index:2; padding:8px 5px; border-bottom:1px solid rgba(214,255,240,.12);
+    background:transparent; color:rgba(225,240,237,.72); font:600 8.5px 'Space Grotesk',sans-serif;
     letter-spacing:.08em; text-align:right; white-space:nowrap;
   }
   table.trenches th:first-child, table.trenches td:first-child { text-align:left; padding-left:10px; width:14%; }
@@ -402,23 +442,23 @@
   table.trenches th:nth-child(5), table.trenches td:nth-child(5) { width:20%; }
   table.trenches th:nth-child(6), table.trenches td:nth-child(6) { width:14%; padding-right:10px; }
   table.trenches td {
-    padding:7px 5px; border-bottom:1px solid rgba(255,255,255,.055); color:var(--text);
-    font:600 8px 'JetBrains Mono',monospace; text-align:right; white-space:nowrap;
+    padding:8px 5px; border-bottom:1px solid rgba(255,255,255,.07); color:rgba(238,246,244,.88);
+    font:600 9.5px 'JetBrains Mono',monospace; text-align:right; white-space:nowrap;
     overflow:hidden; text-overflow:ellipsis;
   }
-  .trench-symbol { color:var(--text-bright); }
-  .trench-score { display:block; margin-top:2px; color:var(--muted2); font-size:6px; }
-  .trench-decision { font-size:9px; }
+  .trench-symbol { color:var(--text-bright); font-size:10px; }
+  .trench-score { display:block; margin-top:3px; color:rgba(190,211,207,.64); font-size:7px; }
+  .trench-decision { font-size:11px; }
   .trench-note {
-    padding:6px 10px; border-bottom:1px solid rgba(255,255,255,.045); color:rgba(228,240,238,.72);
-    font:500 7.5px/1.45 'JetBrains Mono',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    padding:7px 10px; border-bottom:1px solid rgba(255,255,255,.055); color:rgba(235,244,242,.82);
+    font:500 8.5px/1.5 'JetBrains Mono',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   }
   .trench-note strong { color:var(--text-bright); }
   .trench-note a { color:#6bdcff; text-decoration:none; }
   .trench-note a:hover { text-decoration:underline; }
   .trench-change { color:#ffd66b; margin-left:5px; }
   .trench-eliminated, .trench-state {
-    padding:7px 10px; color:var(--muted); font:500 7.5px/1.4 'JetBrains Mono',monospace;
+    padding:8px 10px; color:rgba(207,224,220,.72); font:500 8.5px/1.45 'JetBrains Mono',monospace;
   }
   .trench-eliminated { color:rgba(255,137,157,.78); }
   .trench-state.err { color:var(--red); }
@@ -539,7 +579,7 @@
   table.ticker tbody td { padding-top: 8px; padding-bottom: 8px; }
 
   @media (max-width: 1380px) {
-    .grid { grid-template-columns: minmax(0, 1.15fr) minmax(500px, 1fr); }
+    .grid { grid-template-columns: minmax(320px, var(--bubble-width)) minmax(500px, 1fr); }
     table.ticker thead th,
     table.ticker tbody td { padding-left:7px; padding-right:7px; }
     .sym-cell { gap:5px; }
@@ -555,6 +595,7 @@
       grid-template-columns: 1fr 1fr;
       grid-template-rows: minmax(360px, 1fr) minmax(300px, .85fr);
     }
+    .panel-resizer { display:none; }
   }
 
   @media (max-width: 700px) {
@@ -592,7 +633,6 @@
           <input id="px-q" placeholder="Add coin or stock — e.g. TSLA, AAPL, ADA" autocomplete="off" spellcheck="false" />
           <button class="btn" id="px-add" title="Add to list">+ ADD</button>
         </div>
-        <div id="px-watchlist" class="px-watchlist" aria-label="Added assets"></div>
         <div id="px-msg" class="px-msg"></div>
         <div class="px-scroll scroll">
           <table class="ticker">
@@ -623,6 +663,9 @@
         </div>
       </div>
     </section>
+
+    <div id="resize-columns" class="panel-resizer resizer-columns" role="separator" aria-label="Resize bubble and data panels" aria-orientation="vertical" aria-valuemin="30" aria-valuemax="70" tabindex="0"></div>
+    <div id="resize-rows" class="panel-resizer resizer-rows" role="separator" aria-label="Resize prices and trenches panels" aria-orientation="horizontal" aria-valuemin="32" aria-valuemax="70" tabindex="0"></div>
 
   </div>
 </div>
@@ -667,6 +710,145 @@ function compact(n){
 }
 const cacheGet = k => { try { return JSON.parse(localStorage.getItem(k)); } catch(e){ return null; } };
 const cacheSet = (k,v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} };
+const APP_API_ORIGIN = location.protocol === 'file:' ? 'https://mus-terminal.vercel.app' : '';
+async function fetchWithTimeout(url,options={},timeoutMs=12000){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),timeoutMs);
+  try { return await fetch(url,{...options,signal:controller.signal}); }
+  finally { clearTimeout(timer); }
+}
+
+/* ============================================================
+   RESIZABLE PANEL LAYOUT
+   ============================================================ */
+const PANEL_LAYOUT_KEY = 'mus_panel_layout_v1';
+function setupPanelResizers(){
+  const grid=$('.grid');
+  const columnHandle=$('#resize-columns');
+  const rowHandle=$('#resize-rows');
+  if (!grid || !columnHandle || !rowHandle) return;
+
+  const GAP=12;
+  const stored=cacheGet(PANEL_LAYOUT_KEY);
+  const state={
+    columns:Number(stored?.columns),
+    rows:Number(stored?.rows),
+    dragAxis:null,
+    pointerId:null,
+    resizeFrame:0
+  };
+  const clamp=(value,min,max)=>Math.min(max,Math.max(min,value));
+  const desktop=()=>matchMedia('(min-width:901px)').matches;
+  const defaults=()=>({ columns:grid.clientWidth<=1380?.53:.61, rows:.54 });
+  const validRatio=value=>isFinite(value) && value>0 && value<1;
+  if (!validRatio(state.columns)) state.columns=defaults().columns;
+  if (!validRatio(state.rows)) state.rows=defaults().rows;
+
+  function bounds(rect){
+    const compact=rect.width<=1380;
+    return {
+      minLeft:compact?320:340,
+      minRight:compact?500:360,
+      minTop:220,
+      minBottom:220
+    };
+  }
+  function applyLayout(){
+    if (!desktop()) return;
+    const rect=grid.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const limit=bounds(rect);
+    const maxLeft=Math.max(limit.minLeft,rect.width-GAP-limit.minRight);
+    const maxTop=Math.max(limit.minTop,rect.height-GAP-limit.minBottom);
+    const left=clamp(rect.width*state.columns,limit.minLeft,maxLeft);
+    const top=clamp(rect.height*state.rows,limit.minTop,maxTop);
+    state.columns=left/rect.width;
+    state.rows=top/rect.height;
+    grid.style.setProperty('--bubble-width',`${left.toFixed(2)}px`);
+    grid.style.setProperty('--prices-height',`${top.toFixed(2)}px`);
+    columnHandle.setAttribute('aria-valuenow',String(Math.round(state.columns*100)));
+    rowHandle.setAttribute('aria-valuenow',String(Math.round(state.rows*100)));
+  }
+  function saveLayout(){ cacheSet(PANEL_LAYOUT_KEY,{columns:state.columns,rows:state.rows}); }
+  function resetLayout(){
+    const next=defaults();
+    state.columns=next.columns;
+    state.rows=next.rows;
+    applyLayout();
+    saveLayout();
+  }
+  function beginDrag(axis,event){
+    if (!desktop() || event.button!==0) return;
+    event.preventDefault();
+    state.dragAxis=axis;
+    state.pointerId=event.pointerId;
+    const handle=axis==='columns'?columnHandle:rowHandle;
+    handle.classList.add('active');
+    handle.setPointerCapture?.(event.pointerId);
+    document.body.classList.add('panel-resizing');
+  }
+  function moveDrag(event){
+    if (!state.dragAxis || event.pointerId!==state.pointerId) return;
+    const rect=grid.getBoundingClientRect();
+    const limit=bounds(rect);
+    if (state.dragAxis==='columns'){
+      const max=Math.max(limit.minLeft,rect.width-GAP-limit.minRight);
+      state.columns=clamp(event.clientX-rect.left,limit.minLeft,max)/rect.width;
+    } else {
+      const max=Math.max(limit.minTop,rect.height-GAP-limit.minBottom);
+      state.rows=clamp(event.clientY-rect.top,limit.minTop,max)/rect.height;
+    }
+    applyLayout();
+  }
+  function endDrag(event){
+    if (!state.dragAxis || event.pointerId!==state.pointerId) return;
+    const handle=state.dragAxis==='columns'?columnHandle:rowHandle;
+    handle.classList.remove('active');
+    if (handle.hasPointerCapture?.(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+    state.dragAxis=null;
+    state.pointerId=null;
+    document.body.classList.remove('panel-resizing');
+    saveLayout();
+  }
+  function keyboardResize(axis,event){
+    const relevant=axis==='columns' ? ['ArrowLeft','ArrowRight'] : ['ArrowUp','ArrowDown'];
+    if (!relevant.includes(event.key)){
+      if (event.key==='Home' || event.key==='Enter'){
+        event.preventDefault();
+        resetLayout();
+      }
+      return;
+    }
+    event.preventDefault();
+    const rect=grid.getBoundingClientRect();
+    const step=event.shiftKey?60:24;
+    const positive=event.key==='ArrowRight' || event.key==='ArrowDown';
+    if (axis==='columns') state.columns=(rect.width*state.columns+(positive?step:-step))/rect.width;
+    else state.rows=(rect.height*state.rows+(positive?step:-step))/rect.height;
+    applyLayout();
+    saveLayout();
+  }
+
+  columnHandle.title='Drag to resize · double-click to reset';
+  rowHandle.title='Drag to resize · double-click to reset';
+  columnHandle.addEventListener('pointerdown',event=>beginDrag('columns',event));
+  rowHandle.addEventListener('pointerdown',event=>beginDrag('rows',event));
+  columnHandle.addEventListener('pointermove',moveDrag);
+  rowHandle.addEventListener('pointermove',moveDrag);
+  columnHandle.addEventListener('pointerup',endDrag);
+  rowHandle.addEventListener('pointerup',endDrag);
+  columnHandle.addEventListener('pointercancel',endDrag);
+  rowHandle.addEventListener('pointercancel',endDrag);
+  columnHandle.addEventListener('dblclick',resetLayout);
+  rowHandle.addEventListener('dblclick',resetLayout);
+  columnHandle.addEventListener('keydown',event=>keyboardResize('columns',event));
+  rowHandle.addEventListener('keydown',event=>keyboardResize('rows',event));
+  window.addEventListener('resize',()=>{
+    cancelAnimationFrame(state.resizeFrame);
+    state.resizeFrame=requestAnimationFrame(applyLayout);
+  });
+  requestAnimationFrame(applyLayout);
+}
 
 /* ============================================================
    SOL MEME TRENCHES
@@ -674,9 +856,7 @@ const cacheSet = (k,v) => { try { localStorage.setItem(k, JSON.stringify(v)); } 
 const TRENCH_CACHE_KEY = 'mus_trenches_cache_v1';
 const TRENCH_PREVIOUS_KEY = 'mus_trenches_previous_v1';
 const TRENCH_AUTO_MS = 3 * 60 * 60 * 1000;
-const TRENCH_API_BASE = location.protocol === 'file:'
-  ? 'https://mus-terminal.vercel.app/api/trenches'
-  : '/api/trenches';
+const TRENCH_API_BASE = `${APP_API_ORIGIN}/api/trenches`;
 let trenchesLoading = false;
 
 function trenchEscape(value){
@@ -760,7 +940,7 @@ async function loadTrenches(force=false){
   if (!force && cached) renderTrenches(cached);
   else trenchState('Solana tokenleri taranıyor…');
   try {
-    const response=await fetch(`${TRENCH_API_BASE}${force?'?refresh=1':''}`,{cache:force?'no-store':'default'});
+    const response=await fetchWithTimeout(`${TRENCH_API_BASE}${force?'?refresh=1':''}`,{cache:force?'no-store':'default'},25000);
     const payload=await response.json().catch(()=>({}));
     if (!response.ok) throw new Error(payload.error||`HTTP ${response.status}`);
     renderTrenches(payload);
@@ -785,14 +965,17 @@ function focusTrenches(force=false){
 
 /* ---------- Global state ---------- */
 let tickerMap = {};        // BASE -> ticker obj (USDT pairs)
+let tickerFetchInFlight = false;
 const EXCLUDE = /(UPUSDT|DOWNUSDT|BULLUSDT|BEARUSDT)$/;
 
 /* ============================================================
    BINANCE TICKER FETCH (shared by bubbles and table)
    ============================================================ */
 async function fetchTickers(){
+  if (tickerFetchInFlight) return false;
+  tickerFetchInFlight = true;
   try {
-    const res = await fetch('https://api.binance.com/api/v3/ticker/24hr');
+    const res = await fetchWithTimeout('https://api.binance.com/api/v3/ticker/24hr',{},10000);
     if (!res.ok) throw new Error('HTTP '+res.status);
     const all = await res.json();
     const usdt = all.filter(t =>
@@ -812,6 +995,8 @@ async function fetchTickers(){
       renderAll();
     }
     return false;
+  } finally {
+    tickerFetchInFlight = false;
   }
 }
 
@@ -1075,7 +1260,7 @@ const bubbles = (function(){
       canvas.style.cursor='grab';
     } else {
       tip.style.display='none';
-      canvas.style.cursor='crosshair';
+      canvas.style.cursor='default';
     }
   }
 
@@ -1298,7 +1483,7 @@ $('#assetMenuRemove').addEventListener('click', e => {
 });
 document.addEventListener('click', e => {
   if (!activeAssetMenu) return;
-  if (e.target.closest('#assetMenu, .asset-row, .watch-chip, #bubbleCanvas')) return;
+  if (e.target.closest('#assetMenu, .asset-row, #bubbleCanvas')) return;
   closeAssetMenu();
 });
 document.addEventListener('keydown', e => {
@@ -1355,17 +1540,17 @@ async function loadPerformanceHistory(asset){
 
   let points = [];
   if (provider === 'binance'){
-    const r = await fetch(`https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(symbol)}&interval=1d&limit=400`);
+    const r = await fetchWithTimeout(`https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(symbol)}&interval=1d&limit=400`);
     if (!r.ok) throw new Error('Binance history '+r.status);
     const data = await r.json();
     points = (Array.isArray(data) ? data : []).map(k => [+k[0], +k[4]]);
   } else if (provider === 'coingecko'){
-    const r = await fetch(`${COINGECKO_BASE}/coins/${encodeURIComponent(symbol)}/market_chart?vs_currency=usd&days=365`);
+    const r = await fetchWithTimeout(`${COINGECKO_BASE}/coins/${encodeURIComponent(symbol)}/market_chart?vs_currency=usd&days=365`);
     if (!r.ok) throw new Error('CoinGecko history '+r.status);
     const data = await r.json();
     points = Array.isArray(data.prices) ? data.prices.map(p => [+p[0], +p[1]]) : [];
   } else if (provider === 'yahoo'){
-    const r = await fetch(`/api/history?symbol=${encodeURIComponent(symbol)}`);
+    const r = await fetchWithTimeout(`${APP_API_ORIGIN}/api/history?symbol=${encodeURIComponent(symbol)}`,{},20000);
     if (!r.ok) throw new Error('Market history '+r.status);
     const data = await r.json();
     points = Array.isArray(data.points) ? data.points.map(p => [+p[0], +p[1]]) : [];
@@ -1634,7 +1819,7 @@ async function addCustom(){
   // 1) crypto on Binance?
   if (tickerMap[sym]){
     customItems.push({ sym, type:'crypto' }); saveCustom();
-    $('#px-q').value=''; pxMsg(`Added ${sym} · crypto`, 'ok'); renderWatchlist(); renderAll(); return;
+    $('#px-q').value=''; pxMsg(`Added ${sym} · crypto`, 'ok'); renderAll(); return;
   }
   // 2) coins not listed on Binance (including Backpack/BP)
   pxMsg(`Searching “${sym}”…`);
@@ -1649,7 +1834,6 @@ async function addCustom(){
     saveCustom();
     $('#px-q').value='';
     pxMsg(`Added ${coin.item.name} (${sym}) · crypto`, 'ok');
-    renderWatchlist();
     renderAll();
     return;
   }
@@ -1661,7 +1845,7 @@ async function addCustom(){
   const quote = await cnbcQuoteOne(sym);
   if (quote){
     customItems.push({ sym, type:'stock', name:quote.name }); customQuotes[sym] = quote; saveCustom();
-    $('#px-q').value=''; pxMsg(`Added ${quote.name} (${sym})`, 'ok'); renderWatchlist(); renderAll();
+    $('#px-q').value=''; pxMsg(`Added ${quote.name} (${sym})`, 'ok'); renderAll();
   } else {
     pxMsg(`“${sym}” not found as a coin or stock`, 'err');
   }
@@ -1691,44 +1875,9 @@ function removeCustom(sym){
   delete customQuotes[symbol];
   delete customCoinQuotes[symbol];
   saveCustom();
-  renderWatchlist();
   renderAll();
   pxMsg(`Removed ${symbol} from list`, 'ok');
   return true;
-}
-
-function renderWatchlist(){
-  const box = $('#px-watchlist');
-  if (!box) return;
-  box.replaceChildren();
-  if (!customItems.length) return;
-
-  const title = document.createElement('span');
-  title.className = 'px-watchlist-label';
-  title.textContent = 'ADDED';
-  box.append(title);
-
-  customItems.forEach(item => {
-    const chip = document.createElement('button');
-    chip.type = 'button';
-    chip.className = 'watch-chip';
-    chip.textContent = item.sym;
-    chip.title = `${item.sym} actions`;
-    chip.setAttribute('aria-label', `${item.sym} actions`);
-    chip.onclick = () => openAssetMenu({
-      id:`c:${item.sym}`,
-      rmsym:item.sym,
-      name:item.sym,
-      kind:item.type,
-      cls:item.type === 'crypto' ? 'COIN' : 'STOCK',
-      source:item.source,
-      cgId:item.cgId,
-      tvSymbol:item.tvSymbol,
-      tvExchange:item.tvExchange,
-      custom:true
-    }, chip);
-    box.append(chip);
-  });
 }
 
 // reflect the active sort column/direction in the table headers
@@ -1812,7 +1961,7 @@ $('#ticker-body').innerHTML = Array.from({length:8}).map(()=>
 $('#px-add').onclick = addCustom;
 $('#px-q').addEventListener('keydown', e => { if (e.key === 'Enter') addCustom(); });
 $('#trench-refresh').onclick = () => focusTrenches(true);
-renderWatchlist();
+setupPanelResizers();
 
 // click a column header to sort by it (toggles asc/desc)
 document.querySelectorAll('#panel-table thead th[data-sort]').forEach(th => {
