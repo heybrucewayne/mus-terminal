@@ -661,22 +661,24 @@ const TRADFI_BUBBLE = { SPX:'S&P', NDX:'NASDAQ', GOLD:'GOLD', OIL:'OIL' };
 function refreshBubbles(){
   const items = [];
   CRYPTO_LIST.forEach(c => {
+    if (isAssetHidden(c.base)) return;
     const t = tickerMap[c.base];
     if (!t) return;
     const pct = +t.priceChangePercent;
-    items.push({ base:c.base, pair:'/USDT', kind:'crypto', usd:true, pct,
+    items.push({ id:c.base, base:c.base, name:c.base, pair:'/USDT', kind:'crypto', cls:'COIN', usd:true, pct,
       price:+t.lastPrice, vol:+t.quoteVolume, high:+t.highPrice, low:+t.lowPrice, size:Math.abs(pct) });
   });
-  if (hypeRow){
+  if (hypeRow && !isAssetHidden('HYPE')){
     const pct = +hypeRow.chg || 0;
-    items.push({ base:'HYPE', pair:'/USD', kind:'crypto', usd:true, pct,
+    items.push({ id:'HYPE', base:'HYPE', name:'HYPE', pair:'/USD', kind:'crypto', cls:'COIN', usd:true, pct,
       price:hypeRow.price, vol:hypeRow.vol, high:hypeRow.high, low:hypeRow.low, size:Math.abs(pct) });
   }
   TRADFI.forEach(f => {
+    if (isAssetHidden(f.key)) return;
     const d = tradfiRows[f.key];
     if (!d) return;
     const pct = (d.chgPct!=null && isFinite(d.chgPct)) ? d.chgPct : (d.prev ? (d.price-d.prev)/d.prev*100 : 0);
-    items.push({ base:TRADFI_BUBBLE[f.key]||f.name, full:f.name, kind:'tradfi', usd:f.usd, pct,
+    items.push({ id:f.key, base:TRADFI_BUBBLE[f.key]||f.name, name:f.name, full:f.name, kind:'tradfi', cls:f.cls, usd:f.usd, pct,
       price:d.price, vol:d.vol, high:d.high, low:d.low, size:Math.abs(pct) });
   });
   bubbles.setData(items);
@@ -695,13 +697,29 @@ const bubbles = (function(){
   let drag = null;   // { node, dx, dy, lastX, lastY } while a bubble is being dragged
   const EDGE = 12, EDGE_TOP = 44;   // reserve the legend area and keep bubbles inside the canvas
 
+  function confine(n, bounce=false){
+    const minX = n.r + EDGE;
+    const maxX = Math.max(minX, W - n.r - EDGE);
+    const minY = n.r + EDGE_TOP;
+    const maxY = Math.max(minY, H - n.r - EDGE);
+    if (n.x < minX){ n.x=minX; if (bounce) n.vx=Math.abs(n.vx)*0.55; }
+    if (n.x > maxX){ n.x=maxX; if (bounce) n.vx=-Math.abs(n.vx)*0.55; }
+    if (n.y < minY){ n.y=minY; if (bounce) n.vy=Math.abs(n.vy)*0.55; }
+    if (n.y > maxY){ n.y=maxY; if (bounce) n.vy=-Math.abs(n.vy)*0.55; }
+  }
+
   function resize(){
     const r = canvas.parentElement.getBoundingClientRect();
+    const oldW=W, oldH=H;
     W = r.width; H = r.height;
+    if (oldW > 0 && oldH > 0){
+      nodes.forEach(n => { n.x = n.x / oldW * W; n.y = n.y / oldH * H; });
+    }
     canvas.width = W * dpr; canvas.height = H * dpr;
     canvas.style.width = W+'px'; canvas.style.height = H+'px';
     ctx.setTransform(dpr,0,0,dpr,0,0);
     layoutRadii();
+    nodes.forEach(n => confine(n));
   }
 
   let raw = [];
@@ -709,6 +727,7 @@ const bubbles = (function(){
   // `size` (= |24h % change|) drives the radius; `vol` is shown in the tooltip only.
   function setData(items){
     raw = items;
+    if (!raw.length){ nodes=[]; return; }
     layoutRadii();
   }
   function layoutRadii(){
@@ -731,17 +750,21 @@ const bubbles = (function(){
       let r = Math.sqrt(rawAreas[i] * k);
       r = Math.max(15, Math.min(r, Math.min(W,H)*0.30));
       const prev = existing[base];
+      const angle = i * 2.399963229728653;
+      const spread = Math.sqrt((i+0.5)/raw.length) * Math.min(W, H) * 0.28;
       return {
-        base, pair:c.pair, pct:c.pct, kind:c.kind, usd:c.usd, full:c.full,
+        id:c.id||base, base, name:c.name||c.full||base, cls:c.cls,
+        pair:c.pair, pct:c.pct, kind:c.kind, usd:c.usd, full:c.full,
         price: c.price, vol: c.vol,
         high: c.high, low: c.low,
         r,
-        x: prev ? prev.x : (EDGE + r + Math.random()*Math.max(1, W-2*(r+EDGE))),
-        y: prev ? prev.y : (EDGE_TOP + r + Math.random()*Math.max(1, H-(r+EDGE_TOP)-(r+EDGE))),
+        x: prev ? prev.x : W/2 + Math.cos(angle)*spread,
+        y: prev ? prev.y : (EDGE_TOP+H-EDGE)/2 + Math.sin(angle)*spread,
         vx: prev ? prev.vx : (Math.random()-0.5)*0.4,
         vy: prev ? prev.vy : (Math.random()-0.5)*0.4
       };
     });
+    nodes.forEach(n => confine(n));
   }
 
   function step(){
@@ -752,16 +775,13 @@ const bubbles = (function(){
       a.vx += (Math.random()-0.5)*0.03;
       a.vy += (Math.random()-0.5)*0.03;
       a.vx *= 0.985; a.vy *= 0.985;
+      a.vx = Math.max(-1.2, Math.min(1.2, a.vx));
+      a.vy = Math.max(-1.2, Math.min(1.2, a.vy));
       // mild centering pull
       a.vx += ((W/2 - a.x)) * 0.00012;
-      a.vy += ((H/2 - a.y)) * 0.00012;
+      a.vy += ((((EDGE_TOP+H-EDGE)/2) - a.y)) * 0.00012;
       a.x += a.vx; a.y += a.vy;
-      // walls — bounce while staying clear of the border & legend
-      const minX=a.r+EDGE, maxX=W-a.r-EDGE, minY=a.r+EDGE_TOP, maxY=H-a.r-EDGE;
-      if (a.x < minX){ a.x = minX; a.vx = Math.abs(a.vx)*0.7; }
-      if (a.x > maxX){ a.x = maxX; a.vx = -Math.abs(a.vx)*0.7; }
-      if (a.y < minY){ a.y = minY; a.vy = Math.abs(a.vy)*0.7; }
-      if (a.y > maxY){ a.y = maxY; a.vy = -Math.abs(a.vy)*0.7; }
+      confine(a, true);
     }
     // Two relaxation passes prevent persistent overlap after resize or rapid data updates.
     for (let pass=0; pass<2; pass++){
@@ -795,6 +815,7 @@ const bubbles = (function(){
           }
         }
       }
+      nodes.forEach(n => confine(n));
     }
   }
 
@@ -901,19 +922,32 @@ const bubbles = (function(){
     const r = canvas.getBoundingClientRect();
     const mx = e.clientX - r.left, my = e.clientY - r.top;
     const hit = bubbleAt(mx, my);
-    if (hit){ drag = { node:hit, dx:mx-hit.x, dy:my-hit.y, lastX:mx, lastY:my }; e.preventDefault(); }
+    if (hit){
+      drag = { node:hit, dx:mx-hit.x, dy:my-hit.y, lastX:mx, lastY:my,
+        startClientX:e.clientX, startClientY:e.clientY, moved:false };
+      e.preventDefault();
+    }
   });
   window.addEventListener('mousemove', e=>{
     if (!drag) return;
     const r = canvas.getBoundingClientRect();
     const mx = e.clientX - r.left, my = e.clientY - r.top;
     const n = drag.node;
+    if (Math.hypot(e.clientX-drag.startClientX, e.clientY-drag.startClientY) > 4) drag.moved=true;
     n.x = Math.max(n.r+EDGE, Math.min(W-n.r-EDGE, mx - drag.dx));
     n.y = Math.max(n.r+EDGE_TOP, Math.min(H-n.r-EDGE, my - drag.dy));
     n.vx = mx - drag.lastX; n.vy = my - drag.lastY;   // carry momentum when released
     drag.lastX = mx; drag.lastY = my;
   });
-  window.addEventListener('mouseup', ()=>{ drag = null; });
+  window.addEventListener('mouseup', e=>{
+    const released=drag;
+    drag=null;
+    if (released && !released.moved){
+      const n=released.node;
+      openAssetMenu({ id:n.id, name:n.name, kind:n.kind, cls:n.cls, custom:false },
+        { clientX:e.clientX, clientY:e.clientY });
+    }
+  });
 
   new ResizeObserver(resize).observe(canvas.parentElement);
   setTimeout(resize, 50);
@@ -950,12 +984,26 @@ const TRADFI = [
 
 let hypeRow      = cacheGet('cc_hype')    || null;  // HYPE via CoinGecko (not on Binance)
 let tradfiRows   = cacheGet('cc_tradfi')  || {};    // key -> CNBC row
-let customItems  = cacheGet('cc_custom')  || [];    // user watchlist: [{sym, type:'crypto'|'stock', name}]
-let customQuotes = cacheGet('cc_customq') || {};    // sym -> CNBC quote for added stocks
+const cachedCustomItems = cacheGet('cc_custom');
+const cachedCustomQuotes = cacheGet('cc_customq');
+const cachedHiddenAssets = cacheGet('cc_hidden_assets');
+let customItems  = Array.isArray(cachedCustomItems) ? cachedCustomItems : [];
+let customQuotes = cachedCustomQuotes && typeof cachedCustomQuotes === 'object' ? cachedCustomQuotes : {};
+let hiddenAssets = Array.isArray(cachedHiddenAssets)
+  ? [...new Set(cachedHiddenAssets.filter(id => typeof id === 'string'))]
+  : [];
 let prevPrices = {};
 let tableSort  = { key:'mcap', dir:-1 };           // default: market cap, descending
 const saveCustom = () => { cacheSet('cc_custom', customItems); cacheSet('cc_customq', customQuotes); };
+const saveHiddenAssets = () => cacheSet('cc_hidden_assets', hiddenAssets);
 let activeAssetMenu = null;
+
+function isAssetHidden(id){ return hiddenAssets.includes(String(id)); }
+function defaultAssetIdForSymbol(sym){
+  const symbol=String(sym||'').toUpperCase();
+  if (CRYPTO_LIST.some(c=>c.base===symbol) || symbol==='HYPE') return symbol;
+  return TRADFI.some(f=>f.key===symbol) ? symbol : null;
+}
 
 function tradingViewUrl(asset){
   const id = asset.id || '';
@@ -991,11 +1039,13 @@ function openAssetMenu(asset, anchor){
   activeAssetMenu = asset;
   title.textContent = `${asset.name} · ${asset.cls || (asset.kind === 'crypto' ? 'COIN' : 'ASSET')}`;
   tv.href = tradingViewUrl(asset);
-  remove.hidden = !asset.custom;
-  remove.setAttribute('aria-hidden', String(!asset.custom));
+  remove.hidden = false;
+  remove.setAttribute('aria-hidden', 'false');
   menu.hidden = false;
 
-  const rect = anchor.getBoundingClientRect();
+  const rect = typeof anchor.getBoundingClientRect === 'function'
+    ? anchor.getBoundingClientRect()
+    : { left:anchor.clientX, right:anchor.clientX, top:anchor.clientY, bottom:anchor.clientY };
   const gap = 8;
   const left = Math.max(10, Math.min(rect.left, window.innerWidth - menu.offsetWidth - 10));
   const below = rect.bottom + gap;
@@ -1011,14 +1061,13 @@ $('#assetMenuRemove').addEventListener('click', e => {
   e.preventDefault();
   e.stopPropagation();
   const asset = activeAssetMenu;
-  if (!asset || !asset.custom) return;
-  const symbol = asset.rmsym || asset.name;
+  if (!asset) return;
   closeAssetMenu();
-  removeCustom(symbol);
+  removeAsset(asset);
 });
 document.addEventListener('click', e => {
   if (!activeAssetMenu) return;
-  if (e.target.closest('#assetMenu, .asset-row, .watch-chip')) return;
+  if (e.target.closest('#assetMenu, .asset-row, .watch-chip, #bubbleCanvas')) return;
   closeAssetMenu();
 });
 document.addEventListener('keydown', e => {
@@ -1028,6 +1077,7 @@ document.addEventListener('keydown', e => {
 function renderMarketTable(){
   const rows = [];
   CRYPTO_LIST.forEach(c => {
+    if (isAssetHidden(c.base)) return;
     const t = tickerMap[c.base];
     if (!t) return;
     const price = +t.lastPrice;
@@ -1035,12 +1085,13 @@ function renderMarketTable(){
       price, chg:+t.priceChangePercent, high:+t.highPrice, low:+t.lowPrice,
       vol:+t.quoteVolume, volUsd:true, mcap:price*c.supply });
   });
-  if (hypeRow){
+  if (hypeRow && !isAssetHidden('HYPE')){
     rows.push({ id:'HYPE', name:'HYPE', sub:'/USD', kind:'crypto', cls:'COIN', usd:true,
       price:hypeRow.price, chg:hypeRow.chg, high:hypeRow.high, low:hypeRow.low,
       vol:hypeRow.vol, volUsd:true, mcap:hypeRow.mcap });
   }
   TRADFI.forEach(f => {
+    if (isAssetHidden(f.key)) return;
     const d = tradfiRows[f.key];
     if (!d) return;
     rows.push({ id:f.key, name:f.name, sub:f.sub, kind:'tradfi', cls:f.cls, usd:f.usd,
@@ -1099,8 +1150,8 @@ function renderMarketTable(){
 
 /* ---- watchlist add/remove (coins via Binance, stocks via CNBC) ---- */
 function isKnownSymbol(sym){
-  return CRYPTO_LIST.some(c=>c.base===sym) || sym==='HYPE' ||
-         TRADFI.some(f=>f.key===sym) || customItems.some(c=>c.sym===sym);
+  const defaultId=defaultAssetIdForSymbol(sym);
+  return (defaultId && !isAssetHidden(defaultId)) || customItems.some(c=>c.sym===sym);
 }
 function pxMsg(text, kind){
   const el = $('#px-msg');
@@ -1123,6 +1174,15 @@ async function cnbcQuoteOne(sym){
 async function addCustom(){
   const sym = ($('#px-q').value||'').trim().toUpperCase().replace(/[^A-Z0-9.\-]/g,'');
   if (!sym){ $('#px-q').focus(); return; }
+  const defaultId=defaultAssetIdForSymbol(sym);
+  if (defaultId && isAssetHidden(defaultId)){
+    hiddenAssets=hiddenAssets.filter(id=>id!==defaultId);
+    saveHiddenAssets();
+    $('#px-q').value='';
+    renderAll();
+    pxMsg(`Restored ${sym} to list`, 'ok');
+    return;
+  }
   if (isKnownSymbol(sym)){ pxMsg(`${sym} is already in the list`, 'err'); return; }
   // 1) crypto on Binance?
   if (tickerMap[sym]){
@@ -1139,6 +1199,20 @@ async function addCustom(){
     pxMsg(`“${sym}” not found as a coin or stock`, 'err');
   }
 }
+function removeAsset(asset){
+  if (!asset) return false;
+  if (asset.custom) return removeCustom(asset.rmsym || asset.name);
+  const id=String(asset.id||'').trim();
+  if (!id){ pxMsg('Asset could not be removed', 'err'); return false; }
+  if (!isAssetHidden(id)){
+    hiddenAssets.push(id);
+    saveHiddenAssets();
+  }
+  renderAll();
+  pxMsg(`Removed ${asset.name} · search ${id} to restore`, 'ok');
+  return true;
+}
+
 function removeCustom(sym){
   const symbol = String(sym || '').trim().toUpperCase();
   const before = customItems.length;
