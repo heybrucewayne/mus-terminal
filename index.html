@@ -91,21 +91,25 @@
     --terminal-background: url('backgrounds/bear-rooftop.jpeg');
     --bg: #05070e;
     --bg2: #04060c;
-    --panel: linear-gradient(160deg, rgba(26,36,62,0.46) 0%, rgba(11,17,32,0.36) 100%);
-    --panel-flat: rgba(13,19,34,0.6);
-    --glass: rgba(255,255,255,0.05);
-    --border: rgba(255,255,255,0.12);
-    --border-soft: rgba(255,255,255,0.06);
+    --panel: linear-gradient(145deg, rgba(255,255,255,.115), rgba(255,255,255,.035) 34%, rgba(7,12,18,.34) 100%);
+    --panel-flat: rgba(10,15,22,.38);
+    --glass: rgba(255,255,255,.085);
+    --glass-strong: rgba(18,24,32,.58);
+    --border: rgba(255,255,255,.20);
+    --border-soft: rgba(255,255,255,.105);
+    --border-strong: rgba(255,255,255,.30);
+    --glass-highlight: rgba(255,255,255,.18);
+    --focus: #9bdcff;
     --green: #00ff88;
     --green-dim: #0a8f55;
     --red: #ff4466;
     --red-dim: #a8324a;
     --yellow: #ffd23f;
     --orange: #ff9f43;
-    --text: #c7d2e0;
-    --text-bright: #e8f0fb;
-    --muted: #5b6b82;
-    --muted2: #3c4a5e;
+    --text: rgba(238,245,248,.92);
+    --text-bright: #f9fcff;
+    --muted: rgba(224,235,240,.70);
+    --muted2: rgba(207,221,228,.52);
     --accent-glow: rgba(0,255,136,0.12);
   }
 
@@ -164,15 +168,15 @@
 
   .panel {
     background: var(--panel);
-    -webkit-backdrop-filter: blur(24px) saturate(165%);
-    backdrop-filter: blur(24px) saturate(165%);
+    -webkit-backdrop-filter: blur(9px) saturate(135%);
+    backdrop-filter: blur(9px) saturate(135%);
     border: 1px solid var(--border);
     border-radius: 16px;
     box-shadow:
-      inset 0 1px 0 rgba(255,255,255,0.16),
-      inset 0 0 0 1px rgba(255,255,255,0.02),
-      0 10px 34px rgba(0,0,0,0.45),
-      0 2px 10px rgba(0,0,0,0.30);
+      inset 0 1px 0 var(--glass-highlight),
+      inset 0 -1px 0 rgba(255,255,255,.045),
+      0 16px 42px rgba(0,0,0,.30),
+      0 2px 8px rgba(0,0,0,.22);
     display: flex;
     flex-direction: column;
     min-height: 0;
@@ -186,7 +190,9 @@
     position: absolute; inset: 0;
     border-radius: 16px;
     pointer-events: none;
-    background: linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0) 42%);
+    background:
+      radial-gradient(90% 56% at 12% 0%, rgba(255,255,255,.13), transparent 62%),
+      linear-gradient(180deg, rgba(255,255,255,.045), transparent 44%);
   }
 
   .panel-body { flex: 1 1 auto; min-height: 0; position: relative; }
@@ -204,13 +210,13 @@
     position: fixed;
     z-index: 50;
     pointer-events: none;
-    background: rgba(16,22,40,0.72);
-    -webkit-backdrop-filter: blur(18px) saturate(160%); backdrop-filter: blur(18px) saturate(160%);
+    background: rgba(16,22,30,.58);
+    -webkit-backdrop-filter: blur(18px) saturate(145%); backdrop-filter: blur(18px) saturate(145%);
     border: 1px solid var(--border);
     border-radius: 11px;
     padding: 9px 11px;
     font-size: 11px;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 12px 34px rgba(0,0,0,0.55);
+    box-shadow: inset 0 1px 0 var(--glass-highlight), 0 14px 38px rgba(0,0,0,.42);
     display: none;
     min-width: 150px;
   }
@@ -222,10 +228,10 @@
   table.ticker { width: 100%; border-collapse: collapse; }
   table.ticker thead th {
     position: sticky; top: 0; z-index: 2;
-    background: rgba(255,255,255,0.035);
-    -webkit-backdrop-filter: none; backdrop-filter: none;
+    background: rgba(14,19,26,.36);
+    -webkit-backdrop-filter: blur(12px) saturate(135%); backdrop-filter: blur(12px) saturate(135%);
     text-align: right;
-    font-size: 9.5px; letter-spacing: 1.2px; text-transform: uppercase;
+    font-size:10.5px; letter-spacing:1.05px; text-transform:uppercase;
     color: var(--muted); font-weight: 600;
     padding: 8px 12px 7px;
     border-bottom: 1px solid var(--border-soft);
@@ -242,10 +248,11 @@
     font-size: 12px;
   }
   table.ticker tbody td:first-child { text-align: left; }
-  table.ticker tbody tr:hover { background: rgba(255,255,255,0.05); }
+  table.ticker tbody tr { transition:background .14s ease; }
+  table.ticker tbody tr:hover { background: rgba(255,255,255,.085); }
   table.ticker tbody tr.asset-row { cursor: grab; user-select:none; }
   table.ticker tbody tr.asset-row:active { cursor: grabbing; }
-  table.ticker tbody tr.asset-row:focus-visible { outline: 1px solid rgba(0,255,136,.7); outline-offset: -1px; }
+  table.ticker tbody tr.asset-row:focus-visible { outline:2px solid rgba(155,220,255,.78); outline-offset:-2px; }
   table.ticker tbody tr.asset-row.dragging { opacity:.34; }
   table.ticker tbody tr.asset-row.drop-before { box-shadow:inset 0 2px 0 var(--green); }
   table.ticker tbody tr.asset-row.drop-after { box-shadow:inset 0 -2px 0 var(--green); }
@@ -259,10 +266,10 @@
   }
   .sym-cell .quote {
     flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis;
-    font-size:9px; color:var(--muted2);
+    font-size:9.5px; color:var(--muted2);
   }
   .rank { flex:0 0 16px; color:var(--muted2); font-size:10px; width:16px; display:inline-block; text-align:right; }
-  .kind-tag { flex:0 0 auto; font-size:8px; letter-spacing:.5px; padding:1px 7px; border-radius:999px; margin-left:auto; font-family:'Space Grotesk',sans-serif; font-weight:600; border:1px solid; white-space:nowrap; }
+  .kind-tag { flex:0 0 auto; font-size:8.5px; letter-spacing:.5px; padding:1px 7px; border-radius:999px; margin-left:auto; font-family:'Space Grotesk',sans-serif; font-weight:600; border:1px solid; white-space:nowrap; }
   .kind-tag.t-COIN      { color:#2dd4bf; border-color:rgba(45,212,191,.34); background:rgba(45,212,191,.10); }
   .kind-tag.t-STOCK     { color:#3fb6ff; border-color:rgba(63,182,255,.34); background:rgba(63,182,255,.10); }
   .kind-tag.t-INDEX     { color:#c77dff; border-color:rgba(199,125,255,.34); background:rgba(199,125,255,.10); }
@@ -273,8 +280,8 @@
   .px-scroll { flex:1 1 auto; min-height:0; overflow-y:auto; }
   .px-search { display:flex; gap:6px; padding:8px 10px; border-bottom:1px solid var(--border-soft); }
   .px-search input { flex:1; }
-  .px-search .btn { padding:6px 10px; font-size:11px; }
-  .px-msg { font-size:10px; padding:0 12px; height:0; overflow:hidden; color:var(--muted); transition:height .15s, padding .15s; }
+  .px-search .btn { padding:6px 10px; font-size:12px; }
+  .px-msg { font-size:10.5px; padding:0 12px; height:0; overflow:hidden; color:var(--muted); transition:height .15s, padding .15s; }
   .px-msg.show { height:auto; padding:5px 12px; }
   .px-msg.ok { color:var(--green); } .px-msg.err { color:var(--red); }
   @keyframes flashUp { 0%{ background: rgba(0,255,136,0.22);} 100%{ background: transparent;} }
@@ -294,24 +301,24 @@
 
   /* ===== INPUTS / BUTTONS ===== */
   input, select {
-    background: rgba(255,255,255,0.05);
+    background: rgba(255,255,255,.085);
     border: 1px solid var(--border);
     border-radius: 8px;
     color: var(--text-bright);
     font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
+    font-size:12px;
     padding: 6px 8px;
     width: 100%;
     outline: none;
     transition: border-color .15s, box-shadow .15s, background .15s;
   }
-  input:focus, select:focus { border-color: rgba(0,255,136,0.55); background: rgba(255,255,255,0.07); box-shadow: 0 0 0 3px rgba(0,255,136,0.10); }
+  input:focus, select:focus { border-color:rgba(155,220,255,.72); background:rgba(255,255,255,.12); box-shadow:0 0 0 3px rgba(155,220,255,.14); }
   input::placeholder { color: var(--muted2); }
   input[type=date] { color-scheme: dark; }
   .btn {
-    background: rgba(0,255,136,0.14);
-    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
-    border: 1px solid rgba(0,255,136,0.4);
+    background:linear-gradient(180deg,rgba(255,255,255,.14),rgba(255,255,255,.07));
+    -webkit-backdrop-filter:blur(12px) saturate(140%); backdrop-filter:blur(12px) saturate(140%);
+    border:1px solid rgba(255,255,255,.22);
     color: var(--green);
     border-radius: 8px;
     font-family: 'Space Grotesk', sans-serif;
@@ -323,7 +330,7 @@
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.18);
     transition: background .15s, box-shadow .15s;
   }
-  .btn:hover { background: rgba(0,255,136,0.26); box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 0 16px rgba(0,255,136,0.22); }
+  .btn:hover { background:linear-gradient(180deg,rgba(255,255,255,.22),rgba(0,255,136,.12)); border-color:rgba(255,255,255,.34); box-shadow:inset 0 1px 0 rgba(255,255,255,.24),0 8px 20px rgba(0,0,0,.18); }
   .btn.full { width:100%; }
   .x-btn {
     background: none; border: none; color: var(--muted2);
@@ -410,13 +417,13 @@
   }
   .panel-resizer::before {
     content:''; position:absolute; border-radius:999px;
-    background:rgba(210,255,242,.32); box-shadow:0 0 10px rgba(0,255,136,.12);
+    background:rgba(255,255,255,.28); box-shadow:0 4px 14px rgba(0,0,0,.18);
     transition:background .14s, box-shadow .14s, transform .14s;
   }
   .panel-resizer:hover::before,
   .panel-resizer:focus-visible::before,
   .panel-resizer.active::before {
-    background:rgba(0,255,136,.82); box-shadow:0 0 13px rgba(0,255,136,.52); transform:scale(1.08);
+    background:rgba(225,242,250,.88); box-shadow:0 0 0 4px rgba(155,220,255,.12),0 5px 16px rgba(0,0,0,.24); transform:scale(1.08);
   }
   .panel-resizer:focus-visible { outline:none; }
   .resizer-columns {
@@ -442,61 +449,73 @@
     min-width: 0;
     min-height: 0;
     isolation: isolate;
-    border: 1px solid rgba(214, 255, 240, 0.2);
-    border-radius: 14px;
-    background: linear-gradient(145deg, rgba(12, 30, 29, 0.28), rgba(5, 14, 18, 0.22));
-    box-shadow: 0 18px 42px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.12);
-    -webkit-backdrop-filter: blur(7px) saturate(125%);
-    backdrop-filter: blur(7px) saturate(125%);
+    border:1px solid var(--border);
+    border-radius:16px;
+    background:var(--panel);
+    box-shadow:0 18px 48px rgba(0,0,0,.28),inset 0 1px 0 var(--glass-highlight),inset 0 -1px 0 rgba(255,255,255,.045);
+    -webkit-backdrop-filter:blur(9px) saturate(135%);
+    backdrop-filter:blur(9px) saturate(135%);
+    color:var(--text);
+    text-shadow:0 1px 3px rgba(0,0,0,.54);
   }
 
   .panel::before {
     z-index: 0;
-    border-radius: 14px;
-    background: linear-gradient(145deg, rgba(255,255,255,0.05), transparent 34%);
+    border-radius:16px;
+    background:radial-gradient(90% 58% at 8% 0%,rgba(255,255,255,.13),transparent 62%),linear-gradient(180deg,rgba(255,255,255,.035),transparent 42%);
   }
 
   .panel > .panel-body { position: relative; z-index: 1; }
 
-  #panel-bubbles { border-color: rgba(141, 244, 182, 0.26); }
   #panel-bubbles { grid-row: 1 / span 2; }
   #panel-bubbles .panel-body {
-    background:
-      linear-gradient(135deg, rgba(4, 19, 20, 0.07), rgba(4, 10, 14, 0.04)),
-      radial-gradient(circle at 48% 48%, rgba(57, 220, 134, 0.045), transparent 58%);
+    background:linear-gradient(135deg,rgba(255,255,255,.018),rgba(4,10,14,.035));
   }
   #panel-table .panel-body {
-    background: linear-gradient(135deg, rgba(4, 16, 18, 0.07), rgba(4, 10, 14, 0.04));
+    background:linear-gradient(135deg,rgba(255,255,255,.018),rgba(4,10,14,.035));
   }
   #panel-table table.ticker thead th {
-    color:rgba(229,241,239,.76);
-    text-shadow:0 1px 3px rgba(0,0,0,.78);
+    color:rgba(250,253,255,.94);
+    font-weight:700;
+    text-shadow:0 1px 2px rgba(0,0,0,.95),0 0 8px rgba(0,0,0,.52);
   }
   #panel-table table.ticker tbody td {
-    color:rgba(237,246,244,.9);
+    color:rgba(246,250,252,.94);
     text-shadow:0 1px 3px rgba(0,0,0,.72);
   }
   #panel-table .sym-cell .base,
   #panel-table .pricecell { color:#f2faf8; }
   #panel-table .sym-cell .quote {
-    color:rgba(210,226,223,.62);
+    color:rgba(221,232,238,.68);
     font-weight:600;
   }
-  #panel-table .rank { color:rgba(202,220,216,.62); }
+  #panel-table .rank { color:rgba(216,228,234,.62); }
   #panel-table .px-search input {
-    color:#eff9f7;
-    background:rgba(5,14,17,.16);
-    text-shadow:0 1px 2px rgba(0,0,0,.65);
+    color:#fff;
+    background:linear-gradient(180deg,rgba(7,11,17,.58),rgba(14,19,27,.44));
+    border-color:rgba(255,255,255,.28);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.09),0 5px 14px rgba(0,0,0,.13);
+    text-shadow:0 1px 2px rgba(0,0,0,.95);
   }
-  #panel-table .px-search input::placeholder { color:rgba(204,221,218,.64); opacity:1; }
+  #panel-table .px-search input::placeholder {
+    color:rgba(244,249,252,.78);
+    font-weight:500;
+    opacity:1;
+    text-shadow:0 1px 2px rgba(0,0,0,.92);
+  }
+  #panel-table .px-search input:focus {
+    color:#fff;
+    background:linear-gradient(180deg,rgba(7,12,18,.72),rgba(13,20,28,.58));
+    border-color:rgba(155,220,255,.78);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 0 0 3px rgba(155,220,255,.15),0 8px 22px rgba(0,0,0,.18);
+  }
   #panel-table .sym-cell { min-width:0; flex-wrap:nowrap; }
   #bubbleCanvas { position: relative; z-index: 1; }
 
   /* ===== SOL MEME TRENCHES ===== */
-  #panel-trenches { border-color:rgba(120,213,255,.24); }
   #panel-trenches .panel-body {
     display:flex; flex-direction:column;
-    background:linear-gradient(135deg,rgba(5,18,22,.08),rgba(5,12,16,.035));
+    background:linear-gradient(135deg,rgba(255,255,255,.018),rgba(4,10,14,.035));
   }
   .trench-head {
     display:none; align-items:center; gap:9px; min-height:38px; padding:7px 10px;
@@ -520,9 +539,10 @@
   .trench-scroll { flex:1 1 auto; min-height:0; overflow:auto; }
   table.trenches { width:100%; min-width:600px; border-collapse:collapse; table-layout:fixed; }
   table.trenches th {
-    position:sticky; top:0; z-index:2; padding:9px 6px; border-bottom:1px solid rgba(214,255,240,.12);
-    background:transparent; color:rgba(235,246,243,.82); font:600 10px 'Space Grotesk',sans-serif;
+    position:sticky; top:0; z-index:2; padding:10px 6px; border-bottom:1px solid var(--border-soft);
+    background:rgba(16,21,29,.36); color:rgba(243,248,250,.86); font:600 10.5px 'Space Grotesk',sans-serif;
     letter-spacing:.08em; text-align:right; white-space:nowrap;
+    -webkit-backdrop-filter:blur(12px) saturate(135%); backdrop-filter:blur(12px) saturate(135%);
   }
   table.trenches th:first-child, table.trenches td:first-child { text-align:left; padding-left:10px; width:14%; }
   table.trenches th:nth-child(2), table.trenches td:nth-child(2) { width:12%; }
@@ -531,76 +551,72 @@
   table.trenches th:nth-child(5), table.trenches td:nth-child(5) { width:20%; }
   table.trenches th:nth-child(6), table.trenches td:nth-child(6) { width:14%; padding-right:10px; }
   table.trenches td {
-    padding:9px 6px; border-bottom:1px solid rgba(255,255,255,.075); color:rgba(244,250,248,.94);
-    font:600 11px 'JetBrains Mono',monospace; text-align:right; white-space:nowrap;
+    padding:9px 6px; border-bottom:1px solid rgba(255,255,255,.09); color:rgba(248,251,252,.96);
+    font:600 11.5px 'JetBrains Mono',monospace; text-align:right; white-space:nowrap;
     overflow:hidden; text-overflow:ellipsis;
   }
-  .trench-symbol { color:#f5fffc; font-size:11.5px; text-decoration:none; }
+  .trench-symbol { color:#fbfdff; font-size:12px; text-decoration:none; }
   a.trench-symbol { cursor:pointer; transition:color .14s,text-shadow .14s; }
   a.trench-symbol:hover { color:var(--green); text-shadow:0 0 10px rgba(0,255,136,.38); }
-  a.trench-symbol:focus-visible { outline:1px solid var(--green); outline-offset:3px; border-radius:2px; }
-  .trench-score { display:block; margin-top:3px; color:rgba(207,225,221,.72); font-size:8px; }
+  a.trench-symbol:focus-visible { outline:2px solid var(--focus); outline-offset:3px; border-radius:3px; }
+  .trench-score { display:block; margin-top:3px; color:rgba(220,232,238,.72); font-size:8.5px; }
   .trench-decision { font-size:12px; }
   .trench-note {
-    padding:8px 10px; border-bottom:1px solid rgba(255,255,255,.06); color:rgba(241,248,246,.9);
-    font:500 10px/1.5 'JetBrains Mono',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    padding:9px 10px; border-bottom:1px solid rgba(255,255,255,.075); color:rgba(244,249,250,.92);
+    font:500 10.5px/1.55 'JetBrains Mono',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   }
   .trench-note strong { color:var(--text-bright); }
   .trench-note a { color:#6bdcff; text-decoration:none; }
   .trench-note a:hover { text-decoration:underline; }
   .trench-change { color:#ffd66b; margin-left:5px; }
   .trench-eliminated, .trench-state {
-    padding:9px 10px; color:rgba(221,235,232,.8); font:500 10px/1.45 'JetBrains Mono',monospace;
+    padding:10px; color:rgba(228,238,242,.84); font:500 10.5px/1.5 'JetBrains Mono',monospace;
   }
   .trench-eliminated { color:rgba(255,137,157,.78); }
   .trench-state.err { color:var(--red); }
   #panel-trenches.command-focus { animation:trenchFocus .8s ease-out; }
   @keyframes trenchFocus { 0%,45%{box-shadow:0 0 0 2px rgba(80,215,255,.65),0 18px 42px rgba(0,0,0,.3)} 100%{box-shadow:0 18px 42px rgba(0,0,0,.3)} }
 
-  table.ticker thead th,
-  .btn {
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
-
   .asset-menu {
     position: fixed;
     z-index: 100;
     min-width: 218px;
     display: grid;
-    gap: 6px;
-    padding: 9px;
-    border: 1px solid rgba(214,255,240,.28);
-    border-radius: 12px;
-    background: rgba(7, 18, 20, .94);
-    -webkit-backdrop-filter: blur(18px) saturate(145%);
-    backdrop-filter: blur(18px) saturate(145%);
-    box-shadow: 0 16px 36px rgba(0,0,0,.48), inset 0 1px 0 rgba(255,255,255,.14);
+    gap:7px;
+    padding:10px;
+    border:1px solid var(--border-strong);
+    border-radius:16px;
+    background:linear-gradient(145deg,rgba(255,255,255,.16),rgba(255,255,255,.065) 34%,rgba(11,16,24,.62));
+    -webkit-backdrop-filter:blur(24px) saturate(155%);
+    backdrop-filter:blur(24px) saturate(155%);
+    box-shadow:0 22px 60px rgba(0,0,0,.42),inset 0 1px 0 rgba(255,255,255,.24),inset 0 -1px 0 rgba(255,255,255,.055);
+    text-shadow:0 1px 3px rgba(0,0,0,.50);
   }
   .asset-menu[hidden] { display:none; }
   .asset-menu-title {
     padding: 2px 4px 5px;
     color: var(--text-bright);
-    font: 700 10px 'JetBrains Mono', monospace;
+    font:700 11px 'JetBrains Mono',monospace;
     letter-spacing: .08em;
     text-transform: uppercase;
   }
   .asset-menu-action {
     display:block;
     width:100%;
-    padding:8px 9px;
-    border:1px solid rgba(255,255,255,.12);
-    border-radius:8px;
-    background:rgba(255,255,255,.055);
+    padding:10px 11px;
+    border:1px solid rgba(255,255,255,.16);
+    border-radius:10px;
+    background:linear-gradient(180deg,rgba(255,255,255,.11),rgba(255,255,255,.055));
     color:var(--text-bright);
-    font:600 9px 'Space Grotesk', sans-serif;
+    font:650 10.5px 'Space Grotesk',sans-serif;
     letter-spacing:.06em;
     text-align:left;
     text-decoration:none;
     cursor:pointer;
     touch-action:manipulation;
   }
-  .asset-menu-action:hover { background:rgba(0,255,136,.14); border-color:rgba(0,255,136,.48); color:var(--green); }
+  .asset-menu-action:hover { background:linear-gradient(180deg,rgba(255,255,255,.19),rgba(255,255,255,.09)); border-color:rgba(255,255,255,.32); color:#fff; }
+  .asset-menu-action:focus-visible { outline:2px solid var(--focus); outline-offset:2px; }
   .asset-menu-action.danger { color:var(--red); border-color:rgba(255,68,102,.28); background:rgba(255,68,102,.08); }
   .asset-menu-action.danger:hover { background:rgba(255,68,102,.22); border-color:var(--red); color:#fff; }
 
@@ -619,22 +635,24 @@
     width:26px;
     height:26px;
     flex:0 0 26px;
-    border:1px solid rgba(255,255,255,.12);
-    border-radius:7px;
-    background:rgba(255,255,255,.055);
-    color:var(--muted);
+    border:1px solid rgba(255,255,255,.18);
+    border-radius:9px;
+    background:rgba(255,255,255,.08);
+    color:rgba(240,247,250,.78);
     font-size:16px;
     line-height:1;
     cursor:pointer;
   }
-  .asset-menu-close:hover { color:var(--text-bright); border-color:rgba(255,255,255,.3); }
+  .asset-menu-close:hover { color:#fff; border-color:rgba(255,255,255,.34); background:rgba(255,255,255,.14); }
+  .asset-menu-close:focus-visible { outline:2px solid var(--focus); outline-offset:2px; }
   .asset-menu-chart {
     position:relative;
     height:clamp(240px,46vh,420px);
     overflow:hidden;
-    border:1px solid rgba(255,255,255,.11);
-    border-radius:9px;
-    background:linear-gradient(145deg,rgba(9,24,26,.98),rgba(4,10,14,.98));
+    border:1px solid rgba(255,255,255,.18);
+    border-radius:12px;
+    background:linear-gradient(145deg,rgba(15,22,29,.92),rgba(5,9,14,.94));
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
   }
   .asset-menu-chart .tradingview-widget-container {
     width:100%;
@@ -669,50 +687,57 @@
 
   .page-context-menu {
     z-index: 200;
-    min-width: 170px;
+    min-width:230px;
+    padding:10px;
+    gap:8px;
   }
   .page-context-menu .asset-menu-action {
     display:flex;
     align-items:center;
-    gap:8px;
+    gap:10px;
   }
   .page-context-icon {
-    color:var(--green);
-    font-size:14px;
+    display:inline-grid;
+    place-items:center;
+    width:20px;
+    color:rgba(225,241,249,.9);
+    font-size:15px;
     line-height:1;
   }
 
   .perf-overlay {
     position:fixed; inset:0; z-index:140; display:grid; place-items:center; padding:20px;
-    background:rgba(2,8,10,.48); -webkit-backdrop-filter:blur(4px); backdrop-filter:blur(4px);
+    background:rgba(3,7,11,.32); -webkit-backdrop-filter:blur(7px) saturate(120%); backdrop-filter:blur(7px) saturate(120%);
   }
   .perf-overlay[hidden] { display:none; }
   .perf-modal {
     position:relative; width:min(520px,100%); padding:22px;
-    border:1px solid rgba(214,255,240,.28); border-radius:18px;
-    background:linear-gradient(145deg,rgba(24,42,40,.86),rgba(11,19,23,.78));
-    -webkit-backdrop-filter:blur(18px) saturate(145%); backdrop-filter:blur(18px) saturate(145%);
-    box-shadow:0 28px 80px rgba(0,0,0,.58),inset 0 1px 0 rgba(255,255,255,.16);
+    border:1px solid var(--border-strong); border-radius:20px;
+    background:linear-gradient(145deg,rgba(255,255,255,.16),rgba(255,255,255,.065) 34%,rgba(11,16,24,.66));
+    -webkit-backdrop-filter:blur(24px) saturate(155%); backdrop-filter:blur(24px) saturate(155%);
+    box-shadow:0 30px 90px rgba(0,0,0,.50),inset 0 1px 0 rgba(255,255,255,.24),inset 0 -1px 0 rgba(255,255,255,.055);
+    text-shadow:0 1px 3px rgba(0,0,0,.50);
   }
   .perf-close {
     position:absolute; top:12px; right:12px; width:30px; height:30px; border-radius:50%;
-    border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.06);
+    border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.09);
     color:var(--text-bright); font-size:18px; line-height:1; cursor:pointer;
   }
-  .perf-close:hover { border-color:rgba(0,255,136,.5); color:var(--green); }
-  .perf-kicker { color:var(--green); font:600 8px 'Space Grotesk',sans-serif; letter-spacing:.2em; margin-bottom:7px; }
+  .perf-close:hover { border-color:rgba(255,255,255,.34); background:rgba(255,255,255,.15); color:#fff; }
+  .perf-close:focus-visible { outline:2px solid var(--focus); outline-offset:2px; }
+  .perf-kicker { color:var(--green); font:650 9px 'Space Grotesk',sans-serif; letter-spacing:.18em; margin-bottom:7px; }
   .perf-title { color:var(--text-bright); font:700 21px 'Space Grotesk',sans-serif; letter-spacing:.03em; }
-  .perf-sub { min-height:17px; margin-top:4px; color:var(--muted); font-size:10px; }
+  .perf-sub { min-height:17px; margin-top:4px; color:var(--muted); font-size:11px; }
   .perf-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:9px; margin-top:18px; }
   .perf-card {
-    min-width:0; padding:14px 11px; border:1px solid rgba(255,255,255,.1); border-radius:12px;
-    background:rgba(255,255,255,.045); box-shadow:inset 0 1px 0 rgba(255,255,255,.06);
+    min-width:0; padding:14px 11px; border:1px solid rgba(255,255,255,.16); border-radius:13px;
+    background:linear-gradient(180deg,rgba(255,255,255,.105),rgba(255,255,255,.045)); box-shadow:inset 0 1px 0 rgba(255,255,255,.11);
   }
-  .perf-label { color:var(--muted); font:600 8px 'Space Grotesk',sans-serif; letter-spacing:.12em; white-space:nowrap; }
+  .perf-label { color:var(--muted); font:650 9.5px 'Space Grotesk',sans-serif; letter-spacing:.1em; white-space:nowrap; }
   .perf-value { margin-top:8px; font:700 17px 'JetBrains Mono',monospace; color:var(--text-bright); }
   .perf-value.pos { color:var(--green); } .perf-value.neg { color:var(--red); }
   .perf-value.na { color:var(--muted2); font-size:10px; line-height:23px; }
-  .perf-status { min-height:16px; margin-top:12px; color:var(--muted2); font-size:9px; }
+  .perf-status { min-height:16px; margin-top:12px; color:var(--muted2); font-size:10px; }
   .perf-status.err { color:var(--red); }
   .perf-loading { height:23px; margin-top:8px; border-radius:6px; background:linear-gradient(90deg,rgba(255,255,255,.04),rgba(255,255,255,.11),rgba(255,255,255,.04)); background-size:200% 100%; animation:shimmer 1.1s linear infinite; }
 
@@ -720,14 +745,17 @@
     .perf-modal { padding:19px 15px; }
     .perf-grid { gap:6px; }
     .perf-card { padding:12px 7px; }
-    .perf-label { font-size:7px; }
+    .perf-label { font-size:8.5px; }
     .perf-value { font-size:14px; }
   }
 
   .px-search {
     padding: 9px 10px;
-    background: rgba(255, 255, 255, 0.025);
-    border-bottom-color: rgba(214, 255, 240, 0.08);
+    background:linear-gradient(180deg,rgba(8,13,20,.48),rgba(12,18,25,.30));
+    border-bottom-color:var(--border-soft);
+    -webkit-backdrop-filter:blur(16px) saturate(135%);
+    backdrop-filter:blur(16px) saturate(135%);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
   }
 
   .px-search input { min-width: 0; }
@@ -742,11 +770,13 @@
   table.ticker thead th {
     padding-top: 9px;
     padding-bottom: 8px;
-    background: linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.018));
-    border-bottom-color: rgba(214,255,240,0.10);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+    background:linear-gradient(180deg,rgba(7,12,18,.64),rgba(11,17,24,.48));
+    border-bottom-color:rgba(255,255,255,.15);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.10),0 4px 12px rgba(0,0,0,.10);
+    -webkit-backdrop-filter:blur(16px) saturate(130%);
+    backdrop-filter:blur(16px) saturate(130%);
   }
-  table.ticker tbody td { padding-top: 8px; padding-bottom: 8px; }
+  table.ticker tbody td { padding-top:8px; padding-bottom:8px; font-size:12.5px; }
 
   @media (max-width: 1380px) {
     .grid { grid-template-columns: minmax(320px, var(--bubble-width)) minmax(500px, 1fr); }
@@ -800,7 +830,7 @@
     <section class="panel" id="panel-table" aria-label="Market prices">
       <div class="panel-body">
         <div class="px-search">
-          <input id="px-q" placeholder="Add coin or stock — e.g. TSLA, AAPL, ADA" autocomplete="off" spellcheck="false" />
+          <input id="px-q" placeholder="Add coin, stock or commodity — e.g. ADA, AAPL, SILVER" autocomplete="off" spellcheck="false" />
           <button class="btn" id="px-add" title="Add to list">+ ADD</button>
         </div>
         <div id="px-msg" class="px-msg"></div>
@@ -892,6 +922,18 @@ function compact(n){
   if (n >= 1e6) return (n/1e6).toFixed(2)+'M';
   if (n >= 1e3) return (n/1e3).toFixed(2)+'K';
   return n.toFixed(0);
+}
+function bubblePriceLabel(asset){
+  const price=Number(asset?.price);
+  if (!isFinite(price) || price<=0) return '—';
+  const currency=(asset.kind==='tradfi' || asset.kind==='stock') && asset.usd===false ? '' : '$';
+  if (price>=10000) return currency+(price/1000).toFixed(1)+'K';
+  if (price>=1000) return currency+fmtNum(price,0);
+  if (price>=1) return currency+fmtNum(price,2);
+  if (price>=0.01) return currency+fmtNum(price,4);
+  if (price>=0.001) return currency+Number(price.toFixed(5)).toString();
+  if (price>=0.0001) return currency+Number(price.toFixed(6)).toString();
+  return currency+price.toExponential(1).replace('e+','e');
 }
 const cacheGet = k => { try { return JSON.parse(localStorage.getItem(k)); } catch(e){ return null; } };
 const cacheSet = (k,v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} };
@@ -1085,7 +1127,10 @@ function trenchChanges(token, previous){
   if (token?.priceVolumeDivergence && !previous?.priceVolumeDivergence) changes.push('F/H!');
   if (Number(previous?.liquidity)>0 && Number(token?.liquidity)<Number(previous.liquidity)*.8) changes.push('LP↓');
   const securityFields=['mint','freeze','lpLockedPct','riskScore'];
-  if (securityFields.some(key => String(token?.security?.[key])!==String(previous?.security?.[key]))) changes.push('GÜVENLİK Δ');
+  const rugcheckChanged=securityFields.some(key => String(token?.security?.[key])!==String(previous?.security?.[key]));
+  const bubblemapsChanged=String(token?.bubblemaps?.score)!==String(previous?.bubblemaps?.score)
+    || String(token?.bubblemaps?.nakamotoCoefficient)!==String(previous?.bubblemaps?.nakamotoCoefficient);
+  if (rugcheckChanged || bubblemapsChanged) changes.push('GÜVENLİK Δ');
   if (token.decision!==previous.decision) changes.push('KARAR Δ');
   return changes;
 }
@@ -1111,7 +1156,10 @@ function renderTrenches(payload){
   }).join('');
   const notes=tokens.map(token=>{
     const badges=token._changes?.length?`<span class="trench-change">${token._changes.map(trenchEscape).join(' · ')}</span>`:'';
-    return `<div class="trench-note"><strong>${trenchSymbolLink(token,'trench-note-symbol')}</strong> — ${trenchEscape(token.reason)}; <a href="${trenchEscape(token.rugUrl)}" target="_blank" rel="noopener noreferrer">RugCheck</a> · <a href="${trenchEscape(token.dexUrl)}" target="_blank" rel="noopener noreferrer">DexScreener</a>${badges}</div>`;
+    const bubbleStatus=token?.bubblemaps?.verified
+      ? ` · Bubblemaps ${trenchEscape(Math.round(Number(token.bubblemaps.score)))} / 100`
+      : token?.bubblemaps?.requested ? ' · Bubblemaps Doğrulanmadı' : '';
+    return `<div class="trench-note"><strong>${trenchSymbolLink(token,'trench-note-symbol')}</strong> — ${trenchEscape(token.reason)}${bubbleStatus}; <a href="${trenchEscape(token.rugUrl)}" target="_blank" rel="noopener noreferrer">RugCheck</a> · <a href="${trenchEscape(token.dexUrl)}" target="_blank" rel="noopener noreferrer">DexScreener</a>${badges}</div>`;
   }).join('');
   const reasons=(payload.eliminationReasons||[]).map(item=>`${trenchEscape(item.reason)} ${Number(item.count)||0}`).join(' · ');
   const eliminated=payload.eliminatedCount
@@ -1386,48 +1434,171 @@ const bubbles = (function(){
   function colorFor(pct){
     const mag = Math.min(Math.abs(pct)/10, 1);
     if (pct >= 0){
-      const l = 46 + mag*12;
-      return { core:`hsla(150,100%,${l+8}%,1)`, edge:`hsla(150,96%,${l-14}%,0.94)`,
-               ring:`hsla(150,100%,70%,1)`, glow:'rgba(0,255,140,0.55)', text:'#02160c' };
+      const mid = 48 + mag*7;
+      return {
+        core:`hsla(145,100%,${78+mag*5}%,1)`,
+        body:`hsla(150,96%,${mid}%,1)`,
+        edge:`hsla(154,100%,${24+mag*5}%,1)`,
+        ring:'hsla(150,100%,78%,.92)',
+        rimDark:'rgba(0,49,29,.62)',
+        glow:'rgba(0,255,140,.48)',
+        text:'#02160c'
+      };
     } else {
-      const l = 52 + mag*10;
-      return { core:`hsla(349,100%,${l+6}%,1)`, edge:`hsla(349,96%,${l-14}%,0.94)`,
-               ring:`hsla(349,100%,72%,1)`, glow:'rgba(255,55,95,0.5)', text:'#2a0006' };
+      const mid = 54 + mag*6;
+      return {
+        core:`hsla(351,100%,${80+mag*4}%,1)`,
+        body:`hsla(348,96%,${mid}%,1)`,
+        edge:`hsla(350,100%,${29+mag*4}%,1)`,
+        ring:'hsla(350,100%,80%,.92)',
+        rimDark:'rgba(72,0,17,.64)',
+        glow:'rgba(255,55,95,.46)',
+        text:'#2a0006'
+      };
     }
+  }
+
+  function setFittedBubbleFont(text,weight,preferred,minSize,maxWidth,family){
+    let size=preferred;
+    ctx.font=`${weight} ${size}px ${family}`;
+    const measured=ctx.measureText(text).width;
+    if (measured>maxWidth && measured>0) size=Math.max(minSize,size*(maxWidth/measured));
+    ctx.font=`${weight} ${size}px ${family}`;
+    return { size, width:ctx.measureText(text).width };
   }
 
   function draw(){
     ctx.clearRect(0,0,W,H);
-    let hover = null;
+    const hover = mouse.over ? bubbleAt(mouse.x, mouse.y) : null;
     for (const n of nodes){
       const c = colorFor(n.pct);
-      const grad = ctx.createRadialGradient(n.x-n.r*0.3, n.y-n.r*0.35, n.r*0.1, n.x, n.y, n.r);
+      const isHovered = hover === n;
+      const grad = ctx.createRadialGradient(
+        n.x-n.r*0.36, n.y-n.r*0.42, n.r*0.03,
+        n.x+n.r*0.12, n.y+n.r*0.14, n.r*1.08
+      );
       grad.addColorStop(0, c.core);
+      grad.addColorStop(0.34, c.core);
+      grad.addColorStop(0.62, c.body);
       grad.addColorStop(1, c.edge);
+
+      // Projected shadow and directional body gradient create the sphere depth.
+      ctx.save();
+      ctx.shadowColor='rgba(0,0,0,.58)';
+      ctx.shadowBlur=Math.max(8,n.r*0.25);
+      ctx.fillStyle='rgba(0,0,0,.24)';
+      ctx.beginPath();
+      ctx.ellipse(n.x+n.r*0.10,n.y+n.r*0.76,n.r*0.66,n.r*0.15,-0.06,0,Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+
       ctx.save();
       ctx.shadowColor = c.glow;
-      ctx.shadowBlur = 16;
+      ctx.shadowBlur = isHovered ? 28 : Math.max(14, Math.min(22,n.r*0.34));
+      ctx.shadowOffsetY = Math.max(2,n.r*0.08);
       ctx.beginPath();
       ctx.arc(n.x, n.y, n.r, 0, Math.PI*2);
       ctx.fillStyle = grad;
       ctx.fill();
       ctx.restore();
-      ctx.lineWidth = 1.6;
+
+      // Glassy highlight, lower vignette and soft reflected light stay clipped
+      // inside the bubble so the surface reads as a polished 3D object.
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(n.x,n.y,n.r-0.7,0,Math.PI*2);
+      ctx.clip();
+      const depth=ctx.createLinearGradient(n.x,n.y-n.r,n.x,n.y+n.r);
+      depth.addColorStop(0,'rgba(255,255,255,.10)');
+      depth.addColorStop(0.52,'rgba(255,255,255,0)');
+      depth.addColorStop(1,'rgba(0,0,0,.30)');
+      ctx.fillStyle=depth;
+      ctx.fillRect(n.x-n.r,n.y-n.r,n.r*2,n.r*2);
+
+      const gloss=ctx.createRadialGradient(
+        n.x-n.r*0.38,n.y-n.r*0.43,0,
+        n.x-n.r*0.32,n.y-n.r*0.34,n.r*0.72
+      );
+      gloss.addColorStop(0,'rgba(255,255,255,.72)');
+      gloss.addColorStop(0.16,'rgba(255,255,255,.30)');
+      gloss.addColorStop(0.52,'rgba(255,255,255,.06)');
+      gloss.addColorStop(1,'rgba(255,255,255,0)');
+      ctx.fillStyle=gloss;
+      ctx.fillRect(n.x-n.r,n.y-n.r,n.r*2,n.r*2);
+
+      ctx.beginPath();
+      ctx.ellipse(n.x-n.r*0.30,n.y-n.r*0.38,n.r*0.22,n.r*0.095,-0.42,0,Math.PI*2);
+      ctx.fillStyle='rgba(255,255,255,.40)';
+      ctx.fill();
+
+      const reflection=ctx.createRadialGradient(
+        n.x+n.r*0.16,n.y+n.r*0.68,0,
+        n.x+n.r*0.16,n.y+n.r*0.68,n.r*0.62
+      );
+      reflection.addColorStop(0,'rgba(255,255,255,.13)');
+      reflection.addColorStop(1,'rgba(255,255,255,0)');
+      ctx.fillStyle=reflection;
+      ctx.fillRect(n.x-n.r,n.y,n.r*2,n.r);
+      ctx.restore();
+
+      // Split rim lighting reinforces the top-lit, rounded silhouette.
+      ctx.lineCap='round';
+      ctx.lineWidth = isHovered ? 2.2 : 1.55;
       ctx.strokeStyle = c.ring;
+      ctx.beginPath();
+      ctx.arc(n.x,n.y,n.r-0.75,Math.PI*1.15,Math.PI*1.86);
       ctx.stroke();
+      ctx.lineWidth=Math.max(1,n.r*0.035);
+      ctx.strokeStyle=c.rimDark;
+      ctx.beginPath();
+      ctx.arc(n.x,n.y,n.r-0.9,Math.PI*0.10,Math.PI*0.90);
+      ctx.stroke();
+      ctx.lineCap='butt';
+
+      if (isHovered){
+        ctx.save();
+        ctx.strokeStyle='rgba(255,255,255,.70)';
+        ctx.lineWidth=1;
+        ctx.beginPath();
+        ctx.arc(n.x,n.y,n.r+3,0,Math.PI*2);
+        ctx.stroke();
+        ctx.restore();
+      }
       // labels
       if (n.r >= 19){
-        const fs = Math.max(9, Math.min(n.r*0.42, 17));
+        const fs = Math.max(9, Math.min(n.r*0.36,16));
+        const maxTextWidth=n.r*1.72;
+        const priceText=bubblePriceLabel(n);
+        const pctText=(n.pct>=0?'+':'')+n.pct.toFixed(1)+'%';
+        ctx.save();
         ctx.fillStyle = c.text;
         ctx.textAlign='center'; ctx.textBaseline='middle';
-        ctx.font = `700 ${fs}px 'Space Grotesk', sans-serif`;
-        ctx.fillText(n.base, n.x, n.y - fs*0.42);
-        ctx.font = `600 ${fs*0.8}px 'JetBrains Mono', monospace`;
-        ctx.fillText((n.pct>=0?'+':'')+n.pct.toFixed(1)+'%', n.x, n.y + fs*0.55);
-      }
-      if (mouse.over){
-        const d = Math.hypot(mouse.x-n.x, mouse.y-n.y);
-        if (d <= n.r && (!hover || n.r < hover.r)) hover = n;
+        ctx.shadowColor='transparent'; ctx.shadowBlur=0;
+
+        setFittedBubbleFont(n.base,700,fs,7.5,maxTextWidth,"'Space Grotesk', sans-serif");
+        ctx.fillText(n.base,n.x,n.y-fs*0.82);
+
+        const priceFont=setFittedBubbleFont(
+          priceText,700,Math.max(9.2,Math.min(fs*0.86,13.5)),8,n.r*1.76,"'JetBrains Mono', monospace"
+        );
+        const pillY=n.y+fs*0.01;
+        const pillHalf=Math.max(1,(priceFont.width-priceFont.size*0.28)/2);
+        ctx.save();
+        ctx.strokeStyle='rgba(255,255,255,.26)';
+        ctx.lineWidth=priceFont.size*1.42;
+        ctx.lineCap='round';
+        ctx.beginPath();
+        ctx.moveTo(n.x-pillHalf,pillY);
+        ctx.lineTo(n.x+pillHalf,pillY);
+        ctx.stroke();
+        ctx.restore();
+        ctx.fillStyle=c.text;
+        ctx.font=`700 ${priceFont.size}px 'JetBrains Mono', monospace`;
+        ctx.fillText(priceText,n.x,pillY);
+
+        setFittedBubbleFont(pctText,700,Math.max(8.5,fs*0.78),7.5,maxTextWidth,"'JetBrains Mono', monospace");
+        ctx.fillText(pctText,n.x,n.y+fs*0.84);
+        ctx.restore();
       }
     }
     // tooltip + cursor
@@ -1550,6 +1721,24 @@ const TRADFI = [
   { key:'OIL',  name:'OIL WTI', sub:'CRUDE · BBL', cls:'COMMODITY', ysym:'CL=F',  mcap:12e12, usd:true  },
 ];
 
+// Reserve familiar commodity names before crypto lookup. This prevents a
+// search such as "silver" from resolving to an unrelated crypto token.
+const CUSTOM_TRADFI_ALIASES = {
+  SILVER: {
+    sym:'SILVER', type:'commodity', name:'SILVER', sub:'XAG · OZ', cls:'COMMODITY',
+    cnbcSymbol:'@SI.1', ysym:'SI=F', tvSymbol:'XAGUSD', tvExchange:'OANDA', usd:true
+  }
+};
+const CUSTOM_TRADFI_INPUTS = {
+  SILVER:'SILVER', XAG:'SILVER', XAGUSD:'SILVER', GUMUS:'SILVER', 'GÜMÜŞ':'SILVER'
+};
+
+function customTradFiAlias(rawInput){
+  const key=String(rawInput||'').trim().toUpperCase().replace(/\s+/g,'');
+  const aliasKey=CUSTOM_TRADFI_INPUTS[key];
+  return aliasKey ? { ...CUSTOM_TRADFI_ALIASES[aliasKey] } : null;
+}
+
 let hypeRow      = cacheGet('cc_hype')    || null;  // HYPE via CoinGecko (not on Binance)
 let tradfiRows   = cacheGet('cc_tradfi')  || {};    // key -> CNBC row
 const cachedCustomItems = cacheGet('cc_custom');
@@ -1560,6 +1749,19 @@ const cachedMarketOrder = cacheGet('cc_market_order_v1');
 let customItems  = Array.isArray(cachedCustomItems) ? cachedCustomItems : [];
 let customQuotes = cachedCustomQuotes && typeof cachedCustomQuotes === 'object' ? cachedCustomQuotes : {};
 let customCoinQuotes = cachedCustomCoinQuotes && typeof cachedCustomCoinQuotes === 'object' ? cachedCustomCoinQuotes : {};
+
+// Repair SILVER entries saved by older versions that classified it as crypto.
+let repairedLegacySilver=false;
+customItems=customItems.map(item => {
+  if (String(item?.sym||'').toUpperCase()!=='SILVER' || item.type==='commodity') return item;
+  repairedLegacySilver=true;
+  return { ...CUSTOM_TRADFI_ALIASES.SILVER };
+});
+if (repairedLegacySilver){
+  delete customCoinQuotes.SILVER;
+  cacheSet('cc_custom', customItems);
+  cacheSet('cc_custom_cgq', customCoinQuotes);
+}
 let hiddenAssets = Array.isArray(cachedHiddenAssets)
   ? [...new Set(cachedHiddenAssets.filter(id => typeof id === 'string'))]
   : [];
@@ -1587,12 +1789,12 @@ function customAssetSnapshot(c){
     id:'c:'+c.sym,
     rmsym:c.sym,
     custom:true,
-    name:c.sym,
+    name:c.name || c.sym,
     source:c.source,
     cgId:c.cgId,
     tvSymbol:c.tvSymbol,
     tvExchange:c.tvExchange,
-    usd:true
+    usd:c.usd !== false
   };
   if (c.type === 'crypto'){
     if (c.source === 'coingecko'){
@@ -1611,8 +1813,9 @@ function customAssetSnapshot(c){
       high:+t.highPrice, low:+t.lowPrice, vol:+t.quoteVolume, mcap:0 };
   }
   const d = customQuotes[c.sym];
-  return { ...common, sub:'', kind:'stock', cls:'STOCK',
-    historyProvider:'yahoo', historySymbol:c.sym.replace(/\./g,'-'),
+  const isCommodity=c.type==='commodity';
+  return { ...common, sub:isCommodity ? (c.sub||'') : '', kind:isCommodity ? 'tradfi' : 'stock', cls:isCommodity ? (c.cls||'COMMODITY') : 'STOCK',
+    historyProvider:'yahoo', historySymbol:c.ysym || c.sym.replace(/\./g,'-'),
     price:d ? d.price : null, chg:d ? d.chgPct : 0,
     high:d ? d.high : null, low:d ? d.low : null,
     vol:d ? d.vol : null, mcap:0 };
@@ -1811,6 +2014,7 @@ function openPageContextMenu(event){
   const top = Math.max(gap, Math.min(event.clientY, window.innerHeight - rect.height - gap));
   pageContextMenu.style.left = `${left}px`;
   pageContextMenu.style.top = `${top}px`;
+  requestAnimationFrame(() => pageContextMenu.querySelector('[role="menuitem"]')?.focus({ preventScroll:true }));
 }
 
 document.addEventListener('contextmenu', openPageContextMenu);
@@ -1818,7 +2022,18 @@ document.addEventListener('pointerdown', event => {
   if (!event.target.closest?.('#pageContextMenu')) closePageContextMenu();
 });
 document.addEventListener('keydown', event => {
-  if (event.key === 'Escape') closePageContextMenu();
+  if (event.key === 'Escape') {
+    closePageContextMenu();
+    return;
+  }
+  if (pageContextMenu.hidden || !['ArrowDown','ArrowUp'].includes(event.key)) return;
+  const items=[...pageContextMenu.querySelectorAll('[role="menuitem"]')];
+  if (!items.length) return;
+  const current=items.indexOf(document.activeElement);
+  const direction=event.key==='ArrowDown'?1:-1;
+  const next=(current+direction+items.length)%items.length;
+  event.preventDefault();
+  items[next]?.focus({ preventScroll:true });
 });
 window.addEventListener('resize', closePageContextMenu);
 document.addEventListener('scroll', closePageContextMenu, true);
@@ -2183,6 +2398,22 @@ async function cnbcQuoteOne(sym){
   } catch(e){ return null; }
 }
 
+async function commodityFallbackQuote(asset){
+  if (asset?.sym!=='SILVER') return null;
+  try {
+    const r=await fetch('https://api.gold-api.com/price/XAG', { cache:'no-store' });
+    if (!r.ok) return null;
+    const data=await r.json();
+    const price=Number(data?.price);
+    if (!isFinite(price) || price<=0) return null;
+    return { price, chgPct:0, prev:null, high:null, low:null, vol:null, name:'Silver' };
+  } catch(e){ return null; }
+}
+
+async function customTradFiQuoteOne(asset){
+  return await cnbcQuoteOne(asset.cnbcSymbol || asset.sym) || await commodityFallbackQuote(asset);
+}
+
 const COINGECKO_BASE = 'https://api.coingecko.com/api/v3';
 const COINGECKO_ALIASES = {
   BP: { id:'backpack', name:'Backpack', tvSymbol:'BPUSDT', tvExchange:'MEXC' }
@@ -2268,8 +2499,9 @@ async function addCustom(){
     focusTrenches(command.endsWith(' refresh'));
     return;
   }
+  const tradFiAlias=customTradFiAlias(rawInput);
   const rawSym = rawInput.toUpperCase().replace(/[^A-Z0-9.\-]/g,'');
-  const sym = rawSym === 'BACKPACK' ? 'BP' : rawSym;
+  const sym = tradFiAlias?.sym || (rawSym === 'BACKPACK' ? 'BP' : rawSym);
   if (!sym){ $('#px-q').focus(); return; }
   const defaultId=defaultAssetIdForSymbol(sym);
   if (defaultId && isAssetHidden(defaultId)){
@@ -2283,12 +2515,35 @@ async function addCustom(){
   const existingCustom = customItems.find(c => c.sym === sym);
   let replaceExistingStock = false;
   if (existingCustom){
-    const alias = COINGECKO_ALIASES[sym];
-    const isRequestedCoinMissing = alias && existingCustom.type !== 'crypto';
-    if (!isRequestedCoinMissing){ pxMsg(`${sym} is already in the list`, 'err'); return; }
-    replaceExistingStock = true;
+    const shouldReplaceWithTradFi=tradFiAlias && existingCustom.type!==tradFiAlias.type;
+    if (shouldReplaceWithTradFi){
+      customItems=customItems.filter(c=>c.sym!==sym);
+      delete customQuotes[sym];
+      delete customCoinQuotes[sym];
+    } else {
+      const alias = COINGECKO_ALIASES[sym];
+      const isRequestedCoinMissing = alias && existingCustom.type !== 'crypto';
+      if (!isRequestedCoinMissing){ pxMsg(`${sym} is already in the list`, 'err'); return; }
+      replaceExistingStock = true;
+    }
   } else if (isKnownSymbol(sym)){
     pxMsg(`${sym} is already in the list`, 'err');
+    return;
+  }
+  // Commodity aliases take priority over crypto symbols with the same name.
+  if (tradFiAlias){
+    pxMsg(`Loading ${tradFiAlias.name} commodity…`);
+    const quote=await customTradFiQuoteOne(tradFiAlias);
+    if (!quote){
+      pxMsg(`${tradFiAlias.name} commodity price could not be loaded right now`, 'err');
+      return;
+    }
+    customItems.push(tradFiAlias);
+    customQuotes[tradFiAlias.sym]=quote;
+    saveCustom();
+    $('#px-q').value='';
+    pxMsg(`Added ${tradFiAlias.name} · commodity`, 'ok');
+    renderAll();
     return;
   }
   // 1) crypto on Binance?
@@ -2388,8 +2643,10 @@ const CNBC_BASE = 'https://quote.cnbc.com/quote-html-webservice/quote.htm?reques
 const CNBC_MAP = { '.SPX':'SPX', '.IXIC':'NDX', '@CL.1':'OIL', '@GC.1':'GOLD' };
 async function fetchTradFi(){
   let ok = 0, gotGold = false;
-  const stockSyms = customItems.filter(c => c.type==='stock').map(c => c.sym);
-  const syms = ['.SPX','.IXIC','@CL.1','@GC.1', ...stockSyms];   // TradFi + added stocks in one batch
+  const customTradFiItems = customItems.filter(c => c.type==='stock' || c.type==='commodity');
+  const customByCnbcSymbol = new Map(customTradFiItems.map(c => [c.cnbcSymbol || c.sym, c.sym]));
+  const refreshedCustomSymbols = new Set();
+  const syms = ['.SPX','.IXIC','@CL.1','@GC.1', ...customByCnbcSymbol.keys()];   // TradFi + added stocks/commodities in one batch
   try {
     const r = await fetch(CNBC_BASE + encodeURIComponent(syms.join('|')), { cache:'no-store' });
     if (!r.ok) throw new Error('HTTP '+r.status);
@@ -2410,9 +2667,18 @@ async function fetchTradFi(){
       };
       const key = CNBC_MAP[x.symbol];
       if (key){ tradfiRows[key] = quote; ok++; if (key === 'GOLD') gotGold = true; }
-      else { customQuotes[x.symbol] = quote; }      // an added stock
+      else {
+        const customSymbol=customByCnbcSymbol.get(x.symbol) || x.symbol;
+        customQuotes[customSymbol] = quote;
+        refreshedCustomSymbols.add(customSymbol);
+      }
     });
   } catch(e){ console.warn('tradfi (CNBC) failed', e); }
+  for (const item of customTradFiItems){
+    if (item.type!=='commodity' || refreshedCustomSymbols.has(item.sym)) continue;
+    const fallback=await commodityFallbackQuote(item);
+    if (fallback) customQuotes[item.sym]=fallback;
+  }
   if (!gotGold){                                   // CORS-native fallback for gold
     try { const r = await fetch('https://api.gold-api.com/price/XAU');
           if (r.ok){ const g = await r.json();

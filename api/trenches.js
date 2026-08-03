@@ -1,10 +1,16 @@
 const CACHE_MS = 10 * 60 * 1000;
-const DISCOVERY_LIMIT = 27;
-const REPORT_LIMIT = 12;
+const DISCOVERY_LIMIT = 60;
+const DEX_BATCH_LIMIT = 30;
+const REPORT_LIMIT = 24;
+const VISIBLE_LIMIT = 12;
+const BUBBLEMAPS_LIMIT = 16;
 const REQUEST_TIMEOUT_MS = 8500;
 const GREEN_SCORE_MIN = 76;
 const MIN_GREEN_AGE_HOURS = 6;
 const HIGH_RUGCHECK_RISK = 70;
+const BUBBLEMAPS_API_KEY = typeof process !== "undefined"
+  ? String(process.env?.BUBBLEMAPS_API_KEY || "").trim()
+  : "";
 
 let runtimeCache = { updatedAt: 0, payload: null };
 
@@ -16,14 +22,14 @@ const number = (value) => {
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const addressPattern = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
-async function fetchJson(url, timeout = REQUEST_TIMEOUT_MS) {
+async function fetchJson(url, timeout = REQUEST_TIMEOUT_MS, extraHeaders = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
 
   try {
     const response = await fetch(url, {
       signal: controller.signal,
-      headers: { Accept: "application/json", "User-Agent": "MUS-Terminal/1.0" }
+      headers: { Accept: "application/json", "User-Agent": "MUS-Terminal/1.0", ...extraHeaders }
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return await response.json();
@@ -32,9 +38,12 @@ async function fetchJson(url, timeout = REQUEST_TIMEOUT_MS) {
   }
 }
 
-async function settleJson(url) {
+async function settleJson(url, options = {}) {
   try {
-    return { ok: true, data: await fetchJson(url) };
+    return {
+      ok: true,
+      data: await fetchJson(url, options.timeout || REQUEST_TIMEOUT_MS, options.headers || {})
+    };
   } catch (error) {
     return { ok: false, data: null, error: error?.name === "AbortError" ? "timeout" : error?.message || "request failed" };
   }
@@ -103,6 +112,89 @@ async function mapLimit(items, limit, worker) {
 
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, run));
   return results;
+}
+
+function chunk(items, size) {
+  const groups = [];
+  for (let index = 0; index < items.length; index += size) groups.push(items.slice(index, index + size));
+  return groups;
+}
+
+function optionalNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function bubblemapsSnapshot(metrics, requested = false) {
+  const scores = metrics?.scores || metrics?.metrics?.scores || null;
+  const rawScore = optionalNumber(scores?.bubblemaps_score);
+  const rawGini = optionalNumber(scores?.gini_index);
+  const rawHhi = optionalNumber(scores?.herfindahl_hirschman_index);
+  const rawNakamoto = optionalNumber(scores?.nakamoto_coefficient);
+  const score = rawScore !== null && rawScore >= 0 && rawScore <= 100
+    ? clamp(rawScore <= 1 ? rawScore * 100 : rawScore, 0, 100)
+    : null;
+
+  return {
+    requested,
+    verified: Boolean(scores) && score !== null,
+    score,
+    giniIndex: rawGini,
+    hhi: rawHhi,
+    nakamotoCoefficient: rawNakamoto,
+    notableRisk: !requested
+      ? "Bubblemaps etkin değil"
+      : score === null
+        ? "Bubblemaps verisi Doğrulanmadı"
+        : score < 25
+          ? "Holder dağılım skoru çok düşük"
+          : score < 45
+            ? "Holder dağılım skoru zayıf"
+            : rawNakamoto !== null && rawNakamoto <= 3
+              ? "Nakamoto katsayısı düşük"
+              : "Belirgin Bubblemaps dağılım uyarısı yok"
+  };
+}
+
+function bubblemapsAssessment(snapshot, security) {
+  const hardReasons = [];
+  const cautionReasons = [];
+  let adjustment = 0;
+
+  if (!snapshot.requested) return { adjustment, hardReasons, cautionReasons };
+  if (!snapshot.verified) {
+    cautionReasons.push("Bubblemaps verisi Doğrulanmadı");
+    return { adjustment, hardReasons, cautionReasons };
+  }
+
+  if (snapshot.score < 25) {
+    adjustment -= 8;
+    cautionReasons.push("Bubblemaps holder dağılımı çok zayıf");
+  } else if (snapshot.score < 45) {
+    adjustment -= 4;
+    cautionReasons.push("Bubblemaps holder dağılımı zayıf");
+  } else if (snapshot.score >= 75) {
+    adjustment += 4;
+  }
+
+  if (snapshot.nakamotoCoefficient !== null && snapshot.nakamotoCoefficient <= 2) {
+    adjustment -= 6;
+    cautionReasons.push("Bubblemaps Nakamoto katsayısı çok düşük");
+  } else if (snapshot.nakamotoCoefficient !== null && snapshot.nakamotoCoefficient <= 5) {
+    adjustment -= 2;
+    cautionReasons.push("Bubblemaps Nakamoto katsayısı düşük");
+  }
+
+  const corroboratedConcentration = (security.top10Pct !== null && security.top10Pct > 45)
+    || (security.insiderPct !== null && security.insiderPct > 5)
+    || security.graphInsiders > 10;
+  if (snapshot.score < 20 && snapshot.nakamotoCoefficient !== null
+      && snapshot.nakamotoCoefficient <= 2 && corroboratedConcentration) {
+    hardReasons.push("Bubblemaps ve RugCheck holder yoğunluğu aşırı");
+  }
+
+  return { adjustment: clamp(adjustment, -14, 4), hardReasons, cautionReasons };
 }
 
 function authorityState(...values) {
@@ -326,7 +418,7 @@ function qualityScore({ marketCap, liquidity, lpRatio, ageHours, volume, txns, p
   };
 }
 
-function classifyPair(pair, report, discovery) {
+function classifyPair(pair, report, discovery, bubblemapsMetrics = null, bubblemapsRequested = false) {
   const marketCap = number(pair?.marketCap) || number(pair?.fdv);
   const liquidity = number(pair?.liquidity?.usd) || number(report?.totalMarketLiquidity);
   const ageHours = pair?.pairCreatedAt ? Math.max(0, (Date.now() - number(pair.pairCreatedAt)) / 3600000) : null;
@@ -338,6 +430,8 @@ function classifyPair(pair, report, discovery) {
     h24: number(pair?.priceChange?.h24)
   };
   const security = securitySnapshot(report);
+  const bubblemaps = bubblemapsSnapshot(bubblemapsMetrics, bubblemapsRequested);
+  const bubbleAssessment = bubblemapsAssessment(bubblemaps, security);
   const lpRatio = marketCap ? liquidity / marketCap : 0;
   const criticalLpFloor = marketCap ? Math.max(5000, Math.min(30000, marketCap * 0.005)) : 6000;
   const greenLpFloor = marketCap ? Math.max(15000, Math.min(120000, marketCap * 0.015)) : 20000;
@@ -364,6 +458,7 @@ function classifyPair(pair, report, discovery) {
   if (unsupportedSpike) hardReasons.push("Hacimsiz dik fiyat hareketi");
   if (severeSelloff) hardReasons.push("Şiddetli fiyat çöküşü");
   if (security.riskScore !== null && security.riskScore >= HIGH_RUGCHECK_RISK) hardReasons.push("Yüksek RugCheck risk skoru");
+  hardReasons.push(...bubbleAssessment.hardReasons);
 
   const cautionReasons = [];
   if (!security.verified) cautionReasons.push("Güvenlik verisi Doğrulanmadı");
@@ -386,6 +481,7 @@ function classifyPair(pair, report, discovery) {
   if (security.top10Pct !== null && security.top10Pct > 45) cautionReasons.push("Top holder yoğunluğu yüksek");
   if (security.insiderPct !== null && security.insiderPct > 5) cautionReasons.push("Insider yoğunluğu dikkat istiyor");
   if (security.graphInsiders > 10) cautionReasons.push("Cluster/insider sayısı yüksek");
+  cautionReasons.push(...bubbleAssessment.cautionReasons);
 
   const quality = qualityScore({
     marketCap,
@@ -399,7 +495,7 @@ function classifyPair(pair, report, discovery) {
     priceVolumeDivergence
   });
   const hardPenalty = Math.min(36, hardReasons.length * 12);
-  const score = Math.round(clamp(quality.score - hardPenalty, 0, 100));
+  const score = Math.round(clamp(quality.score + bubbleAssessment.adjustment - hardPenalty, 0, 100));
 
   let decision = "yellow";
   if (hardReasons.length) decision = "red";
@@ -414,10 +510,14 @@ function classifyPair(pair, report, discovery) {
         : "hacim dengeli seyrediyor";
   const importantRisk = !security.verified
     ? "güvenlik verisi Doğrulanmadı"
-    : cautionReasons[0]
-      || (security.notableRisk === "Belirgin RugCheck uyarısı yok"
-        ? "benzersiz trader sayısı Doğrulanmadı"
-        : security.notableRisk);
+    : bubblemaps.requested && !bubblemaps.verified
+      ? "Bubblemaps verisi Doğrulanmadı"
+      : bubblemaps.verified && bubblemaps.notableRisk !== "Belirgin Bubblemaps dağılım uyarısı yok"
+        ? bubblemaps.notableRisk
+        : cautionReasons[0]
+          || (security.notableRisk === "Belirgin RugCheck uyarısı yok"
+            ? "benzersiz trader sayısı Doğrulanmadı"
+            : security.notableRisk);
 
   return {
     address: pair.baseToken.address,
@@ -430,13 +530,14 @@ function classifyPair(pair, report, discovery) {
     txns,
     ageHours,
     score,
-    scoreBreakdown: { ...quality.components, hardPenalty: -hardPenalty },
+    scoreBreakdown: { ...quality.components, bubblemaps: bubbleAssessment.adjustment, hardPenalty: -hardPenalty },
     decision,
     decisionLabel: decision === "green" ? "🟢 İzlemeye değer" : decision === "yellow" ? "🟡 Şartlı izleme" : "🔴 Elendi",
     reason: `${volumeComment}; Mint ${security.mint === "revoked" ? "✅" : "⚠️"} Freeze ${security.freeze === "revoked" ? "✅" : "⚠️"} LP ${security.lpLockedPct !== null && security.lpLockedPct >= 80 && liquidity >= greenLpFloor ? "✅" : "⚠️"}; ${importantRisk}`,
     hardReasons,
     cautionReasons,
     security,
+    bubblemaps,
     priceVolumeDivergence,
     dexUrl: pair?.url || `https://dexscreener.com/solana/${pair?.pairAddress || pair.baseToken.address}`,
     rugUrl: `https://rugcheck.xyz/tokens/${pair.baseToken.address}`,
@@ -465,13 +566,16 @@ async function discover() {
   const discovered = new Map();
 
   const discoveryGroups = [
-    [(Array.isArray(profiles.data) ? profiles.data : []).slice(0, 13), "dex-profile"],
-    [(Array.isArray(latestBoosts.data) ? latestBoosts.data : []).slice(0, 7), "dex-boost"],
-    [(Array.isArray(topBoosts.data) ? topBoosts.data : []).slice(0, 7), "dex-top"],
-    [(Array.isArray(rugNew.data) ? rugNew.data : []).slice(0, 7), "rug-new"]
+    [(Array.isArray(profiles.data) ? profiles.data : []).slice(0, 30), "dex-profile"],
+    [(Array.isArray(latestBoosts.data) ? latestBoosts.data : []).slice(0, 20), "dex-boost"],
+    [(Array.isArray(topBoosts.data) ? topBoosts.data : []).slice(0, 20), "dex-top"],
+    [(Array.isArray(rugNew.data) ? rugNew.data : []).slice(0, 30), "rug-new"]
   ];
-  for (const [items, source] of discoveryGroups) {
-    for (const item of items) addDiscovery(discovered, item, source);
+  const longestGroup = Math.max(...discoveryGroups.map(([items]) => items.length), 0);
+  for (let index = 0; index < longestGroup; index++) {
+    for (const [items, source] of discoveryGroups) {
+      if (items[index]) addDiscovery(discovered, items[index], source);
+    }
   }
 
   const warnings = [profiles, latestBoosts, topBoosts, rugNew]
@@ -485,10 +589,14 @@ async function buildScan() {
   if (!candidates.length) throw new Error("Token keşif kaynakları şu anda yanıt vermiyor.");
 
   const addresses = candidates.map((item) => item.address);
-  const dexResult = await settleJson(`https://api.dexscreener.com/tokens/v1/solana/${addresses.join(",")}`);
-  if (!dexResult.ok) throw new Error("DexScreener piyasa verisi alınamadı.");
+  const dexResults = await mapLimit(chunk(addresses, DEX_BATCH_LIMIT), 2, (batch) => (
+    settleJson(`https://api.dexscreener.com/tokens/v1/solana/${batch.join(",")}`)
+  ));
+  const successfulDexResults = dexResults.filter((result) => result.ok);
+  if (!successfulDexResults.length) throw new Error("DexScreener piyasa verisi alınamadı.");
+  if (successfulDexResults.length !== dexResults.length) warnings.push("DexScreener toplu sorgularından biri başarısız oldu.");
 
-  const pairMap = selectPairs(dexResult.data);
+  const pairMap = selectPairs(successfulDexResults.flatMap((result) => Array.isArray(result.data) ? result.data : []));
   const ranked = candidates
     .map((discovery) => ({ discovery, pair: pairMap.get(discovery.address) }))
     .filter((item) => item.pair)
@@ -497,26 +605,55 @@ async function buildScan() {
 
   if (!ranked.length) throw new Error("Taranan tokenlerde aktif Solana çifti bulunamadı.");
 
-  const reports = await mapLimit(ranked, 3, async ({ discovery }) => {
+  const reports = await mapLimit(ranked, 6, async ({ discovery }) => {
     const result = await settleJson(`https://api.rugcheck.xyz/v1/tokens/${discovery.address}/report`);
     return result.ok ? result.data : null;
   });
-  const classified = ranked.map((item, index) => classifyPair(item.pair, reports[index], item.discovery));
+  const preliminary = ranked.map((item, index) => classifyPair(item.pair, reports[index], item.discovery));
+  const bubblemapsByAddress = new Map();
+
+  if (BUBBLEMAPS_API_KEY) {
+    const bubbleTargets = preliminary
+      .filter((token) => token.decision !== "red")
+      .sort((a, b) => b.score - a.score)
+      .slice(0, BUBBLEMAPS_LIMIT);
+    const bubbleResults = await mapLimit(bubbleTargets, 4, async (token) => {
+      const result = await settleJson(
+        `https://api.bubblemaps.io/v0/tokens/metrics/solana/${token.address}`,
+        { timeout: 7000, headers: { "X-ApiKey": BUBBLEMAPS_API_KEY } }
+      );
+      return { address: token.address, ...result };
+    });
+    for (const result of bubbleResults) {
+      if (result.ok) bubblemapsByAddress.set(result.address, result.data);
+    }
+    if (bubbleResults.some((result) => !result.ok)) warnings.push("Bazı Bubblemaps güvenlik verileri alınamadı.");
+  }
+
+  const classified = ranked.map((item, index) => classifyPair(
+    item.pair,
+    reports[index],
+    item.discovery,
+    bubblemapsByAddress.get(item.discovery.address) || null,
+    Boolean(BUBBLEMAPS_API_KEY)
+  ));
   const visible = classified
     .filter((token) => token.decision !== "red")
     .sort((a, b) => b.score - a.score)
-    .slice(0, 8);
+    .slice(0, VISIBLE_LIMIT);
   const eliminated = classified.filter((token) => token.decision === "red");
 
   return {
-    modelVersion: 2,
+    modelVersion: 3,
     generatedAt: new Date().toISOString(),
     autoRefreshMs: 16 * 60 * 1000,
+    candidateCount: candidates.length,
     scannedCount: classified.length,
     tokens: visible,
     eliminatedCount: eliminated.length,
     eliminationReasons: reasonSummary(eliminated),
-    warning: warnings.length ? "Bazı keşif kaynakları yanıt vermedi; mevcut verilerle tarandı." : ""
+    bubblemapsEnabled: Boolean(BUBBLEMAPS_API_KEY),
+    warning: warnings.length ? "Bazı veri kaynakları yanıt vermedi; mevcut verilerle tarandı." : ""
   };
 }
 
