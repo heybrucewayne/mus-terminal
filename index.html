@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>MUS Terminal</title>
 <meta name="theme-color" content="#071416" />
-<link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="favicon.png" type="image/png" />
 <script>
   (() => {
     const backgrounds = [
@@ -577,6 +577,69 @@
   .asset-menu-action.danger { color:var(--red); border-color:rgba(255,68,102,.28); background:rgba(255,68,102,.08); }
   .asset-menu-action.danger:hover { background:rgba(255,68,102,.22); border-color:var(--red); color:#fff; }
 
+  #assetMenu {
+    width:min(480px,calc(100vw - 20px));
+    max-height:calc(100vh - 20px);
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+    overflow:auto;
+  }
+  #assetMenu .asset-menu-title,
+  #assetMenu .asset-menu-heading,
+  #assetMenu .asset-menu-chart { grid-column:1 / -1; }
+  .asset-menu-heading { display:flex; align-items:center; gap:8px; }
+  .asset-menu-heading .asset-menu-title { flex:1; min-width:0; }
+  .asset-menu-close {
+    width:26px;
+    height:26px;
+    flex:0 0 26px;
+    border:1px solid rgba(255,255,255,.12);
+    border-radius:7px;
+    background:rgba(255,255,255,.055);
+    color:var(--muted);
+    font-size:16px;
+    line-height:1;
+    cursor:pointer;
+  }
+  .asset-menu-close:hover { color:var(--text-bright); border-color:rgba(255,255,255,.3); }
+  .asset-menu-chart {
+    position:relative;
+    height:clamp(240px,46vh,420px);
+    overflow:hidden;
+    border:1px solid rgba(255,255,255,.11);
+    border-radius:9px;
+    background:linear-gradient(145deg,rgba(9,24,26,.98),rgba(4,10,14,.98));
+  }
+  .asset-menu-chart .tradingview-widget-container {
+    width:100%;
+    height:100%;
+  }
+  .asset-menu-chart .tradingview-widget-container__widget { width:100%; height:calc(100% - 20px); }
+  .asset-menu-chart .tradingview-widget-copyright {
+    height:20px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:var(--muted);
+    font:500 8px 'JetBrains Mono',monospace;
+  }
+  .asset-menu-chart .tradingview-widget-copyright a { color:#6bdcff; text-decoration:none; }
+  .asset-chart-state {
+    position:absolute;
+    inset:0;
+    display:grid;
+    place-items:center;
+    padding:14px;
+    color:var(--muted);
+    font:600 9px 'JetBrains Mono',monospace;
+    letter-spacing:.08em;
+    text-align:center;
+  }
+  @media (max-width:520px) {
+    #assetMenu { grid-template-columns:1fr; }
+    #assetMenu .asset-menu-action { grid-column:1 / -1; }
+    .asset-menu-chart { height:clamp(230px,44vh,340px); }
+  }
+
   .page-context-menu {
     z-index: 200;
     min-width: 170px;
@@ -751,10 +814,14 @@
 </div>
 
 <div id="bubbleTip"></div>
-<div id="assetMenu" class="asset-menu" hidden role="menu" aria-label="Asset actions">
-  <div id="assetMenuTitle" class="asset-menu-title"></div>
-  <a id="assetMenuTradingView" class="asset-menu-action" target="_blank" rel="noopener noreferrer" role="menuitem">VIEW IN TRADINGVIEW</a>
-  <button id="assetMenuRemove" class="asset-menu-action danger" type="button" role="menuitem">REMOVE FROM LIST</button>
+<div id="assetMenu" class="asset-menu" hidden role="dialog" aria-labelledby="assetMenuTitle">
+  <div class="asset-menu-heading">
+    <div id="assetMenuTitle" class="asset-menu-title"></div>
+    <button id="assetMenuClose" class="asset-menu-close" type="button" aria-label="Close asset panel">×</button>
+  </div>
+  <div id="assetMenuChart" class="asset-menu-chart" aria-label="Live TradingView chart"></div>
+  <a id="assetMenuTradingView" class="asset-menu-action" target="_blank" rel="noopener noreferrer">VIEW IN TRADINGVIEW</a>
+  <button id="assetMenuRemove" class="asset-menu-action danger" type="button">REMOVE FROM LIST</button>
 </div>
 
 <div id="pageContextMenu" class="asset-menu page-context-menu" hidden role="menu" aria-label="Page actions">
@@ -1482,6 +1549,7 @@ const saveCustom = () => {
 const saveHiddenAssets = () => cacheSet('cc_hidden_assets', hiddenAssets);
 const saveMarketOrder = () => cacheSet('cc_market_order_v1', marketOrder);
 let activeAssetMenu = null;
+let assetChartGeneration = 0;
 
 function customAssetSnapshot(c){
   const common = {
@@ -1526,32 +1594,121 @@ function defaultAssetIdForSymbol(sym){
   return TRADFI.some(f=>f.key===symbol) ? symbol : null;
 }
 
-function tradingViewUrl(asset){
+function tradingViewSymbol(asset){
   const id = asset.id || '';
   if (asset.kind === 'crypto'){
     if (asset.source === 'coingecko'){
       if (asset.tvSymbol && asset.tvExchange){
-        return `https://www.tradingview.com/symbols/${encodeURIComponent(asset.tvSymbol)}/?exchange=${encodeURIComponent(asset.tvExchange)}`;
+        return `${asset.tvExchange}:${asset.tvSymbol}`;
       }
-      return `https://www.tradingview.com/search/?query=${encodeURIComponent(asset.name)}`;
+      return null;
     }
     const symbol = id === 'HYPE' ? 'HYPEUSDT' : `${asset.name}USDT`;
     const exchange = id === 'HYPE' ? 'BYBIT' : 'BINANCE';
-    return `https://www.tradingview.com/symbols/${encodeURIComponent(symbol)}/?exchange=${exchange}`;
+    return `${exchange}:${symbol}`;
   }
   const map = {
-    SPX:  { symbol:'SPX',    exchange:'SP' },
-    NDX:  { symbol:'NDX',    exchange:'NASDAQ' },
-    GOLD: { symbol:'XAUUSD', exchange:'OANDA' },
-    OIL:  { symbol:'USOIL',  exchange:'TVC' }
+    SPX:  'SP:SPX',
+    NDX:  'NASDAQ:NDX',
+    GOLD: 'OANDA:XAUUSD',
+    OIL:  'TVC:USOIL'
   };
-  const mapped = map[id] || { symbol:asset.name, exchange:'NASDAQ' };
-  return `https://www.tradingview.com/symbols/${encodeURIComponent(mapped.symbol)}/?exchange=${mapped.exchange}`;
+  return map[id] || `${asset.tvExchange || 'NASDAQ'}:${asset.tvSymbol || asset.name}`;
+}
+
+function tradingViewUrl(asset){
+  const widgetSymbol = tradingViewSymbol(asset);
+  if (!widgetSymbol) return `https://www.tradingview.com/search/?query=${encodeURIComponent(asset.name)}`;
+  const separator = widgetSymbol.indexOf(':');
+  const exchange = widgetSymbol.slice(0, separator);
+  const symbol = widgetSymbol.slice(separator + 1);
+  return `https://www.tradingview.com/symbols/${encodeURIComponent(symbol)}/?exchange=${encodeURIComponent(exchange)}`;
+}
+
+function clearAssetChart(){
+  assetChartGeneration++;
+  const host = $('#assetMenuChart');
+  if (host){
+    host.removeAttribute('aria-busy');
+    host.replaceChildren();
+  }
+}
+
+function assetChartState(message){
+  const state = document.createElement('div');
+  state.className = 'asset-chart-state';
+  state.textContent = message;
+  return state;
+}
+
+function renderAssetChart(asset){
+  const host = $('#assetMenuChart');
+  if (!host) return;
+  clearAssetChart();
+  const generation = assetChartGeneration;
+  const symbol = tradingViewSymbol(asset);
+  if (!symbol){
+    host.append(assetChartState('TRADINGVIEW CHART UNAVAILABLE'));
+    return;
+  }
+
+  host.setAttribute('aria-busy', 'true');
+  const loading = assetChartState('LOADING CHART…');
+  const container = document.createElement('div');
+  container.className = 'tradingview-widget-container';
+  const widget = document.createElement('div');
+  widget.className = 'tradingview-widget-container__widget';
+  const attribution = document.createElement('div');
+  attribution.className = 'tradingview-widget-copyright';
+  const attributionLink = document.createElement('a');
+  attributionLink.href = tradingViewUrl(asset);
+  attributionLink.target = '_blank';
+  attributionLink.rel = 'noopener nofollow';
+  attributionLink.textContent = `${asset.name} chart by TradingView`;
+  attribution.append(attributionLink);
+  const script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
+  script.async = true;
+  script.textContent = JSON.stringify({
+    autosize: true,
+    symbol,
+    interval: '15',
+    timezone: 'Etc/UTC',
+    theme: 'dark',
+    style: '1',
+    locale: 'en',
+    backgroundColor: 'rgba(7, 18, 20, 1)',
+    gridColor: 'rgba(255, 255, 255, 0.06)',
+    hide_side_toolbar: true,
+    hide_top_toolbar: false,
+    hide_legend: false,
+    hide_volume: false,
+    allow_symbol_change: false,
+    save_image: false,
+    calendar: false,
+    withdateranges: true,
+    support_host: 'https://www.tradingview.com'
+  });
+  script.addEventListener('load', () => {
+    if (generation === assetChartGeneration){
+      host.removeAttribute('aria-busy');
+      loading.remove();
+    }
+  }, { once:true });
+  script.addEventListener('error', () => {
+    if (generation !== assetChartGeneration) return;
+    host.removeAttribute('aria-busy');
+    host.replaceChildren(assetChartState('TRADINGVIEW CHART COULD NOT LOAD'));
+  }, { once:true });
+  container.append(widget, attribution, script);
+  host.append(loading, container);
 }
 
 function closeAssetMenu(){
   const menu = $('#assetMenu');
   if (menu) menu.hidden = true;
+  clearAssetChart();
   activeAssetMenu = null;
 }
 
@@ -1568,6 +1725,7 @@ function openAssetMenu(asset, anchor){
   tv.href = tradingViewUrl(asset);
   remove.hidden = false;
   remove.setAttribute('aria-hidden', 'false');
+  menu.style.visibility = 'hidden';
   menu.hidden = false;
 
   const rect = typeof anchor.getBoundingClientRect === 'function'
@@ -1581,9 +1739,12 @@ function openAssetMenu(asset, anchor){
     : Math.max(10, rect.top - menu.offsetHeight - gap);
   menu.style.left = `${left}px`;
   menu.style.top = `${top}px`;
+  menu.style.visibility = '';
+  renderAssetChart(asset);
 }
 
 $('#assetMenuTradingView').addEventListener('click', closeAssetMenu);
+$('#assetMenuClose').addEventListener('click', closeAssetMenu);
 $('#assetMenuRemove').addEventListener('click', e => {
   e.preventDefault();
   e.stopPropagation();
