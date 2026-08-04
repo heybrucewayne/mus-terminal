@@ -58,7 +58,9 @@ export default async function handler(request, response) {
 
     const meta = result.meta || {};
     const quote = result.indicators?.quote?.[0] || {};
-    const closes = Array.isArray(quote.close) ? quote.close.filter(Number.isFinite) : [];
+    const closes = Array.isArray(quote.close)
+      ? quote.close.map(Number).filter(Number.isFinite)
+      : [];
     const price = finiteNumber(meta.regularMarketPrice, closes.at(-1));
     if (!price || price <= 0) {
       return response.status(404).json({ error: 'Quote not found' });

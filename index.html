@@ -1089,6 +1089,7 @@
    ============================================================ */
 const $ = (s, r=document) => r.querySelector(s);
 const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[char]));
+const finiteValue = (value, fallback=null) => { const number=Number(value); return Number.isFinite(number) ? number : fallback; };
 const fmtNum = (n, d=2) => Number(n).toLocaleString('en-US',{minimumFractionDigits:d, maximumFractionDigits:d});
 function smartPrice(p){
   p = +p;
@@ -1321,16 +1322,24 @@ function trenchChanges(token, previous){
   if (token.decision!==previous.decision) changes.push('KARAR Δ');
   return changes;
 }
-function renderTrenches(payload){
+function isTrenchesPayload(payload){
+  return Boolean(payload && typeof payload==='object'
+    && Array.isArray(payload.tokens)
+    && typeof payload.generatedAt==='string'
+    && Number.isFinite(Date.parse(payload.generatedAt)));
+}
+function renderTrenches(payload,{persist=true}={}){
   const content=$('#trench-content');
   const time=$('#trench-time');
-  if (!content || !payload) return;
+  if (!content || !time || !isTrenchesPayload(payload)) return false;
   const previousPayload=cacheGet(TRENCH_PREVIOUS_KEY);
-  const previousMap=new Map((previousPayload?.tokens||[]).map(token=>[token.address,token]));
-  const tokens=Array.isArray(payload.tokens)?payload.tokens:[];
+  const previousTokens=Array.isArray(previousPayload?.tokens)?previousPayload.tokens:[];
+  const previousMap=new Map(previousTokens.filter(token=>token && typeof token==='object').map(token=>[token.address,token]));
+  const tokens=payload.tokens.filter(token=>token && typeof token==='object');
+  const changesByAddress=new Map();
   const rows=tokens.map(token=>{
     const changes=trenchChanges(token,previousMap.get(token.address));
-    token._changes=changes;
+    changesByAddress.set(String(token.address||''),changes);
     const decisionIcon=token.decision==='green'?'🟢':'🟡';
     return `<tr title="${trenchEscape(token.decisionLabel)}">
       <td>${trenchSymbolLink(token)}<span class="trench-score">${Number(token.score)||0}/100</span></td>
@@ -1342,20 +1351,23 @@ function renderTrenches(payload){
     </tr>`;
   }).join('');
   const notes=tokens.map(token=>{
-    const badges=token._changes?.length?`<span class="trench-change">${token._changes.map(trenchEscape).join(' · ')}</span>`:'';
+    const changes=changesByAddress.get(String(token.address||'')) || [];
+    const badges=changes.length?`<span class="trench-change">${changes.map(trenchEscape).join(' · ')}</span>`:'';
     const bubbleStatus=token?.bubblemaps?.verified
       ? ` · Bubblemaps ${trenchEscape(Math.round(Number(token.bubblemaps.score)))} / 100`
       : token?.bubblemaps?.requested ? ' · Bubblemaps Doğrulanmadı' : '';
     const externalLinks=trenchExternalLinks(token);
     return `<div class="trench-note"><strong>${trenchSymbolLink(token,'trench-note-symbol')}</strong> — ${trenchEscape(token.reason)}${bubbleStatus}; ${externalLinks}${badges}</div>`;
   }).join('');
-  const reasons=(payload.eliminationReasons||[]).map(item=>`${trenchEscape(item.reason)} ${Number(item.count)||0}`).join(' · ');
+  const reasons=(Array.isArray(payload.eliminationReasons)?payload.eliminationReasons:[])
+    .map(item=>`${trenchEscape(item?.reason)} ${Number(item?.count)||0}`).join(' · ');
   const eliminated=payload.eliminatedCount
     ? `<div class="trench-eliminated">🔴 ${Number(payload.eliminatedCount)} elendi${reasons?` — ${reasons}`:''}</div>`:'';
   const warning=payload.warning?`<div class="trench-state">${trenchEscape(payload.warning)}</div>`:'';
   const sourceLabels={dexScreener:'Dex',rugCheck:'Rug',geckoTerminal:'Gecko',helius:'Helius',gmgn:'GMGN'};
-  const sourceIssues=Object.entries(payload.sourceStatus||{})
-    .map(([name,status])=>`${sourceLabels[name]||name}: ${status?.status||'Doğrulanmadı'}`)
+  const sourceStatus=payload.sourceStatus && typeof payload.sourceStatus==='object' ? payload.sourceStatus : {};
+  const sourceIssues=Object.entries(sourceStatus)
+    .map(([name,status])=>`${trenchEscape(sourceLabels[name]||name)}: ${trenchEscape(status?.status||'Doğrulanmadı')}`)
     .join(' · ');
   const sourceState=sourceIssues?`<div class="trench-state trench-source-status">Kaynaklar: ${sourceIssues}</div>`:'';
   const empty=!tokens.length?'<div class="trench-state">Uygun 🟢 veya 🟡 sonuç bulunamadı.</div>':'';
@@ -1365,8 +1377,11 @@ function renderTrenches(payload){
   </div>`;
   const date=new Date(payload.generatedAt);
   time.textContent=isNaN(date)?'—':date.toLocaleString('tr-TR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
-  cacheSet(TRENCH_CACHE_KEY,payload);
-  if (previousPayload?.generatedAt!==payload.generatedAt) cacheSet(TRENCH_PREVIOUS_KEY,payload);
+  if (persist){
+    cacheSet(TRENCH_CACHE_KEY,payload);
+    if (previousPayload?.generatedAt!==payload.generatedAt) cacheSet(TRENCH_PREVIOUS_KEY,payload);
+  }
+  return true;
 }
 function trenchState(message,isError=false){
   const content=$('#trench-content');
@@ -1378,16 +1393,21 @@ async function loadTrenches(force=false){
   const button=$('#trench-refresh');
   if (button) button.disabled=true;
   const cached=cacheGet(TRENCH_CACHE_KEY);
-  if (!force && cached) renderTrenches(cached);
+  if (isTrenchesPayload(cached)) renderTrenches(cached);
   else trenchState('Solana tokenleri taranıyor…');
   try {
     const response=await fetchWithTimeout(`${TRENCH_API_BASE}${force?'?refresh=1':''}`,{cache:force?'no-store':'default'},25000);
     const payload=await response.json().catch(()=>({}));
-    if (!response.ok) throw new Error(payload.error||`HTTP ${response.status}`);
+    if (!response.ok) throw new Error(payload?.error||`HTTP ${response.status}`);
+    if (!isTrenchesPayload(payload)) throw new Error('Tarama yanıtı geçersiz');
     renderTrenches(payload);
   } catch(error){
     console.warn('trenches scan failed',error);
-    if (!cached) trenchState('Tarama şu anda kullanılamıyor.');
+    if (isTrenchesPayload(cached)){
+      renderTrenches({...cached,warning:'Canlı tarama başarısız; son sonuç gösteriliyor.'},{persist:false});
+    } else {
+      trenchState('Tarama şu anda kullanılamıyor.',true);
+    }
   } finally {
     trenchesLoading=false;
     if (button) button.disabled=false;
@@ -1415,10 +1435,11 @@ function rebuildTickerMaps(rows){
   tickerMap={};
   tickerSymbolMap={};
   (Array.isArray(rows)?rows:[]).forEach(t => {
-    if (!t?.symbol) return;
-    tickerSymbolMap[t.symbol]=t;
-    if (t.symbol.endsWith('USDT') && !EXCLUDE.test(t.symbol)){
-      tickerMap[t.symbol.replace(/USDT$/,'')]=t;
+    const symbol=String(t?.symbol||'').toUpperCase();
+    if (!symbol) return;
+    tickerSymbolMap[symbol]=t;
+    if (symbol.endsWith('USDT') && !EXCLUDE.test(symbol)){
+      tickerMap[symbol.replace(/USDT$/,'')]=t;
     }
   });
 }
@@ -1433,10 +1454,16 @@ async function fetchTickers(){
     const res = await fetchWithTimeout('https://api.binance.com/api/v3/ticker/24hr',{},10000);
     if (!res.ok) throw new Error('HTTP '+res.status);
     const all = await res.json();
-    const usdt = all.filter(t =>
-      t.symbol.endsWith('USDT') && !EXCLUDE.test(t.symbol) && +t.quoteVolume > 0
-    );
-    const reservedPairs=all.filter(t => t.symbol==='USDTTRY');
+    if (!Array.isArray(all)) throw new Error('Invalid Binance ticker payload');
+    const usdt = all.filter(t => {
+      const symbol=String(t?.symbol||'').toUpperCase();
+      return symbol.endsWith('USDT') && !EXCLUDE.test(symbol)
+        && Number.isFinite(Number(t?.lastPrice))
+        && Number.isFinite(Number(t?.priceChangePercent))
+        && Number(t?.quoteVolume) > 0;
+    });
+    const reservedPairs=all.filter(t => String(t?.symbol||'').toUpperCase()==='USDTTRY'
+      && Number.isFinite(Number(t?.lastPrice)));
     const cachedTickers=[...usdt,...reservedPairs];
     rebuildTickerMaps(cachedTickers);
     cacheSet('cc_tickers',cachedTickers);
@@ -1445,7 +1472,7 @@ async function fetchTickers(){
   } catch (e) {
     console.warn('ticker fetch failed', e);
     const cached = cacheGet('cc_tickers');
-    if (cached && Object.keys(tickerMap).length === 0){
+    if (Array.isArray(cached) && Object.keys(tickerMap).length === 0){
       rebuildTickerMaps(cached);
       renderAll();
     }
@@ -1480,22 +1507,25 @@ function refreshBubbles(){
       price:+t.lastPrice, vol:+t.quoteVolume, high:+t.highPrice, low:+t.lowPrice, size:Math.abs(pct) });
   });
   if (hypeRow && !isAssetHidden('HYPE')){
-    const pct = +hypeRow.chg || 0;
+    const pct = finiteValue(hypeRow.chg,0);
     items.push({ id:'HYPE', base:'HYPE', name:'HYPE', pair:'/USD', kind:'crypto', cls:'COIN', usd:true, pct,
-      price:hypeRow.price, vol:hypeRow.vol, high:hypeRow.high, low:hypeRow.low, size:Math.abs(pct) });
+      price:finiteValue(hypeRow.price), vol:finiteValue(hypeRow.vol), high:finiteValue(hypeRow.high), low:finiteValue(hypeRow.low), size:Math.abs(pct) });
   }
   TRADFI.forEach(f => {
     if (isAssetHidden(f.key)) return;
     const d = tradfiRows[f.key];
     if (!d) return;
-    const pct = (d.chgPct!=null && isFinite(d.chgPct)) ? d.chgPct : (d.prev ? (d.price-d.prev)/d.prev*100 : 0);
+    const price=finiteValue(d.price);
+    const previous=finiteValue(d.prev);
+    const sourcePct=finiteValue(d.chgPct);
+    const pct = sourcePct !== null ? sourcePct : (previous ? (price-previous)/previous*100 : 0);
     items.push({ id:f.key, base:TRADFI_BUBBLE[f.key]||f.name, name:f.name, full:f.name, kind:'tradfi', cls:f.cls, usd:f.usd, pct,
-      price:d.price, vol:d.vol, high:d.high, low:d.low, size:Math.abs(pct) });
+      price, vol:finiteValue(d.vol), high:finiteValue(d.high), low:finiteValue(d.low), size:Math.abs(pct) });
   });
   customItems.forEach(c => {
     const d = customAssetSnapshot(c);
     if (!d || !isFinite(+d.price)) return;
-    const pct = isFinite(+d.chg) ? +d.chg : 0;
+    const pct = finiteValue(d.chg,0);
     items.push({
       ...d,
       base:d.name,
@@ -1857,6 +1887,7 @@ const bubbles = (function(){
     return hit;
   }
   canvas.addEventListener('mousedown', e=>{
+    if (e.button !== 0) return;
     const r = canvas.getBoundingClientRect();
     const mx = e.clientX - r.left, my = e.clientY - r.top;
     const hit = bubbleAt(mx, my);
@@ -1889,6 +1920,11 @@ const bubbles = (function(){
       },
         { clientX:e.clientX, clientY:e.clientY });
     }
+  });
+  window.addEventListener('blur', ()=>{
+    if (!drag) return;
+    drag=null;
+    setCanvasCursor('default');
   });
 
   new ResizeObserver(resize).observe(canvas.parentElement);
@@ -1985,9 +2021,40 @@ const cachedCustomQuotes = cacheGet('cc_customq');
 const cachedCustomCoinQuotes = cacheGet('cc_custom_cgq');
 const cachedHiddenAssets = cacheGet('cc_hidden_assets');
 const cachedMarketOrder = cacheGet('cc_market_order_v1');
-let customItems  = Array.isArray(cachedCustomItems) ? cachedCustomItems : [];
+const CUSTOM_ITEM_TYPES = new Set(['crypto','crypto_pair','stock','commodity','forex','economic']);
+const persistedText = (value, max=80) => typeof value === 'string' ? value.trim().slice(0,max) : '';
+function normalizeCustomItem(item){
+  if (!item || typeof item !== 'object') return null;
+  const sym=persistedText(item.sym,24).toUpperCase();
+  const type=persistedText(item.type,20).toLowerCase();
+  if (!/^[A-Z0-9._-]{1,24}$/.test(sym) || !CUSTOM_ITEM_TYPES.has(type)) return null;
+  return {
+    sym,
+    type,
+    name:persistedText(item.name,80) || sym,
+    sub:persistedText(item.sub,24),
+    cls:persistedText(item.cls,20).toUpperCase(),
+    source:persistedText(item.source,24),
+    cgId:persistedText(item.cgId,80),
+    cnbcSymbol:persistedText(item.cnbcSymbol,32),
+    ysym:persistedText(item.ysym,32),
+    binanceSymbol:persistedText(item.binanceSymbol,32).toUpperCase(),
+    tvSymbol:persistedText(item.tvSymbol,40),
+    tvExchange:persistedText(item.tvExchange,32),
+    usd:item.usd !== false,
+    decimals:Number.isInteger(item.decimals) && item.decimals >= 0 && item.decimals <= 12 ? item.decimals : undefined,
+    suffix:persistedText(item.suffix,8)
+  };
+}
+const normalizedCustomItems = Array.isArray(cachedCustomItems)
+  ? cachedCustomItems.map(normalizeCustomItem).filter(Boolean)
+  : [];
+let customItems  = normalizedCustomItems;
 let customQuotes = cachedCustomQuotes && typeof cachedCustomQuotes === 'object' ? cachedCustomQuotes : {};
 let customCoinQuotes = cachedCustomCoinQuotes && typeof cachedCustomCoinQuotes === 'object' ? cachedCustomCoinQuotes : {};
+if (Array.isArray(cachedCustomItems) && normalizedCustomItems.length !== cachedCustomItems.length){
+  cacheSet('cc_custom', normalizedCustomItems);
+}
 
 // Repair SILVER entries saved by older versions that classified it as crypto.
 let repairedLegacySilver=false;
@@ -2070,24 +2137,24 @@ function customAssetSnapshot(c){
     if (!t) return null;
     return { ...common, sub:c.sub||'', kind:'crypto', cls:'FOREX',
       historyProvider:'binance', historySymbol:c.binanceSymbol || c.sym,
-      price:+t.lastPrice, chg:+t.priceChangePercent,
-      high:+t.highPrice, low:+t.lowPrice, vol:+t.quoteVolume, mcap:0 };
+      price:finiteValue(t.lastPrice), chg:finiteValue(t.priceChangePercent,0),
+      high:finiteValue(t.highPrice), low:finiteValue(t.lowPrice), vol:finiteValue(t.quoteVolume), mcap:0 };
   }
   if (c.type === 'crypto'){
     if (c.source === 'coingecko'){
       const d = customCoinQuotes[c.sym];
       return { ...common, sub:'/USD', kind:'crypto', cls:'COIN',
         historyProvider:'coingecko', historySymbol:c.cgId,
-        price:d ? d.price : null, chg:d ? d.chg : 0,
-        high:d ? d.high : null, low:d ? d.low : null,
-        vol:d ? d.vol : null, mcap:d ? d.mcap : 0 };
+        price:d ? finiteValue(d.price) : null, chg:d ? finiteValue(d.chg,0) : 0,
+        high:d ? finiteValue(d.high) : null, low:d ? finiteValue(d.low) : null,
+        vol:d ? finiteValue(d.vol) : null, mcap:d ? finiteValue(d.mcap,0) : 0 };
     }
     const t = tickerMap[c.sym];
     if (!t) return null;
     return { ...common, sub:'/USDT', kind:'crypto', cls:'COIN',
       historyProvider:'binance', historySymbol:c.sym+'USDT',
-      price:+t.lastPrice, chg:+t.priceChangePercent,
-      high:+t.highPrice, low:+t.lowPrice, vol:+t.quoteVolume, mcap:0 };
+      price:finiteValue(t.lastPrice), chg:finiteValue(t.priceChangePercent,0),
+      high:finiteValue(t.highPrice), low:finiteValue(t.lowPrice), vol:finiteValue(t.quoteVolume), mcap:0 };
   }
   const d = customQuotes[c.sym];
   const isCommodity=c.type==='commodity';
@@ -2096,9 +2163,9 @@ function customAssetSnapshot(c){
   const isTradFi=isCommodity || isForex || isEconomic;
   return { ...common, sub:isTradFi ? (c.sub||'') : '', kind:isTradFi ? 'tradfi' : 'stock', cls:isCommodity ? (c.cls||'COMMODITY') : isForex ? (c.cls||'FOREX') : isEconomic ? (c.cls||'ECONOMIC') : 'STOCK',
     historyProvider:isEconomic ? 'economic' : 'yahoo', historySymbol:isEconomic ? c.sym : (c.ysym || c.sym.replace(/\./g,'-')),
-    price:d ? d.price : null, chg:d ? d.chgPct : 0,
-    high:d ? d.high : null, low:d ? d.low : null,
-    vol:d ? d.vol : null, mcap:0 };
+    price:d ? finiteValue(d.price) : null, chg:d ? finiteValue(d.chgPct,0) : 0,
+    high:d ? finiteValue(d.high) : null, low:d ? finiteValue(d.low) : null,
+    vol:d ? finiteValue(d.vol) : null, mcap:0 };
 }
 
 function isAssetHidden(id){ return hiddenAssets.includes(String(id)); }
@@ -2574,18 +2641,21 @@ function renderMarketTable(){
   if (hypeRow && !isAssetHidden('HYPE')){
     rows.push({ id:'HYPE', name:'HYPE', sub:'/USD', kind:'crypto', cls:'COIN', usd:true,
       source:'coingecko', cgId:'hyperliquid', historyProvider:'coingecko', historySymbol:'hyperliquid',
-      price:hypeRow.price, chg:hypeRow.chg, high:hypeRow.high, low:hypeRow.low,
-      vol:hypeRow.vol, volUsd:true, mcap:hypeRow.mcap });
+      price:finiteValue(hypeRow.price), chg:finiteValue(hypeRow.chg,0), high:finiteValue(hypeRow.high), low:finiteValue(hypeRow.low),
+      vol:finiteValue(hypeRow.vol), volUsd:true, mcap:finiteValue(hypeRow.mcap,0) });
   }
   TRADFI.forEach(f => {
     if (isAssetHidden(f.key)) return;
     const d = tradfiRows[f.key];
     if (!d) return;
+    const price=finiteValue(d.price);
+    const previous=finiteValue(d.prev);
+    const sourcePct=finiteValue(d.chgPct);
     rows.push({ id:f.key, name:f.name, sub:f.sub, kind:'tradfi', cls:f.cls, usd:f.usd,
       historyProvider:'yahoo', historySymbol:f.ysym,
-      price:d.price,
-      chg:(d.chgPct!=null && isFinite(d.chgPct)) ? d.chgPct : (d.prev ? (d.price-d.prev)/d.prev*100 : 0),
-      high:d.high, low:d.low, vol:d.vol, volUsd:false, mcap:f.mcap });
+      price,
+      chg:sourcePct !== null ? sourcePct : (previous ? (price-previous)/previous*100 : 0),
+      high:finiteValue(d.high), low:finiteValue(d.low), vol:finiteValue(d.vol), volUsd:false, mcap:f.mcap });
   });
   // user-added items share one normalized data model with the bubble panel.
   customItems.forEach(c => {
@@ -2619,6 +2689,7 @@ function renderMarketTable(){
     const priceStr = fmtP(r.price)!=null ? cur+fmtP(r.price)+suffix : '<span style="color:var(--muted2)">…</span>';
     const highStr  = fmtP(r.high)!=null ? fmtP(r.high)+suffix : '—';
     const lowStr   = fmtP(r.low) !=null ? fmtP(r.low)+suffix  : '—';
+    const change=finiteValue(r.chg,0);
     const safeName=escapeHtml(r.name);
     const safeSub=escapeHtml(r.sub);
     const safeClass=escapeHtml(r.cls);
@@ -2626,7 +2697,7 @@ function renderMarketTable(){
     return `<tr class="asset-row" data-asset-id="${escapeHtml(r.id)}" draggable="true" tabindex="0" role="button" aria-label="${safeName} actions; drag to reorder">
       <td><div class="sym-cell"><span class="rank">${i+1}</span><span class="base">${safeName}</span><span class="quote">${safeSub}</span>${tag}</div></td>
       <td class="pricecell num ${flash}">${priceStr}</td>
-      <td><button class="chgpill perf-trigger num ${r.chg>=0?'pos':'neg'}" type="button" data-performance-id="${escapeHtml(r.id)}" aria-label="Open ${safeName} extended performance">${r.chg>=0?'+':''}${(r.chg||0).toFixed(2)}%</button></td>
+      <td><button class="chgpill perf-trigger num ${change>=0?'pos':'neg'}" type="button" data-performance-id="${escapeHtml(r.id)}" aria-label="Open ${safeName} extended performance">${change>=0?'+':''}${change.toFixed(2)}%</button></td>
       <td class="num">${highStr}</td>
       <td class="num">${lowStr}</td>
     </tr>`;
@@ -3055,9 +3126,11 @@ async function fetchHype(){
   try {
     const r = await fetchWithTimeout('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=hyperliquid&price_change_percentage=24h',{cache:'no-store'},12000);
     if(!r.ok) throw new Error('HTTP '+r.status);
-    const c = (await r.json())[0];
-    if(!c) throw new Error('empty');
-    hypeRow = { price:c.current_price, chg:c.price_change_percentage_24h||0, high:c.high_24h, low:c.low_24h, vol:c.total_volume, mcap:c.market_cap };
+    const payload = await r.json();
+    const c = Array.isArray(payload) ? payload[0] : null;
+    const price=finiteValue(c?.current_price);
+    if(price===null) throw new Error('empty or invalid');
+    hypeRow = { price, chg:finiteValue(c.price_change_percentage_24h,0), high:finiteValue(c.high_24h), low:finiteValue(c.low_24h), vol:finiteValue(c.total_volume), mcap:finiteValue(c.market_cap,0) };
     cacheSet('cc_hype', hypeRow);
     renderAll();
   } catch(e){ console.warn('hype failed', e); }   // fall back to cached value
@@ -3079,9 +3152,9 @@ async function fetchTradFi(){
     const r = await fetchWithTimeout(CNBC_BASE + encodeURIComponent(syms.join('|')), { cache:'no-store' }, 12000);
     if (!r.ok) throw new Error('HTTP '+r.status);
     const j = await r.json();
-    let q = (j.QuickQuoteResult && j.QuickQuoteResult.QuickQuote) || [];
+    let q = (j?.QuickQuoteResult && j.QuickQuoteResult.QuickQuote) || [];
     if (!Array.isArray(q)) q = [q];
-    q.forEach(x => {
+    q.filter(x => x && typeof x === 'object').forEach(x => {
       const price = parseFloat(x.last);
       if (!isFinite(price)) return;
       const quote = {
@@ -3158,7 +3231,7 @@ const pollWhenVisible = (fn, ms) => window.setInterval(() => {
   if (!document.hidden) fn();
 }, ms);
 
-pollWhenVisible(fetchTickers, 5000);      // 5s price refresh (Binance)
+pollWhenVisible(fetchTickers, 15000);      // 15s price refresh (Binance)
 pollWhenVisible(fetchHype, 60*1000);      // 60s (CoinGecko — HYPE)
 pollWhenVisible(fetchCustomCoinGecko, 60*1000); // 60s (added CoinGecko coins)
 pollWhenVisible(fetchCustomForex, 60*1000); // 60s (added FX pairs)

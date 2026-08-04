@@ -47,8 +47,12 @@ export default async function handler(request, response) {
     const payload = await upstream.json();
     const result = payload?.chart?.result?.[0];
     const timestamps = Array.isArray(result?.timestamp) ? result.timestamp : [];
-    const closes = result?.indicators?.adjclose?.[0]?.adjclose || result?.indicators?.quote?.[0]?.close || [];
-    const points = timestamps.map((timestamp, index) => [timestamp * 1000, Number(closes[index])])
+    const closeSeries = result?.indicators?.adjclose?.[0]?.adjclose;
+    const quoteSeries = result?.indicators?.quote?.[0]?.close;
+    const closes = Array.isArray(closeSeries)
+      ? closeSeries
+      : Array.isArray(quoteSeries) ? quoteSeries : [];
+    const points = timestamps.map((timestamp, index) => [Number(timestamp) * 1000, Number(closes[index])])
       .filter(point => Number.isFinite(point[0]) && Number.isFinite(point[1]) && point[1] > 0);
 
     if (!points.length) {

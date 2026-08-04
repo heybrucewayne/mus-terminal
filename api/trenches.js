@@ -374,7 +374,8 @@ function optionalNumber(value) {
 }
 
 function firstArray(...values) {
-  return values.find((value) => Array.isArray(value)) || [];
+  const arrays = values.filter((value) => Array.isArray(value));
+  return arrays.find((value) => value.length > 0) || arrays[0] || [];
 }
 
 function responseData(payload) {
@@ -853,6 +854,9 @@ function bubblemapsAssessment(snapshot, security) {
 function authorityState(...values) {
   const present = values.filter((value) => value !== undefined);
   if (!present.length) return "unknown";
+  const normalized = present.map((value) => String(value).toLowerCase());
+  if (normalized.some((value) => ["1", "true", "open", "enabled", "available"].includes(value))) return "open";
+  if (normalized.every((value) => ["", "null", "false", "0", "closed", "disabled", "revoked"].includes(value))) return "revoked";
   if (present.some((value) => value !== null && value !== "")) return "open";
   return "revoked";
 }
@@ -860,7 +864,10 @@ function authorityState(...values) {
 function contradictoryAuthority(...values) {
   const present = values
     .filter((value) => value !== undefined)
-    .map((value) => value === null || value === "" ? null : value);
+    .map((value) => {
+      const normalized = String(value).toLowerCase();
+      return ["", "null", "false", "0", "closed", "disabled", "revoked"].includes(normalized) ? null : value;
+    });
   if (present.length < 2) return false;
   return present.some((value) => String(value) !== String(present[0]));
 }
@@ -1129,7 +1136,6 @@ function marketEarlynessScore(marketCap) {
 
 function qualityScore({ marketCap, liquidity, lpRatio, ageHours, volume, txns, price, security, priceVolumeDivergence, history, marketValidation = {} }) {
   const historyState = historyAssessment(volume, price, liquidity, history);
-  const turnover24h = marketCap ? volume.h24 / marketCap : 0;
   const liquidityTurnover = liquidity ? volume.h1 / liquidity : 0;
 
   // 25 points: flow size, 5m/1h/6h acceleration and repeated snapshots.
@@ -1307,6 +1313,7 @@ function classifyPair(pair, report, discovery, bubblemapsMetrics = null, bubblem
 
   const cautionReasons = [];
   if (!security.compositeVerified && !bubblemaps.verified) cautionReasons.push("Bağımsız güvenlik doğrulaması Doğrulanmadı");
+  if (marketValidation.unavailable) cautionReasons.push("GeckoTerminal piyasa doğrulaması Doğrulanmadı");
   if (security.crossSourceConflict) cautionReasons.push("Güvenlik kaynakları çelişiyor");
   if (marketValidation.marketDataConflict) cautionReasons.push("Piyasa kaynakları çelişiyor");
   if (marketValidation.poolLiquidityConflict) cautionReasons.push("Pool likiditesi kaynaklar arasında farklı");
