@@ -6,6 +6,10 @@ const BUBBLEMAPS_LIMIT = 16;
 const BIRDEYE_LIMIT = 12;
 const GOPLUS_LIMIT = 16;
 const ONCHAIN_LIMIT = 16;
+const SOLANA_TRACKER_LIMIT = 12;
+const GECKO_LIMIT = 8;
+const BITQUERY_LIMIT = 8;
+const HELIUS_ACTIVITY_LIMIT = 8;
 const REQUEST_TIMEOUT_MS = 8500;
 const SOURCE_CACHE_MS = 10 * 60 * 1000;
 const GREEN_SCORE_MIN = 78;
@@ -22,6 +26,15 @@ const BIRDEYE_API_KEY = typeof process !== "undefined"
 const GOPLUS_API_TOKEN = typeof process !== "undefined"
   ? String(process.env?.GOPLUS_API_TOKEN || "").trim()
   : "";
+const SOLANA_TRACKER_API_KEY = typeof process !== "undefined"
+  ? String(process.env?.SOLANA_TRACKER_API_KEY || "").trim()
+  : "";
+const BITQUERY_API_TOKEN = typeof process !== "undefined"
+  ? String(process.env?.BITQUERY_API_TOKEN || process.env?.BITQUERY_API_KEY || "").trim()
+  : "";
+const BITQUERY_API_URL = typeof process !== "undefined"
+  ? String(process.env?.BITQUERY_API_URL || "https://streaming.bitquery.io/graphql").trim()
+  : "https://streaming.bitquery.io/graphql";
 const HELIUS_API_KEY = typeof process !== "undefined"
   ? String(process.env?.HELIUS_API_KEY || "").trim()
   : "";
@@ -137,7 +150,9 @@ function selectPairs(rawPairs) {
       pairCreatedAt: createdAt || primary.pairCreatedAt,
       pairCount: markets.length,
       pairAddresses: markets.map((pair) => pair?.pairAddress).filter(Boolean),
-      primaryPairAddress: primary?.pairAddress || null
+      primaryPairAddress: primary?.pairAddress || null,
+      primaryLiquidityUsd: optionalNumber(primary?.liquidity?.usd),
+      primaryVolume: Object.fromEntries(periods.map((period) => [period, optionalNumber(primary?.volume?.[period])]))
     });
   }
   return selected;
@@ -203,19 +218,89 @@ function historyCandidateEntries() {
     }));
 }
 
+function smartMoneyDirection(snapshot) {
+  const flow = snapshot?.security?.bitquery;
+  if (!flow?.verified || flow.netBuyVolume === null || flow.netBuyVolume === undefined) return "unknown";
+  if (flow.netBuyVolume > 0) return "inflow";
+  if (flow.netBuyVolume < 0) return "outflow";
+  return "balanced";
+}
+
+function updateForwardEvaluations(history, current) {
+  const horizons = [1, 3, 6, 24];
+  for (const previous of Array.isArray(history) ? history : []) {
+    const elapsedHours = (number(current.capturedAtMs) - number(previous.capturedAtMs)) / 3600000;
+    if (!Number.isFinite(elapsedHours) || elapsedHours < 1) continue;
+    for (const horizon of horizons) {
+      const key = `${horizon}h`;
+      if (elapsedHours < horizon || previous.forward?.[key]) continue;
+      const priceChangePct = number(previous.priceUsd) > 0 && number(current.priceUsd) > 0
+        ? (number(current.priceUsd) / number(previous.priceUsd) - 1) * 100
+        : null;
+      const liquidityChangePct = number(previous.liquidity) > 0
+        ? (number(current.liquidity) / number(previous.liquidity) - 1) * 100
+        : null;
+      const windowSnapshots = [
+        ...(Array.isArray(history) ? history : []).filter((item) => number(item?.capturedAtMs) > number(previous.capturedAtMs)
+          && number(item?.capturedAtMs) <= number(previous.capturedAtMs) + horizon * 3600000),
+        ...(elapsedHours <= horizon ? [current] : [])
+      ];
+      const observedPriceChanges = windowSnapshots
+        .map((item) => number(previous.priceUsd) > 0 && number(item?.priceUsd) > 0
+          ? (number(item.priceUsd) / number(previous.priceUsd) - 1) * 100
+          : null)
+        .filter((value) => value !== null);
+      const maxGainPct = observedPriceChanges.length ? Math.max(0, ...observedPriceChanges) : null;
+      const maxDrawdownPct = observedPriceChanges.length ? Math.min(0, ...observedPriceChanges) : null;
+      const volumeH1Ratio = number(previous.volume?.h1) > 0
+        ? number(current.volume?.h1) / number(previous.volume.h1)
+        : null;
+      const top10ChangePct = previous.security?.effectiveTop10Pct !== null
+        && previous.security?.effectiveTop10Pct !== undefined
+        && current.security?.effectiveTop10Pct !== null
+        && current.security?.effectiveTop10Pct !== undefined
+        ? number(current.security.effectiveTop10Pct) - number(previous.security.effectiveTop10Pct)
+        : null;
+      const priceCollapsed = maxDrawdownPct !== null && maxDrawdownPct <= -30;
+      const priceExpanded = maxGainPct !== null && maxGainPct >= 30;
+      const liquidityPulled = liquidityChangePct !== null && liquidityChangePct <= -35;
+      const smartMoneyExit = smartMoneyDirection(previous) === "inflow" && smartMoneyDirection(current) === "outflow";
+      previous.forward = {
+        ...(previous.forward || {}),
+        [key]: {
+          measuredAt: current.capturedAt,
+          priceChangePct,
+          maxGainPct,
+          maxDrawdownPct,
+          liquidityChangePct,
+          volumeH1Ratio,
+          top10ChangePct,
+          smartMoneyExit,
+          decisionAtCapture: previous.decision,
+          outcomeDecision: current.decision,
+          falsePositive: Number(previous.score) >= GREEN_SCORE_MIN && (priceCollapsed || liquidityPulled),
+          missedSignal: previous.decision !== "green" && priceExpanded && !liquidityPulled
+        }
+      };
+    }
+  }
+}
+
 function rememberSnapshots(tokens, capturedAt = new Date()) {
-  const capturedAtMs = capturedAt instanceof Date ? capturedAt.getTime() : Date.parse(capturedAt);
+  const parsedCapturedAtMs = capturedAt instanceof Date ? capturedAt.getTime() : Date.parse(capturedAt);
+  const capturedAtMs = Number.isFinite(parsedCapturedAtMs) ? parsedCapturedAtMs : Date.now();
   for (const token of Array.isArray(tokens) ? tokens : []) {
     if (!addressPattern.test(String(token?.address || ""))) continue;
     const current = {
-      capturedAt: new Date(Number.isFinite(capturedAtMs) ? capturedAtMs : Date.now()).toISOString(),
-      capturedAtMs: Number.isFinite(capturedAtMs) ? capturedAtMs : Date.now(),
+      capturedAt: new Date(capturedAtMs).toISOString(),
+      capturedAtMs,
       address: token.address,
       symbol: token.symbol,
       marketCap: token.marketCap,
       liquidity: token.liquidity,
       volume: token.volume,
       price: token.price,
+      priceUsd: token.priceUsd,
       score: token.score,
       decision: token.decision,
       security: {
@@ -223,10 +308,19 @@ function rememberSnapshots(tokens, capturedAt = new Date()) {
         freeze: token.security?.freeze,
         lpLockedPct: token.security?.lpLockedPct,
         riskScore: token.security?.riskScore,
-        effectiveTop10Pct: token.security?.effectiveTop10Pct
-      }
+        effectiveRiskScore: token.security?.effectiveRiskScore,
+        effectiveTop10Pct: token.security?.effectiveTop10Pct,
+        tracker: token.security?.tracker,
+        bitquery: token.security?.bitquery,
+        onchain: token.security?.onchain
+      },
+      marketValidation: token.marketValidation,
+      pairAddresses: token.pairAddresses,
+      reasonCodes: token.reasonCodes,
+      sourceMeta: token.sourceMeta
     };
     const previous = historyFor(token.address).filter((item) => item?.capturedAtMs !== current.capturedAtMs);
+    updateForwardEvaluations(previous, current);
     tokenHistory.set(token.address, [...previous, current].slice(-MAX_HISTORY_PER_TOKEN));
   }
 
@@ -236,6 +330,29 @@ function rememberSnapshots(tokens, capturedAt = new Date()) {
     if (!oldest) break;
     tokenHistory.delete(oldest[0]);
   }
+}
+
+function backtestSummary() {
+  const summary = { measured: 0, falsePositives: 0, missedSignals: 0, horizons: {} };
+  for (const horizon of ["1h", "3h", "6h", "24h"]) summary.horizons[horizon] = { measured: 0, falsePositives: 0, missedSignals: 0 };
+  for (const snapshots of tokenHistory.values()) {
+    for (const snapshot of snapshots) {
+      for (const [horizon, outcome] of Object.entries(snapshot.forward || {})) {
+        if (!summary.horizons[horizon]) continue;
+        summary.measured += 1;
+        summary.horizons[horizon].measured += 1;
+        if (outcome.falsePositive) {
+          summary.falsePositives += 1;
+          summary.horizons[horizon].falsePositives += 1;
+        }
+        if (outcome.missedSignal) {
+          summary.missedSignals += 1;
+          summary.horizons[horizon].missedSignals += 1;
+        }
+      }
+    }
+  }
+  return summary;
 }
 
 function historyAssessment(volume, price, liquidity, history = []) {
@@ -473,6 +590,254 @@ async function fetchBirdeye(address) {
   });
 }
 
+function emptySolanaTrackerSnapshot(requested = false) {
+  return {
+    requested,
+    verified: false,
+    riskScore: null,
+    rugged: false,
+    mint: "unknown",
+    freeze: "unknown",
+    lpLockedPct: null,
+    sniperPct: null,
+    insiderPct: null,
+    bundlerPct: null,
+    developerTokenPct: null,
+    developerSelling: "unknown",
+    notableRisk: requested ? "Solana Tracker verisi Doğrulanmadı" : "Solana Tracker etkin değil"
+  };
+}
+
+function trackerRiskPercentage(risk, pattern, fallbackValues = []) {
+  const item = (Array.isArray(risk?.risks) ? risk.risks : []).find((entry) => pattern.test(`${entry?.name || ""} ${entry?.description || ""}`.toLowerCase()));
+  const direct = [
+    ...(Array.isArray(fallbackValues) ? fallbackValues : []),
+    item?.percentage,
+    item?.percent,
+    item?.value,
+    item?.totalPercentage
+  ].map(optionalNumber).find((value) => value !== null && value >= 0 && value <= 100);
+  if (direct !== undefined) return direct;
+  const match = `${item?.description || ""} ${item?.name || ""}`.match(/(\d+(?:\.\d+)?)\s*%/);
+  return match ? optionalNumber(match[1]) : null;
+}
+
+function parseSolanaTracker(payload) {
+  const data = responseData(payload);
+  const risk = data?.risk || data?.security || {};
+  const risks = Array.isArray(risk?.risks) ? risk.risks : [];
+  const riskText = risks.map((entry) => `${entry?.name || ""} ${entry?.description || ""}`).join(" ").toLowerCase();
+  const authorityState = (pattern) => {
+    const matches = risks.map((entry) => String(entry?.name || "").toLowerCase()).filter((value) => pattern.test(value));
+    if (matches.some((value) => /disabled|revoked|closed|off|none/.test(value))) return "revoked";
+    return matches.some((value) => /enabled|active|open|on|mintable|freezable/.test(value)) ? "open" : "unknown";
+  };
+  const trackerRiskScore = optionalNumber(risk?.score);
+  const explicitLpLock = data?.lpLocked === true || data?.lpBurned === true
+    || risks.some((entry) => /lp lock|liquidity lock/.test(String(entry?.name || "").toLowerCase())
+      && !/not|unlocked|remov|withdraw/i.test(`${entry?.name || ""} ${entry?.description || ""}`));
+  const lpLockedPct = explicitLpLock ? 100 : null;
+  const sniperPct = trackerRiskPercentage(risk, /sniper/, [
+    data?.totalSniperPercentage,
+    data?.snipers?.percentage,
+    risk?.totalSniperPercentage
+  ]);
+  const insiderPct = trackerRiskPercentage(risk, /insider/, [
+    data?.totalInsiderPercentage,
+    data?.insiders?.percentage,
+    risk?.totalInsiderPercentage
+  ]);
+  const bundlerPct = trackerRiskPercentage(risk, /bundl/, [
+    data?.totalBundlerPercentage,
+    data?.bundlers?.percentage,
+    risk?.totalBundlerPercentage
+  ]);
+  const developerTokenPct = trackerRiskPercentage(risk, /developer|deployer|creator/, [
+    data?.developer?.percentage,
+    data?.developerTokenPercentage,
+    risk?.developerTokenPercentage
+  ]);
+  const developerSelling = /developer|deployer|creator/.test(riskText) && /sell|sold|dump|transfer out/.test(riskText) ? "flagged" : "unknown";
+  const notable = risks.slice().sort((a, b) => number(b?.score) - number(a?.score))[0];
+  return {
+    requested: true,
+    verified: Boolean(payload && (payload?.risk || payload?.security)),
+    riskScore: trackerRiskScore === null ? null : clamp(trackerRiskScore * 10, 0, 100),
+    rugged: risk?.rugged === true || data?.rugged === true,
+    mint: authorityState(/mint authority enabled|mintable|mint authority/),
+    freeze: authorityState(/freeze authority enabled|freezable|freeze authority/),
+    lpLockedPct,
+    sniperPct,
+    insiderPct,
+    bundlerPct,
+    developerTokenPct,
+    developerSelling,
+    notableRisk: notable?.name || "Solana Tracker belirgin risk üretmedi"
+  };
+}
+
+async function fetchSolanaTracker(address) {
+  if (!SOLANA_TRACKER_API_KEY) return { ok: false, fetchedAt: null, ...emptySolanaTrackerSnapshot(false) };
+  return cachedSource(`solana-tracker:${address}`, async () => {
+    const result = await settleJson(`https://data.solanatracker.io/tokens/${encodeURIComponent(address)}`, {
+      headers: { "x-api-key": SOLANA_TRACKER_API_KEY }
+    });
+    if (!result.ok) return { ok: false, fetchedAt: null, error: result.error || "request failed", ...emptySolanaTrackerSnapshot(true) };
+    return { ok: true, fetchedAt: new Date().toISOString(), ...parseSolanaTracker(result.data) };
+  });
+}
+
+function emptyGeckoSnapshot(requested = false) {
+  return {
+    requested,
+    verified: false,
+    poolAddress: null,
+    poolCount: 0,
+    priceUsd: null,
+    liquidityUsd: null,
+    volume24hUsd: null,
+    txns24h: null,
+    poolCreatedAt: null,
+    notableRisk: requested ? "GeckoTerminal verisi Doğrulanmadı" : "GeckoTerminal etkin değil"
+  };
+}
+
+function parseGeckoSnapshot(payload) {
+  const pools = Array.isArray(payload?.data) ? payload.data : [];
+  const normalized = pools.map((pool) => {
+    const attributes = pool?.attributes || {};
+    const transactions = attributes?.transactions?.h24 || {};
+    const poolAddress = attributes?.address || String(pool?.id || "").replace(/^solana_/, "") || null;
+    return {
+      poolAddress,
+      priceUsd: optionalNumber(attributes?.base_token_price_usd),
+      liquidityUsd: optionalNumber(attributes?.reserve_in_usd),
+      volume24hUsd: optionalNumber(attributes?.volume_usd?.h24),
+      txns24h: {
+        buys: optionalNumber(transactions?.buys) || 0,
+        sells: optionalNumber(transactions?.sells) || 0
+      },
+      poolCreatedAt: attributes?.pool_created_at || null
+    };
+  }).filter((pool) => pool.poolAddress);
+  normalized.sort((a, b) => number(b.liquidityUsd) + number(b.volume24hUsd) * 0.15 - (number(a.liquidityUsd) + number(a.volume24hUsd) * 0.15));
+  const primary = normalized[0];
+  if (!primary) return emptyGeckoSnapshot(true);
+  return {
+    requested: true,
+    verified: primary.priceUsd !== null || primary.liquidityUsd !== null || primary.volume24hUsd !== null,
+    ...primary,
+    poolCount: normalized.length,
+    poolCandidates: normalized.slice(0, 5).map(({ poolAddress, liquidityUsd, volume24hUsd }) => ({ poolAddress, liquidityUsd, volume24hUsd })),
+    notableRisk: normalized.length > 1 ? "GeckoTerminal alternatif pool verisi mevcut" : "GeckoTerminal pool verisi mevcut"
+  };
+}
+
+async function fetchGecko(address) {
+  return cachedSource(`gecko:${address}`, async () => {
+    const result = await settleJson(`https://api.geckoterminal.com/api/v2/networks/solana/tokens/${encodeURIComponent(address)}/pools?page=1`, {
+      timeout: 7000,
+      headers: { Accept: "application/json;version=20230203" }
+    });
+    if (!result.ok) return { ok: false, fetchedAt: null, error: result.error || "request failed", ...emptyGeckoSnapshot(true) };
+    return { ok: true, fetchedAt: new Date().toISOString(), ...parseGeckoSnapshot(result.data) };
+  });
+}
+
+const BITQUERY_FLOW_QUERY = `query TokenFlow($token: String!, $side_token: String!, $pair_address: String!, $time_1h_ago: DateTime!) {
+  Solana(dataset: realtime) {
+    DEXTradeByTokens(
+      where: {
+        Transaction: { Result: { Success: true } }
+        Trade: {
+          Currency: { MintAddress: { is: $token } }
+          Side: { Currency: { MintAddress: { is: $side_token }, Amount: { gt: "0" } } }
+          Market: { MarketAddress: { is: $pair_address } }
+        }
+        Block: { Time: { since: $time_1h_ago } }
+      }
+    ) {
+      buyVolume: sum(of: Trade_Side_AmountInUSD, if: { Trade: { Side: { Type: { is: buy } } } })
+      sellVolume: sum(of: Trade_Side_AmountInUSD, if: { Trade: { Side: { Type: { is: sell } } } })
+      totalVolume: sum(of: Trade_Side_AmountInUSD)
+      buys: count(if: { Trade: { Side: { Type: { is: buy } } } })
+      sells: count(if: { Trade: { Side: { Type: { is: sell } } } })
+      uniqueBuyers: uniq(of: Trade_Account_Owner, if: { Trade: { Side: { Type: { is: buy } } } })
+      uniqueSellers: uniq(of: Trade_Account_Owner, if: { Trade: { Side: { Type: { is: sell } } } })
+      makers: uniq(of: Trade_Account_Owner)
+    }
+  }
+}`;
+
+function emptyBitquerySnapshot(requested = false) {
+  return {
+    requested,
+    verified: false,
+    buyVolume: null,
+    sellVolume: null,
+    totalVolume: null,
+    buys: null,
+    sells: null,
+    uniqueBuyers: null,
+    uniqueSellers: null,
+    makers: null,
+    netBuyVolume: null,
+    buyPressure: null,
+    notableRisk: requested ? "Bitquery verisi Doğrulanmadı" : "Bitquery etkin değil"
+  };
+}
+
+function parseBitquerySnapshot(payload) {
+  const rows = payload?.data?.Solana?.DEXTradeByTokens;
+  const row = Array.isArray(rows) ? rows[0] : null;
+  if (!row || typeof row !== "object") return emptyBitquerySnapshot(true);
+  const buyVolume = optionalNumber(row.buyVolume);
+  const sellVolume = optionalNumber(row.sellVolume);
+  const totalVolume = optionalNumber(row.totalVolume);
+  return {
+    requested: true,
+    verified: buyVolume !== null || sellVolume !== null || totalVolume !== null,
+    buyVolume,
+    sellVolume,
+    totalVolume,
+    buys: optionalNumber(row.buys),
+    sells: optionalNumber(row.sells),
+    uniqueBuyers: optionalNumber(row.uniqueBuyers),
+    uniqueSellers: optionalNumber(row.uniqueSellers),
+    makers: optionalNumber(row.makers),
+    netBuyVolume: buyVolume !== null && sellVolume !== null ? buyVolume - sellVolume : null,
+    buyPressure: buyVolume !== null && sellVolume !== null && buyVolume + sellVolume > 0
+      ? buyVolume / (buyVolume + sellVolume)
+      : null,
+    notableRisk: "Bitquery işlem akışı mevcut"
+  };
+}
+
+async function fetchBitquery(address, pair) {
+  if (!BITQUERY_API_TOKEN || !pair?.pairAddress) return { ok: false, fetchedAt: null, ...emptyBitquerySnapshot(false) };
+  const quoteAddress = pair?.quoteToken?.address || "So11111111111111111111111111111111111111112";
+  return cachedSource(`bitquery:${address}:${pair.pairAddress}`, async () => {
+    const result = await settleJson(BITQUERY_API_URL, {
+      timeout: 9000,
+      headers: { Authorization: `Bearer ${BITQUERY_API_TOKEN}`, "Content-Type": "application/json" },
+      init: {
+        method: "POST",
+        body: JSON.stringify({
+          query: BITQUERY_FLOW_QUERY,
+          variables: {
+            token: address,
+            side_token: quoteAddress,
+            pair_address: pair.pairAddress,
+            time_1h_ago: new Date(Date.now() - 3600000).toISOString()
+          }
+        })
+      }
+    });
+    if (!result.ok || result.data?.errors?.length) return { ok: false, fetchedAt: null, error: result.error || "GraphQL error", ...emptyBitquerySnapshot(true) };
+    return { ok: true, fetchedAt: new Date().toISOString(), ...parseBitquerySnapshot(result.data) };
+  });
+}
+
 function parseGoplus(payload, address) {
   const data = responseData(payload);
   const token = data?.[address] || data?.[address.toLowerCase()] || (data?.token_security && (data.token_security[address] || data.token_security[address.toLowerCase()])) || (Array.isArray(data) ? data[0] : data);
@@ -538,6 +903,7 @@ async function fetchOnchain(address) {
       { jsonrpc: "2.0", id: 2, method: "getTokenSupply", params: [address] },
       { jsonrpc: "2.0", id: 3, method: "getAccountInfo", params: [address, { encoding: "base64" }] }
     ];
+    if (HELIUS_API_KEY) batch.push({ jsonrpc: "2.0", id: 4, method: "getAsset", params: { id: address, displayOptions: { showFungible: true } } });
     const result = await settleJson(ONCHAIN_RPC_URL, {
       timeout: 8000,
       headers: { "Content-Type": "application/json" },
@@ -558,7 +924,72 @@ async function fetchOnchain(address) {
     const top1Pct = total && amounts.length ? amounts[0] / total * 100 : null;
     const top10Pct = total && amounts.length ? amounts.slice(0, 10).reduce((sum, value) => sum + value, 0) / total * 100 : null;
     const authorities = parseMintAuthorities(byId.get(3));
-    return { ok: true, fetchedAt: new Date().toISOString(), verified: top10Pct !== null || authorities.mint !== "unknown" || authorities.freeze !== "unknown", ...authorities, top1Pct, top10Pct, notableRisk: "On-chain doğrulama mevcut" };
+    const asset = byId.get(4);
+    const creators = firstArray(asset?.content?.creators, asset?.creators);
+    const creator = asset?.authorities?.[0]?.address || creators.find((item) => item?.verified)?.address || creators[0]?.address || null;
+    const helius = {
+      requested: Boolean(HELIUS_API_KEY),
+      verified: Boolean(asset?.id || asset?.content),
+      creator,
+      metadataVerified: creators.some((item) => item?.verified === true),
+      activity: null
+    };
+    return { ok: true, fetchedAt: new Date().toISOString(), verified: top10Pct !== null || authorities.mint !== "unknown" || authorities.freeze !== "unknown", ...authorities, top1Pct, top10Pct, helius, notableRisk: "On-chain doğrulama mevcut" };
+  });
+}
+
+function parseHeliusActivity(payload, address, creator) {
+  const transactions = Array.isArray(payload) ? payload : firstArray(payload?.transactions, payload?.data);
+  let creatorSold = false;
+  let creatorBought = false;
+  let creatorFunding = false;
+  let swapCount = 0;
+  let transferCount = 0;
+  for (const transaction of transactions) {
+    const transfers = Array.isArray(transaction?.tokenTransfers) ? transaction.tokenTransfers : [];
+    const nativeTransfers = Array.isArray(transaction?.nativeTransfers) ? transaction.nativeTransfers : [];
+    let tokenTransferSeen = false;
+    const tokenRecipients = new Set();
+    for (const transfer of transfers) {
+      if (String(transfer?.mint || "") !== address) continue;
+      tokenTransferSeen = true;
+      const from = transfer?.fromUserAccount || transfer?.from || "";
+      const to = transfer?.toUserAccount || transfer?.to || "";
+      if (from === creator && to !== creator) creatorSold = true;
+      if (to === creator && from !== creator) creatorBought = true;
+      if (to && to !== creator) tokenRecipients.add(to);
+    }
+    if (tokenRecipients.size) {
+      for (const transfer of nativeTransfers) {
+        const from = transfer?.fromUserAccount || transfer?.from || "";
+        const to = transfer?.toUserAccount || transfer?.to || "";
+        if (from === creator && tokenRecipients.has(to) && number(transfer?.amount) > 0) creatorFunding = true;
+      }
+    }
+    if (tokenTransferSeen) {
+      transferCount += 1;
+      if (String(transaction?.type || "").toUpperCase() === "SWAP") swapCount += 1;
+    }
+  }
+  return {
+    requested: true,
+    verified: true,
+    creator,
+    creatorSold,
+    creatorBought,
+    creatorFunding,
+    swapCount,
+    transferCount,
+    notableRisk: creatorSold ? "Helius geliştirici token satışı işareti" : creatorFunding ? "Helius creator-early buyer fonlama işareti" : "Helius geliştirici hareketlerinde satış işareti yok"
+  };
+}
+
+async function fetchHeliusActivity(address, creator) {
+  if (!HELIUS_API_KEY || !creator) return { ok: false, fetchedAt: null, requested: Boolean(HELIUS_API_KEY), verified: false, creatorSold: null, creatorBought: null, creatorFunding: null, swapCount: null, transferCount: null, notableRisk: "Helius geliştirici aktivitesi Doğrulanmadı" };
+  return cachedSource(`helius-activity:${address}:${creator}`, async () => {
+    const result = await settleJson(`https://api-mainnet.helius-rpc.com/v0/addresses/${encodeURIComponent(creator)}/transactions?api-key=${encodeURIComponent(HELIUS_API_KEY)}&limit=50`, { timeout: 8000 });
+    if (!result.ok) return { ok: false, fetchedAt: null, error: result.error || "request failed", requested: true, verified: false, creatorSold: null, creatorBought: null, creatorFunding: null, swapCount: null, transferCount: null, notableRisk: "Helius geliştirici aktivitesi Doğrulanmadı" };
+    return { ok: true, fetchedAt: new Date().toISOString(), ...parseHeliusActivity(result.data, address, creator) };
   });
 }
 
@@ -758,10 +1189,12 @@ function mergeSecuritySources(security, sources = {}) {
   };
   const goplus = sources?.goplus || { verified: false, mint: "unknown", freeze: "unknown", top1Pct: null, top10Pct: null, lpLockedPct: null, notableRisk: GOPLUS_API_TOKEN ? "GoPlus verisi Doğrulanmadı" : "GoPlus etkin değil" };
   const onchain = sources?.onchain || { verified: false, mint: "unknown", freeze: "unknown", top1Pct: null, top10Pct: null, notableRisk: ONCHAIN_RPC_URL ? "On-chain verisi Doğrulanmadı" : "On-chain doğrulama etkin değil" };
-  const authoritySources = [security.mint, security.freeze, birdeye.mint, birdeye.freeze, goplus.mint, goplus.freeze, onchain.mint, onchain.freeze]
+  const tracker = sources?.tracker || emptySolanaTrackerSnapshot(Boolean(SOLANA_TRACKER_API_KEY));
+  const bitquery = sources?.bitquery || emptyBitquerySnapshot(Boolean(BITQUERY_API_TOKEN));
+  const authoritySources = [security.mint, security.freeze, birdeye.mint, birdeye.freeze, goplus.mint, goplus.freeze, onchain.mint, onchain.freeze, tracker.mint, tracker.freeze]
     .filter((value) => value && value !== "unknown");
-  const mintValues = [security.mint, goplus.mint, onchain.mint].filter((value) => value && value !== "unknown");
-  const freezeValues = [security.freeze, goplus.freeze, onchain.freeze].filter((value) => value && value !== "unknown");
+  const mintValues = [security.mint, goplus.mint, onchain.mint, tracker.mint].filter((value) => value && value !== "unknown");
+  const freezeValues = [security.freeze, goplus.freeze, onchain.freeze, tracker.freeze].filter((value) => value && value !== "unknown");
   const authorityConflict = new Set(mintValues).size > 1 || new Set(freezeValues).size > 1;
   const resolvedMint = mintValues.includes("open") ? "open" : mintValues.includes("revoked") ? "revoked" : "unknown";
   const resolvedFreeze = freezeValues.includes("open") ? "open" : freezeValues.includes("revoked") ? "revoked" : "unknown";
@@ -770,7 +1203,7 @@ function mergeSecuritySources(security, sources = {}) {
   // Keep it out of the contradiction test to avoid false eliminations.
   const holderValues = [security.top10Pct, birdeye.top10Pct, goplus.top10Pct].filter((value) => value !== null && value !== undefined);
   const holderConflict = holderValues.length >= 2 && Math.max(...holderValues) - Math.min(...holderValues) > 25;
-  const externalVerifiedCount = [birdeye.verified, goplus.verified, onchain.verified].filter(Boolean).length;
+  const externalVerifiedCount = [birdeye.verified, goplus.verified, onchain.verified, tracker.verified].filter(Boolean).length;
   const compositeVerified = !authorityConflict && !holderConflict
     && (security.verified && externalVerifiedCount >= 1 || externalVerifiedCount >= 2);
   const maxKnown = (...values) => {
@@ -785,13 +1218,55 @@ function mergeSecuritySources(security, sources = {}) {
     birdeye,
     goplus,
     onchain,
+    tracker,
+    bitquery,
     authoritySources,
     externalVerifiedCount,
     compositeVerified,
     crossSourceConflict: authorityConflict || holderConflict,
     effectiveTop1Pct: maxKnown(security.top1Pct, birdeye.top1Pct, goplus.top1Pct),
     effectiveTop10Pct: maxKnown(security.top10Pct, birdeye.top10Pct, goplus.top10Pct),
-    notableRisk: security.verified ? security.notableRisk : birdeye.verified ? "Birdeye holder verisi mevcut" : goplus.verified ? goplus.notableRisk : onchain.notableRisk
+    effectiveRiskScore: maxKnown(security.riskScore, tracker.riskScore),
+    notableRisk: security.verified ? security.notableRisk : tracker.verified ? tracker.notableRisk : birdeye.verified ? "Birdeye holder verisi mevcut" : goplus.verified ? goplus.notableRisk : onchain.notableRisk
+  };
+}
+
+function marketDataAssessment(pair, gecko = null, bitquery = null) {
+  const dexPrice = optionalNumber(pair?.priceUsd);
+  const geckoPrice = optionalNumber(gecko?.priceUsd);
+  const dexLiquidity = optionalNumber(pair?.primaryLiquidityUsd ?? pair?.liquidity?.usd);
+  const geckoLiquidity = optionalNumber(gecko?.liquidityUsd);
+  const dexVolume = optionalNumber(pair?.primaryVolume?.h1 ?? pair?.volume?.h1);
+  const bitqueryVolume = optionalNumber(bitquery?.totalVolume);
+  const relativeDifference = (left, right) => left !== null && right !== null && Math.max(left, right) > 0
+    ? Math.abs(left - right) / Math.max(left, right)
+    : null;
+  const priceDifference = relativeDifference(dexPrice, geckoPrice);
+  const liquidityDifference = relativeDifference(dexLiquidity, geckoLiquidity);
+  const volumeDifference = relativeDifference(dexVolume, bitqueryVolume);
+  const priceConflict = priceDifference !== null && priceDifference > 0.08;
+  const poolLiquidityConflict = liquidityDifference !== null && liquidityDifference > 0.45;
+  const bitqueryVolumeConflict = volumeDifference !== null && volumeDifference > 0.60;
+  const marketDataConflict = priceConflict || poolLiquidityConflict || bitqueryVolumeConflict;
+  const severe = (priceDifference !== null && priceDifference > 0.20)
+    || (liquidityDifference !== null && liquidityDifference > 0.70)
+    || (volumeDifference !== null && volumeDifference > 0.85);
+  const requested = Boolean(gecko?.requested || bitquery?.requested);
+  const verifiedSources = [gecko?.verified, bitquery?.verified].filter(Boolean).length;
+  return {
+    requested,
+    verifiedSources,
+    geckoVerified: Boolean(gecko?.verified),
+    bitqueryVerified: Boolean(bitquery?.verified),
+    priceDifference,
+    liquidityDifference,
+    volumeDifference,
+    priceConflict,
+    poolLiquidityConflict,
+    bitqueryVolumeConflict,
+    marketDataConflict,
+    severe,
+    unavailable: requested && verifiedSources === 0
   };
 }
 
@@ -871,15 +1346,15 @@ function marketEarlynessScore(marketCap) {
   return clamp(6 - Math.abs(Math.log10(Math.max(marketCap, 1)) - 6) * 1.8, 0, 6);
 }
 
-function qualityScore({ marketCap, liquidity, lpRatio, ageHours, volume, txns, price, security, priceVolumeDivergence, history }) {
+function qualityScore({ marketCap, liquidity, lpRatio, ageHours, volume, txns, price, security, priceVolumeDivergence, history, marketValidation = {} }) {
   const historyState = historyAssessment(volume, price, liquidity, history);
   const turnover24h = marketCap ? volume.h24 / marketCap : 0;
   const liquidityTurnover = liquidity ? volume.h1 / liquidity : 0;
 
-  // 30 points: size of the flow plus three normalized acceleration ratios.
-  const accelerationScore = healthyRatioScore(volume.recent5mRatio, 0.30, 0.95, 1.55, 2.40, 4)
-    + healthyRatioScore(volume.recent1hRatio, 0.45, 0.95, 1.35, 1.90, 4)
-    + healthyRatioScore(volume.recent6hRatio, 0.45, 0.90, 1.25, 1.70, 4);
+  // 25 points: flow size, 5m/1h/6h acceleration and repeated snapshots.
+  const accelerationScore = healthyRatioScore(volume.recent5mRatio, 0.30, 0.95, 1.55, 2.40, 3)
+    + healthyRatioScore(volume.recent1hRatio, 0.45, 0.95, 1.35, 1.90, 3)
+    + healthyRatioScore(volume.recent6hRatio, 0.45, 0.90, 1.25, 1.70, 3);
   const volumeContinuity = volume.trend === "rising" ? 4 : volume.trend === "steady" ? 2 : 0;
   const historyContinuity = historyState.momentumConfirmed ? 4 : historyState.hasPrevious ? 2 : 0;
   let volumeScore = logarithmicScore(volume.h24, 5000, 2000000, 8)
@@ -889,21 +1364,21 @@ function qualityScore({ marketCap, liquidity, lpRatio, ageHours, volume, txns, p
   if (priceVolumeDivergence) volumeScore -= 5;
   if (!historyState.priceSupported) volumeScore -= 3;
   if (price.h6 <= -35 || price.h24 <= -55) volumeScore -= 3;
-  volumeScore = clamp(volumeScore, 0, 30);
+  volumeScore = clamp(volumeScore, 0, 25);
 
-  // 20 points: enough LP for the observed flow, not just a large nominal LP.
+  // 15 points: enough LP for the observed flow, not just a large nominal LP.
   const lockPct = security.lpLockedPct !== null && security.lpLockedPct !== undefined
     ? security.lpLockedPct
     : security.goplus?.lpLockedPct;
-  let liquidityScore = logarithmicScore(liquidity, 5000, 250000, 8)
-    + healthyRatioScore(lpRatio, 0.001, 0.008, 0.05, 0.20, 5)
-    + healthyRatioScore(liquidityTurnover, 0.01, 0.05, 0.70, 2.50, 4)
-    + (lockPct !== null && lockPct >= 80 ? 2 : lockPct !== null ? 1 : 0)
-    + (historyState.liquidityStable ? 1 : 0);
+  let liquidityScore = logarithmicScore(liquidity, 5000, 250000, 6)
+    + healthyRatioScore(lpRatio, 0.001, 0.008, 0.05, 0.20, 4)
+    + healthyRatioScore(liquidityTurnover, 0.01, 0.05, 0.70, 2.50, 2)
+    + (lockPct !== null && lockPct >= 80 ? 1 : 0)
+    + (historyState.liquidityStable ? 2 : 0);
   if (historyState.lpChange !== null && historyState.lpChange < -0.20) liquidityScore -= 3;
-  liquidityScore = clamp(liquidityScore, 0, 20);
+  liquidityScore = clamp(liquidityScore, 0, 15);
 
-  // 15 points: transactions are discounted when they come from few wallets.
+  // 20 points: transactions are discounted when they come from few wallets.
   const buyRatio = txns.h1.buyRatio;
   const balanceScore = txns.h1.total
     ? healthyRatioScore(buyRatio, 0.25, 0.45, 0.64, 0.82, 4)
@@ -917,16 +1392,26 @@ function qualityScore({ marketCap, liquidity, lpRatio, ageHours, volume, txns, p
   const flowBalance = flowBuyVolume !== null && flowSellVolume !== null && flowBuyVolume + flowSellVolume > 0
     ? healthyRatioScore(flowBuyVolume / (flowBuyVolume + flowSellVolume), 0.20, 0.42, 0.68, 0.86, 2)
     : 0;
-  let flowScore = logarithmicScore(txns.h1.total, 20, 2000, 5)
+  let flowScore = logarithmicScore(txns.h1.total, 20, 2000, 4)
     + balanceScore + traderScore + traderDistribution + flowBalance;
   if (uniqueTraders !== null && txns.h1.total > 250 && tradesPerTrader > 35) flowScore -= 3;
-  flowScore = clamp(flowScore, 0, 15);
+  const bitquery = security.bitquery || emptyBitquerySnapshot(false);
+  const healthyForSmartMoney = Boolean(security.compositeVerified)
+    && !marketValidation.severe
+    && liquidity >= 5000
+    && lpRatio >= 0.008;
+  if (healthyForSmartMoney && bitquery.verified) {
+    flowScore += healthyRatioScore(bitquery.buyPressure, 0.30, 0.48, 0.68, 0.90, 3);
+    flowScore += logarithmicScore(number(bitquery.uniqueBuyers), 3, 500, 2);
+  }
+  flowScore = clamp(flowScore, 0, 20);
 
   // 25 points: unknown or conflicting security data cannot earn these points.
-  const riskQuality = security.riskScore === null ? 0
-    : security.riskScore <= 20 ? 4
-      : security.riskScore <= 40 ? 2
-        : security.riskScore <= 60 ? 1
+  const effectiveRiskScore = security.effectiveRiskScore ?? security.riskScore;
+  const riskQuality = effectiveRiskScore === null ? 0
+    : effectiveRiskScore <= 20 ? 4
+      : effectiveRiskScore <= 40 ? 2
+        : effectiveRiskScore <= 60 ? 1
           : 0;
   let securityScore = (security.mint === "revoked" ? 4 : 0)
     + (security.freeze === "revoked" ? 4 : 0)
@@ -951,19 +1436,30 @@ function qualityScore({ marketCap, liquidity, lpRatio, ageHours, volume, txns, p
   if (security.crossSourceConflict) securityScore = 0;
   securityScore = clamp(securityScore, 0, 25);
 
-  // 10 points: earlyness is a ranking preference, never an elimination rule.
+  // 10 points: Helius/RPC verification and creator activity history.
+  const helius = security.onchain?.helius || {};
+  const creatorActivity = helius.activity || {};
+  let onchainScore = (security.onchain?.verified ? 3 : 0)
+    + (helius.verified ? 2 : 0)
+    + (helius.metadataVerified ? 2 : 0)
+    + (creatorActivity.verified && !creatorActivity.creatorSold ? 2 : 0)
+    + ((security.externalVerifiedCount || 0) >= 2 ? 1 : 0);
+  onchainScore = clamp(onchainScore, 0, 10);
+
+  // 5 points: earlyness is a ranking preference, never an elimination rule.
   const ageScore = ageHours === null ? 0
-    : ageHours < 6 ? 4
-      : ageHours < 24 ? 3
-        : ageHours < 168 ? 2
-          : ageHours < 720 ? 1
+    : ageHours < 6 ? 2
+      : ageHours < 24 ? 1.5
+        : ageHours < 168 ? 1
+          : ageHours < 720 ? 0.5
             : 0;
   const components = {
     volume: volumeScore,
     liquidity: liquidityScore,
-    traderFlow: flowScore,
+    smartMoney: flowScore,
     security: securityScore,
-    earlyness: clamp(marketEarlynessScore(marketCap) + ageScore, 0, 10)
+    onchain: onchainScore,
+    earlyness: clamp(marketEarlynessScore(marketCap) * 0.5 + ageScore, 0, 5)
   };
   const score = Math.round(clamp(Object.values(components).reduce((sum, value) => sum + value, 0), 0, 100));
   return {
@@ -985,12 +1481,17 @@ function classifyPair(pair, report, discovery, bubblemapsMetrics = null, bubblem
     h24: number(pair?.priceChange?.h24)
   };
   const security = mergeSecuritySources(securitySnapshot(report), externalSources);
+  const marketValidation = marketDataAssessment(pair, externalSources?.gecko, security.bitquery);
   const bubblemaps = bubblemapsSnapshot(bubblemapsMetrics, bubblemapsRequested);
   const bubbleAssessment = bubblemapsAssessment(bubblemaps, security);
   const history = Array.isArray(context.history) ? context.history : historyFor(pair?.baseToken?.address);
   const historyState = historyAssessment(volume, price, liquidity, history);
   const lpRatio = marketCap ? liquidity / marketCap : 0;
-  const effectiveLpLockedPct = security.lpLockedPct !== null ? security.lpLockedPct : security.goplus?.lpLockedPct;
+  const effectiveLpLockedPct = security.lpLockedPct !== null
+    ? security.lpLockedPct
+    : security.goplus?.lpLockedPct !== null && security.goplus?.lpLockedPct !== undefined
+      ? security.goplus.lpLockedPct
+      : security.tracker?.lpLockedPct;
   const criticalLpFloor = marketCap ? Math.max(5000, Math.min(30000, marketCap * 0.005)) : 6000;
   const greenLpFloor = marketCap ? Math.max(15000, Math.min(120000, marketCap * 0.015)) : 20000;
   const unsupportedSpike = (price.h6 > 100 && (volume.trend === "falling" || (marketCap && volume.h6 / marketCap < 0.12)))
@@ -1010,6 +1511,16 @@ function classifyPair(pair, report, discovery, bubblemapsMetrics = null, bubblem
   if (security.goplus?.freeze === "open") hardReasons.push("GoPlus freezable açık");
   if (security.goplus?.creatorMalicious) hardReasons.push("GoPlus kötü niyetli geliştirici işareti");
   if (security.goplus?.transferHookMalicious) hardReasons.push("GoPlus kötü niyetli transfer hook");
+  if (security.tracker?.rugged) hardReasons.push("Solana Tracker rugged işareti");
+  if (security.tracker?.mint === "open") hardReasons.push("Solana Tracker mint authority açık");
+  if (security.tracker?.freeze === "open") hardReasons.push("Solana Tracker freeze authority açık");
+  if (security.tracker?.riskScore !== null && security.tracker.riskScore >= HIGH_RUGCHECK_RISK) hardReasons.push("Solana Tracker yüksek risk skoru");
+  if (security.tracker?.bundlerPct !== null && security.tracker.bundlerPct >= 20) hardReasons.push("Bundled buy oranı yüksek");
+  if (security.tracker?.sniperPct !== null && security.tracker.sniperPct >= 20) hardReasons.push("Sniper yoğunluğu yüksek");
+  if (security.tracker?.insiderPct !== null && security.tracker.insiderPct >= 20) hardReasons.push("Insider yoğunluğu yüksek");
+  if (security.tracker?.developerSelling === "flagged") hardReasons.push("Solana Tracker geliştirici satışı işareti");
+  if (security.onchain?.helius?.activity?.creatorSold) hardReasons.push("Helius geliştirici satış hareketi");
+  if (security.onchain?.helius?.activity?.creatorFunding) hardReasons.push("Helius creator-early buyer fonlama işareti");
   if (liquidity < criticalLpFloor || lpRatio > 0 && lpRatio < 0.003) hardReasons.push("Likidite çok düşük");
   if (volume.h1 > 10000 && liquidity > 0 && liquidity / volume.h1 < 0.08) hardReasons.push("Likidite hacme göre çok ince");
   if (security.effectiveTop1Pct > 22) hardReasons.push("Tek holder yoğunluğu aşırı");
@@ -1025,12 +1536,19 @@ function classifyPair(pair, report, discovery, bubblemapsMetrics = null, bubblem
   if (security.birdeye?.uniqueTraders !== null && txns.h1.total > 250 && txns.h1.total / Math.max(security.birdeye.uniqueTraders, 1) > 45) hardReasons.push("İşlem/trader oranı yapay görünüyor");
   if (unsupportedSpike) hardReasons.push("Hacimsiz dik fiyat hareketi");
   if (severeSelloff) hardReasons.push("Şiddetli fiyat çöküşü");
-  if (security.riskScore !== null && security.riskScore >= HIGH_RUGCHECK_RISK) hardReasons.push("Yüksek RugCheck risk skoru");
+  if (security.effectiveRiskScore !== null && security.effectiveRiskScore >= HIGH_RUGCHECK_RISK) hardReasons.push("Yüksek birleşik risk skoru");
+  if (marketValidation.severe) hardReasons.push("Piyasa verileri arasında ciddi çelişki");
+  if (security.bitquery?.verified && security.bitquery.uniqueBuyers !== null && security.bitquery.buys !== null
+      && security.bitquery.uniqueBuyers < 5 && security.bitquery.buys > 40) hardReasons.push("Az trader ile yoğun alış akışı");
+  if (security.bitquery?.verified && security.bitquery.buyPressure !== null && security.bitquery.buyPressure > 0.86
+      && security.bitquery.uniqueBuyers !== null && security.bitquery.uniqueBuyers < 10) hardReasons.push("Alış akışı yoğunlaşmış");
   hardReasons.push(...bubbleAssessment.hardReasons);
 
   const cautionReasons = [];
   if (!security.compositeVerified && !bubblemaps.verified) cautionReasons.push("Bağımsız güvenlik doğrulaması Doğrulanmadı");
   if (security.crossSourceConflict) cautionReasons.push("Güvenlik kaynakları çelişiyor");
+  if (marketValidation.marketDataConflict) cautionReasons.push("Piyasa kaynakları çelişiyor");
+  if (marketValidation.poolLiquidityConflict) cautionReasons.push("Pool likiditesi kaynaklar arasında farklı");
   if (effectiveLpLockedPct === null) cautionReasons.push("LP kilidi Doğrulanmadı");
   else if (effectiveLpLockedPct < 80) cautionReasons.push("LP kilidi yetersiz");
   if (ageHours === null) cautionReasons.push("Token yaşı Doğrulanmadı");
@@ -1049,8 +1567,8 @@ function classifyPair(pair, report, discovery, bubblemapsMetrics = null, bubblem
   if (priceVolumeDivergence) cautionReasons.push("Fiyat/hacim uyumsuzluğu");
   if (price.h6 <= -25 || price.h24 <= -40) cautionReasons.push("Sert fiyat kaybı");
   if (price.h6 >= 100 || price.h24 >= 200) cautionReasons.push("Aşırı fiyat oynaklığı");
-  if (security.riskScore === null) cautionReasons.push("RugCheck puanı Doğrulanmadı");
-  else if (security.riskScore > 30) cautionReasons.push("RugCheck riski düşük değil");
+  if (security.effectiveRiskScore === null) cautionReasons.push("Birleşik risk puanı Doğrulanmadı");
+  else if (security.effectiveRiskScore > 30) cautionReasons.push("Birleşik risk skoru düşük değil");
   if (security.riskWarningCount > 0) cautionReasons.push(`RugCheck: ${security.notableRisk}`);
   if (security.effectiveTop1Pct > 12) cautionReasons.push("Tek holder yoğunluğu yüksek");
   if (security.effectiveTop10Pct > 45) cautionReasons.push("Top holder yoğunluğu yüksek");
@@ -1058,6 +1576,12 @@ function classifyPair(pair, report, discovery, bubblemapsMetrics = null, bubblem
   if (security.graphInsiders > 10) cautionReasons.push("Cluster/insider sayısı yüksek");
   if (security.birdeye?.bundledRatio !== null && security.birdeye.bundledRatio >= 0.15 && security.birdeye.bundledRatio < 0.30) cautionReasons.push("Birdeye bundled buy oranı yüksek");
   if (security.birdeye?.devCount > 0 && security.birdeye.sellAllCount > 0) cautionReasons.push("Erken geliştirici/ilk alıcı çıkışı işareti");
+  if (security.tracker?.requested && !security.tracker?.verified) cautionReasons.push("Solana Tracker verisi Doğrulanmadı");
+  if (security.bitquery?.verified && security.bitquery.buyPressure !== null && security.bitquery.buyPressure < 0.32) cautionReasons.push("Bitquery satış baskısı yüksek");
+  if (security.bitquery?.verified && security.bitquery.netBuyVolume !== null && security.bitquery.netBuyVolume < 0 && price.h6 > 10) cautionReasons.push("Pozitif fiyat satış akışıyla desteklenmiyor");
+  if (security.tracker?.bundlerPct !== null && security.tracker.bundlerPct >= 10 && security.tracker.bundlerPct < 20) cautionReasons.push("Bundled buy oranı dikkat istiyor");
+  if (security.tracker?.sniperPct !== null && security.tracker.sniperPct >= 10 && security.tracker.sniperPct < 20) cautionReasons.push("Sniper yoğunluğu dikkat istiyor");
+  if (security.onchain?.helius?.activity?.verified && security.onchain.helius.activity.creatorBought) cautionReasons.push("Geliştirici erken alım hareketi gözlendi");
   cautionReasons.push(...bubbleAssessment.cautionReasons);
 
   const quality = qualityScore({
@@ -1069,6 +1593,7 @@ function classifyPair(pair, report, discovery, bubblemapsMetrics = null, bubblem
     txns,
     price,
     security,
+    marketValidation,
     priceVolumeDivergence,
     history
   });
@@ -1114,6 +1639,7 @@ function classifyPair(pair, report, discovery, bubblemapsMetrics = null, bubblem
     liquidity,
     pairCount: Number(pair?.pairCount) || 1,
     pairAddresses: Array.isArray(pair?.pairAddresses) ? pair.pairAddresses : [pair?.pairAddress].filter(Boolean),
+    priceUsd: optionalNumber(pair?.priceUsd),
     volume,
     price,
     txns,
@@ -1126,6 +1652,7 @@ function classifyPair(pair, report, discovery, bubblemapsMetrics = null, bubblem
     hardReasons,
     cautionReasons,
     security,
+    marketValidation,
     bubblemaps,
     priceVolumeDivergence,
     history: historyState,
@@ -1144,7 +1671,7 @@ function deriveReasonCodes(token) {
   const codes = [];
   const add = (condition, code) => { if (condition && !codes.includes(code)) codes.push(code); };
   add(token?.volume?.trend === "rising" || token?.history?.momentumConfirmed, "volume_acceleration");
-  add(token?.scoreBreakdown?.traderFlow >= 9 && !/trader sayısı|benzersiz trader|işlem\/trader|wash/i.test(text), "healthy_trader_flow");
+  add((token?.scoreBreakdown?.smartMoney ?? token?.scoreBreakdown?.traderFlow) >= 9 && !/trader sayısı|benzersiz trader|işlem\/trader|wash/i.test(text), "healthy_trader_flow");
   add(/likidite.*(düşük|ince)|lp kilidi/i.test(text), "thin_liquidity");
   add(/mint authority açık|mintable açık|freeze authority açık|freezable açık/i.test(text), "active_authority");
   add(/lp kilidi doğrulanmadı/i.test(text), "lp_unverified");
@@ -1156,6 +1683,18 @@ function deriveReasonCodes(token) {
   add(number(token?.history?.snapshots) < 2, "insufficient_history");
   add(/bundled/i.test(text), "bundled_buy_risk");
   add(/rug geçmişi|rugcheck risk|rugged/i.test(text), "rug_risk");
+  add(token?.security?.bitquery?.verified && token.security.bitquery.buyPressure >= 0.58
+    && !/satış baskısı|yoğunlaşmış|çeliş/i.test(text), "smart_money_inflow");
+  add(token?.security?.bitquery?.verified && (token.security.bitquery.buyPressure < 0.32 || token.security.bitquery.netBuyVolume < 0), "smart_money_distribution");
+  add(token?.security?.tracker?.sniperPct >= 10, "sniper_concentration");
+  add(token?.security?.tracker?.insiderPct >= 5 || token?.security?.graphInsiders > 10, "insider_cluster");
+  add(token?.security?.tracker?.bundlerPct >= 10 || token?.security?.birdeye?.bundledRatio >= 0.15, "bundler_activity");
+  add(token?.security?.onchain?.helius?.activity?.creatorFunding === true, "creator_funding");
+  add(token?.marketValidation?.poolLiquidityConflict, "pool_liquidity_conflict");
+  add(token?.marketValidation?.unavailable, "source_unavailable");
+  add(token?.security?.externalVerifiedCount >= 2 && !token?.security?.crossSourceConflict, "source_confirmation");
+  add(/piyasa kaynakları|piyasa verileri|pool likiditesi/i.test(text), "market_data_conflict");
+  add(/doğrulanmadı/i.test(text), "source_unverified");
   return codes;
 }
 
@@ -1213,6 +1752,15 @@ async function discover() {
   return { candidates: [...discovered.values()].slice(0, DISCOVERY_LIMIT), warnings };
 }
 
+function sourceHealth(requested, values, verifiedSelector) {
+  if (!requested) return "API anahtarı yok";
+  const list = Array.isArray(values) ? values : [];
+  if (list.some((value) => verifiedSelector(value))) return "Aktif";
+  if (list.some((value) => /429|rate.?limit|too many requests/i.test(String(value?.error || "")))) return "Rate limit";
+  if (list.some((value) => value?.ok === true)) return "Veri yok";
+  return "Doğrulanmadı";
+}
+
 async function buildScan() {
   const scanFetchedAt = new Date().toISOString();
   const { candidates, warnings } = await discover();
@@ -1250,19 +1798,25 @@ async function buildScan() {
   ));
   const bubblemapsByAddress = new Map();
   const externalByAddress = new Map();
+  const geckoByAddress = new Map();
 
   const externalTargets = preliminary
-    .filter((token) => token.decision !== "red")
     .sort((a, b) => b.score - a.score)
-    .slice(0, Math.max(BIRDEYE_LIMIT, GOPLUS_LIMIT));
-  if (BIRDEYE_API_KEY || GOPLUS_API_TOKEN || ONCHAIN_RPC_URL) {
+    .slice(0, Math.max(BIRDEYE_LIMIT, GOPLUS_LIMIT, ONCHAIN_LIMIT, SOLANA_TRACKER_LIMIT, BITQUERY_LIMIT, HELIUS_ACTIVITY_LIMIT));
+  if (BIRDEYE_API_KEY || GOPLUS_API_TOKEN || ONCHAIN_RPC_URL || SOLANA_TRACKER_API_KEY || BITQUERY_API_TOKEN) {
     const externalResults = await mapLimit(externalTargets, 4, async (token, index) => {
-      const [birdeye, goplus, onchain] = await Promise.all([
+      const [birdeye, goplus, onchain, tracker, bitquery] = await Promise.all([
         index < BIRDEYE_LIMIT ? fetchBirdeye(token.address) : Promise.resolve({ ok: false, fetchedAt: null }),
         index < GOPLUS_LIMIT ? fetchGoplus(token.address) : Promise.resolve({ ok: false, fetchedAt: null }),
-        index < ONCHAIN_LIMIT ? fetchOnchain(token.address) : Promise.resolve({ ok: false, fetchedAt: null })
+        index < ONCHAIN_LIMIT ? fetchOnchain(token.address) : Promise.resolve({ ok: false, fetchedAt: null }),
+        index < SOLANA_TRACKER_LIMIT ? fetchSolanaTracker(token.address) : Promise.resolve({ ok: false, fetchedAt: null }),
+        index < BITQUERY_LIMIT ? fetchBitquery(token.address, pairMap.get(token.address)) : Promise.resolve({ ok: false, fetchedAt: null })
       ]);
-      return { address: token.address, birdeye, goplus, onchain };
+      if (index < HELIUS_ACTIVITY_LIMIT && onchain?.helius?.creator) {
+        const activity = await fetchHeliusActivity(token.address, onchain.helius.creator);
+        onchain.helius.activity = activity;
+      }
+      return { address: token.address, birdeye, goplus, onchain, tracker, bitquery };
     });
     for (const result of externalResults) externalByAddress.set(result.address, result);
     if (BIRDEYE_API_KEY && externalResults.some((result) => result.birdeye?.ok === false)) {
@@ -1270,7 +1824,21 @@ async function buildScan() {
     }
     if (GOPLUS_API_TOKEN && externalResults.some((result) => result.goplus?.ok === false)) warnings.push("Bazı GoPlus verileri alınamadı.");
     if (ONCHAIN_RPC_URL && externalResults.some((result) => result.onchain?.ok === false)) warnings.push("Bazı on-chain doğrulamaları alınamadı.");
+    if (SOLANA_TRACKER_API_KEY && externalResults.some((result) => result.tracker?.ok === false)) warnings.push("Bazı Solana Tracker verileri alınamadı.");
+    if (BITQUERY_API_TOKEN && externalResults.some((result) => result.bitquery?.ok === false)) warnings.push("Bazı Bitquery akış verileri alınamadı.");
   }
+
+  const geckoTargets = preliminary
+    .sort((a, b) => b.score - a.score)
+    .slice(0, GECKO_LIMIT);
+  const geckoResults = await mapLimit(geckoTargets, 4, async (token) => ({
+    address: token.address,
+    result: await fetchGecko(token.address)
+  }));
+  for (const item of geckoResults) {
+    if (item.result?.ok) geckoByAddress.set(item.address, item.result);
+  }
+  if (geckoResults.some((item) => item.result?.ok === false)) warnings.push("Bazı GeckoTerminal pool verileri alınamadı.");
 
   if (BUBBLEMAPS_API_KEY) {
     const bubbleTargets = preliminary
@@ -1292,6 +1860,7 @@ async function buildScan() {
 
   const classified = ranked.map((item, index) => {
     const external = externalByAddress.get(item.discovery.address) || {};
+    external.gecko = geckoByAddress.get(item.discovery.address) || emptyGeckoSnapshot(true);
     const bubbleMetrics = bubblemapsByAddress.get(item.discovery.address) || null;
     const sourceMeta = {
       dexScreener: { verified: true, fetchedAt: scanFetchedAt, pairAddress: item.pair?.pairAddress || null },
@@ -1299,6 +1868,10 @@ async function buildScan() {
       birdeye: { requested: Boolean(BIRDEYE_API_KEY), verified: Boolean(external.birdeye?.ok), fetchedAt: external.birdeye?.fetchedAt || null },
       goPlus: { requested: Boolean(GOPLUS_API_TOKEN), verified: Boolean(external.goplus?.ok), fetchedAt: external.goplus?.fetchedAt || null },
       onchain: { requested: Boolean(ONCHAIN_RPC_URL), verified: Boolean(external.onchain?.ok), fetchedAt: external.onchain?.fetchedAt || null },
+      helius: { requested: Boolean(HELIUS_API_KEY), verified: Boolean(external.onchain?.helius?.verified || external.onchain?.helius?.activity?.verified), fetchedAt: external.onchain?.helius?.activity?.fetchedAt || external.onchain?.fetchedAt || null },
+      solanaTracker: { requested: Boolean(SOLANA_TRACKER_API_KEY), verified: Boolean(external.tracker?.verified), fetchedAt: external.tracker?.fetchedAt || null },
+      bitquery: { requested: Boolean(BITQUERY_API_TOKEN), verified: Boolean(external.bitquery?.verified), fetchedAt: external.bitquery?.fetchedAt || null },
+      geckoTerminal: { requested: true, verified: Boolean(external.gecko?.verified), fetchedAt: external.gecko?.fetchedAt || null },
       bubblemaps: { requested: Boolean(BUBBLEMAPS_API_KEY), verified: Boolean(bubbleMetrics), fetchedAt: bubbleMetrics ? scanFetchedAt : null }
     };
     return classifyPair(
@@ -1319,7 +1892,7 @@ async function buildScan() {
   const eliminated = classified.filter((token) => token.decision === "red");
 
   return {
-    modelVersion: 5,
+    modelVersion: 6,
     generatedAt,
     autoRefreshMs: 16 * 60 * 1000,
     candidateCount: candidates.length,
@@ -1329,6 +1902,7 @@ async function buildScan() {
       trackedTokens: tokenHistory.size,
       tokensWithPreviousSnapshot: classified.filter((token) => token.history?.snapshots >= 2).length
     },
+    backtest: backtestSummary(),
     eliminatedCount: eliminated.length,
     eliminationReasons: reasonSummary(eliminated),
     reasonCodeSummary: reasonCodeSummary(classified),
@@ -1339,7 +1913,21 @@ async function buildScan() {
       bubblemaps: Boolean(BUBBLEMAPS_API_KEY),
       birdeye: Boolean(BIRDEYE_API_KEY),
       goPlus: Boolean(GOPLUS_API_TOKEN),
-      onchainRpc: Boolean(ONCHAIN_RPC_URL)
+      onchainRpc: Boolean(ONCHAIN_RPC_URL),
+      helius: Boolean(HELIUS_API_KEY),
+      solanaTracker: Boolean(SOLANA_TRACKER_API_KEY),
+      bitquery: Boolean(BITQUERY_API_TOKEN),
+      geckoTerminal: true,
+      gmgn: false
+    },
+    sourceStatus: {
+      dexScreener: { requested: true, status: "Aktif" },
+      rugCheck: { requested: true, status: reports.some((item) => !item.report) ? "Doğrulanmadı" : "Aktif" },
+      geckoTerminal: { requested: true, status: sourceHealth(true, geckoResults.map((item) => item.result), (value) => Boolean(value?.verified)) },
+      solanaTracker: { requested: Boolean(SOLANA_TRACKER_API_KEY), status: sourceHealth(Boolean(SOLANA_TRACKER_API_KEY), [...externalByAddress.values()].map((item) => item.tracker), (value) => Boolean(value?.verified)) },
+      bitquery: { requested: Boolean(BITQUERY_API_TOKEN), status: sourceHealth(Boolean(BITQUERY_API_TOKEN), [...externalByAddress.values()].map((item) => item.bitquery), (value) => Boolean(value?.verified)) },
+      helius: { requested: Boolean(HELIUS_API_KEY), status: sourceHealth(Boolean(HELIUS_API_KEY), [...externalByAddress.values()].map((item) => item.onchain), (value) => Boolean(value?.helius?.verified || value?.helius?.activity?.verified)) },
+      gmgn: { requested: false, status: "public API yok" }
     },
     warning: warnings.length ? "Bazı veri kaynakları yanıt vermedi; mevcut verilerle tarandı." : ""
   };
