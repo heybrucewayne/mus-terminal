@@ -1185,14 +1185,22 @@ function trenchDexUrl(value){
     return '';
   }
 }
-function trenchRugUrl(value){
-  try {
-    const url=new URL(String(value||''));
-    const trusted=url.protocol==='https:' && (url.hostname==='rugcheck.xyz' || url.hostname.endsWith('.rugcheck.xyz'));
-    return trusted ? url.href : '';
-  } catch(e){
-    return '';
-  }
+function trenchTokenAddress(token){
+  const address=String(token?.address||'').trim();
+  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address) ? address : '';
+}
+function trenchExternalLinks(token){
+  const address=trenchTokenAddress(token);
+  if (!address) return '<span>RugCheck</span> · <span>DexScreener</span>';
+  const links=[
+    ['RugCheck',`https://rugcheck.xyz/tokens/${address}`,'RugCheck security report'],
+    ['Dex',trenchDexUrl(token?.dexUrl),'DexScreener market page'],
+    ['Bird',`https://birdeye.so/solana/token/${address}`,'Birdeye token analytics'],
+    ['Scan',`https://solscan.io/token/${address}`,'Solscan token explorer'],
+    ['Map',`https://app.bubblemaps.io/sol/token/${address}`,'Bubblemaps holder clusters'],
+    ['FM',`https://solana.fm/address/${address}?cluster=mainnet-alpha`,'SolanaFM on-chain explorer']
+  ].filter(([,url])=>url);
+  return links.map(([label,url,title]) => `<a href="${trenchEscape(url)}" target="_blank" rel="noopener noreferrer" title="${trenchEscape(title)}">${label}</a>`).join(' · ');
 }
 function trenchSymbolLink(token,className='trench-symbol'){
   const symbol=trenchEscape(token?.symbol);
@@ -1242,11 +1250,8 @@ function renderTrenches(payload){
     const bubbleStatus=token?.bubblemaps?.verified
       ? ` · Bubblemaps ${trenchEscape(Math.round(Number(token.bubblemaps.score)))} / 100`
       : token?.bubblemaps?.requested ? ' · Bubblemaps Doğrulanmadı' : '';
-    const rugUrl=trenchRugUrl(token.rugUrl);
-    const dexUrl=trenchDexUrl(token.dexUrl);
-    const rugLink=rugUrl ? `<a href="${trenchEscape(rugUrl)}" target="_blank" rel="noopener noreferrer">RugCheck</a>` : '<span>RugCheck</span>';
-    const dexLink=dexUrl ? `<a href="${trenchEscape(dexUrl)}" target="_blank" rel="noopener noreferrer">DexScreener</a>` : '<span>DexScreener</span>';
-    return `<div class="trench-note"><strong>${trenchSymbolLink(token,'trench-note-symbol')}</strong> — ${trenchEscape(token.reason)}${bubbleStatus}; ${rugLink} · ${dexLink}${badges}</div>`;
+    const externalLinks=trenchExternalLinks(token);
+    return `<div class="trench-note"><strong>${trenchSymbolLink(token,'trench-note-symbol')}</strong> — ${trenchEscape(token.reason)}${bubbleStatus}; ${externalLinks}${badges}</div>`;
   }).join('');
   const reasons=(payload.eliminationReasons||[]).map(item=>`${trenchEscape(item.reason)} ${Number(item.count)||0}`).join(' · ');
   const eliminated=payload.eliminatedCount
