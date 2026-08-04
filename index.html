@@ -834,6 +834,16 @@
     .px-search .btn { flex-basis:24px; width:24px; height:24px; }
   }
 
+  /* Transparent glass surfaces for the two table title rows. Keep this
+     override last so older dark header rules cannot cover the background. */
+  #panel-table table.ticker thead th,
+  #panel-trenches table.trenches th {
+    background:rgba(255,255,255,.055) !important;
+    -webkit-backdrop-filter:blur(8px) saturate(125%) !important;
+    backdrop-filter:blur(8px) saturate(125%) !important;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.20), inset 0 -1px 0 rgba(255,255,255,.045) !important;
+  }
+
 </style>
 </head>
 <body>
