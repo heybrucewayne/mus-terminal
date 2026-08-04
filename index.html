@@ -894,6 +894,101 @@
     box-shadow:inset 0 1px 0 rgba(255,255,255,.20), inset 0 -1px 0 rgba(255,255,255,.045) !important;
   }
 
+  /* ===== PHONE LAYOUT ===== */
+  @media (max-width:700px) {
+    html, body { overflow-x:hidden; }
+    body { font-size:12px; }
+    #app {
+      min-height:100dvh;
+      padding:8px;
+      gap:8px;
+    }
+    .grid {
+      display:grid;
+      grid-template-columns:minmax(0,1fr);
+      grid-template-rows:300px minmax(360px,52dvh) minmax(300px,46dvh);
+      gap:8px;
+    }
+    .panel {
+      min-height:0;
+      border-radius:12px;
+    }
+    #panel-bubbles { height:300px; }
+    #panel-table, #panel-trenches { min-height:0; }
+    #panel-table .panel-body,
+    #panel-trenches .panel-body { min-height:0; }
+
+    #panel-table .px-scroll,
+    #panel-trenches .trench-scroll {
+      overflow:auto;
+      -webkit-overflow-scrolling:touch;
+      overscroll-behavior:contain;
+    }
+    #panel-table table.ticker { width:100%; min-width:0; }
+    #panel-table table.ticker thead th,
+    #panel-table table.ticker tbody td { padding-left:6px; padding-right:6px; }
+    #panel-table table.ticker thead th:first-child,
+    #panel-table table.ticker tbody td:first-child { width:52%; }
+    #panel-table table.ticker thead th:nth-child(2),
+    #panel-table table.ticker tbody td:nth-child(2) { width:25%; }
+    #panel-table table.ticker thead th:nth-child(3),
+    #panel-table table.ticker tbody td:nth-child(3) { width:23%; }
+    #panel-table table.ticker thead th:nth-child(4),
+    #panel-table table.ticker tbody td:nth-child(4),
+    #panel-table table.ticker thead th:nth-child(5),
+    #panel-table table.ticker tbody td:nth-child(5) { display:none; }
+    #panel-table table.ticker tbody td { font-size:11px; }
+    #panel-table .market-head { gap:4px; }
+    #panel-table .market-sort-label { font-size:8.5px; letter-spacing:.05em; }
+    #panel-table .px-search { flex:1 1 auto; max-width:none; min-width:0; }
+    #panel-table .px-search input { width:100%; font-size:9px; }
+    #panel-table .px-search .btn { flex:0 0 24px; }
+
+    #panel-trenches table.trenches {
+      width:100%;
+      min-width:0;
+      table-layout:fixed;
+    }
+    #panel-trenches table.trenches th,
+    #panel-trenches table.trenches td { padding-left:5px; padding-right:5px; }
+    #panel-trenches table.trenches th:first-child,
+    #panel-trenches table.trenches td:first-child { width:31%; padding-left:7px; }
+    #panel-trenches table.trenches th:nth-child(4),
+    #panel-trenches table.trenches td:nth-child(4) { width:41%; }
+    #panel-trenches table.trenches th:nth-child(5),
+    #panel-trenches table.trenches td:nth-child(5) { width:21%; }
+    #panel-trenches table.trenches th:nth-child(6),
+    #panel-trenches table.trenches td:nth-child(6) { width:7%; padding-right:7px; }
+    #panel-trenches table.trenches th:nth-child(2),
+    #panel-trenches table.trenches td:nth-child(2),
+    #panel-trenches table.trenches th:nth-child(3),
+    #panel-trenches table.trenches td:nth-child(3) { display:none; }
+    #panel-trenches table.trenches th { font-size:8.5px; padding-top:8px; padding-bottom:8px; }
+    #panel-trenches table.trenches td { font-size:9px; padding-top:8px; padding-bottom:8px; }
+    #panel-trenches .trench-symbol { font-size:10px; }
+    #panel-trenches .trench-score { font-size:7px; }
+    #panel-trenches .trench-note {
+      white-space:normal;
+      overflow:visible;
+      text-overflow:clip;
+      word-break:break-word;
+      line-height:1.45;
+      padding:8px;
+      font-size:9px;
+    }
+    #panel-trenches .trench-change { display:inline; }
+  }
+
+  @media (max-width:380px) {
+    #app { padding:6px; }
+    .grid { grid-template-rows:270px minmax(340px,54dvh) minmax(300px,48dvh); }
+    #panel-bubbles { height:270px; }
+    #panel-table .market-sort-label { display:none; }
+    #panel-table .px-search input { font-size:8.5px; }
+    #panel-trenches table.trenches th { font-size:8px; letter-spacing:0; }
+    #panel-trenches table.trenches td { font-size:8.5px; }
+  }
+
 </style>
 </head>
 <body>
@@ -1197,8 +1292,7 @@ function trenchExternalLinks(token){
     ['Dex',trenchDexUrl(token?.dexUrl),'DexScreener market page'],
     ['Bird',`https://birdeye.so/solana/token/${address}`,'Birdeye token analytics'],
     ['Scan',`https://solscan.io/token/${address}`,'Solscan token explorer'],
-    ['Map',`https://app.bubblemaps.io/sol/token/${address}`,'Bubblemaps holder clusters'],
-    ['FM',`https://solana.fm/address/${address}?cluster=mainnet-alpha`,'SolanaFM on-chain explorer']
+    ['Map',`https://app.bubblemaps.io/sol/token/${address}`,'Bubblemaps holder clusters']
   ].filter(([,url])=>url);
   return links.map(([label,url,title]) => `<a href="${trenchEscape(url)}" target="_blank" rel="noopener noreferrer" title="${trenchEscape(title)}">${label}</a>`).join(' · ');
 }
