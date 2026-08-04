@@ -709,9 +709,17 @@
 
   .page-context-menu {
     z-index: 200;
-    min-width:230px;
+    width:250px;
+    min-width:250px;
+    max-width:calc(100vw - 20px);
+    max-height:calc(100vh - 20px);
     padding:10px;
     gap:8px;
+    box-sizing:border-box;
+    overflow-x:hidden;
+    overflow-y:auto;
+    overscroll-behavior:contain;
+    -webkit-overflow-scrolling:touch;
   }
   .page-context-menu .asset-menu-action {
     display:flex;
@@ -721,10 +729,14 @@
   .background-picker {
     display:grid;
     grid-template-columns:repeat(3,minmax(0,1fr));
+    width:100%;
+    min-width:0;
+    box-sizing:border-box;
     gap:6px;
     padding-top:8px;
     border-top:1px solid rgba(255,255,255,.14);
   }
+  .background-picker[hidden] { display:none; }
   .background-thumb {
     position:relative;
     min-width:0;
@@ -875,7 +887,7 @@
      override last so older dark header rules cannot cover the background. */
   #panel-table table.ticker thead th,
   #panel-trenches table.trenches th {
-    background:rgba(255,255,255,.045) !important;
+    background:transparent !important;
     background-image:none !important;
     -webkit-backdrop-filter:blur(8px) saturate(125%) !important;
     backdrop-filter:blur(8px) saturate(125%) !important;
@@ -962,7 +974,7 @@
     <span class="page-context-icon" aria-hidden="true">▧</span>
     DUVAR KAĞIDINI DEĞİŞTİR
   </button>
-  <div id="backgroundPicker" class="background-picker" role="group" aria-label="Duvar kağıtları"></div>
+  <div id="backgroundPicker" class="background-picker" role="group" aria-label="Duvar kağıtları" hidden></div>
 </div>
 
 <div id="performanceModal" class="perf-overlay" hidden>
@@ -1705,9 +1717,8 @@ const bubbles = (function(){
   function loop(timestamp){
     animationFrame=0;
     if (!pageVisible) return;
-    // 30fps is enough for this slow-moving layout and halves canvas work on
-    // high-refresh displays without affecting pointer interaction.
-    if (timestamp-lastFrameAt < 33){
+    // Keep the bubbles smooth at 60fps, including on high-refresh displays.
+    if (timestamp-lastFrameAt < 1000/60){
       animationFrame=requestAnimationFrame(loop);
       return;
     }
@@ -2162,6 +2173,7 @@ document.addEventListener('keydown', e => {
 
 const pageContextMenu = $('#pageContextMenu');
 const backgroundPicker = $('#backgroundPicker');
+let contextPoint = { x:10, y:10 };
 
 function backgroundName(path){
   return String(path || '').split('/').pop().replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ');
@@ -2204,20 +2216,25 @@ backgroundPicker?.addEventListener('click', async event => {
 
 function closePageContextMenu(){
   pageContextMenu.hidden = true;
+  if (backgroundPicker) backgroundPicker.hidden = true;
+}
+
+function positionPageContextMenu(){
+  const gap = 10;
+  const rect = pageContextMenu.getBoundingClientRect();
+  const left = Math.max(gap, Math.min(contextPoint.x, window.innerWidth - rect.width - gap));
+  const top = Math.max(gap, Math.min(contextPoint.y, window.innerHeight - rect.height - gap));
+  pageContextMenu.style.left = `${left}px`;
+  pageContextMenu.style.top = `${top}px`;
 }
 
 function openPageContextMenu(event){
   if (event.target.closest?.('a, button, input, textarea, select, [contenteditable="true"]')) return;
   event.preventDefault();
   closeAssetMenu();
+  contextPoint = { x:event.clientX, y:event.clientY };
   pageContextMenu.hidden = false;
-
-  const gap = 10;
-  const rect = pageContextMenu.getBoundingClientRect();
-  const left = Math.max(gap, Math.min(event.clientX, window.innerWidth - rect.width - gap));
-  const top = Math.max(gap, Math.min(event.clientY, window.innerHeight - rect.height - gap));
-  pageContextMenu.style.left = `${left}px`;
-  pageContextMenu.style.top = `${top}px`;
+  positionPageContextMenu();
   requestAnimationFrame(() => pageContextMenu.querySelector('[role="menuitem"]')?.focus({ preventScroll:true }));
 }
 
@@ -2240,14 +2257,16 @@ document.addEventListener('keydown', event => {
   items[next]?.focus({ preventScroll:true });
 });
 window.addEventListener('resize', closePageContextMenu);
-document.addEventListener('scroll', closePageContextMenu, true);
-$('#pageBackgroundChange').addEventListener('click', async () => {
+document.addEventListener('scroll', event => {
+  if (event.target === pageContextMenu || event.target.closest?.('#pageContextMenu')) return;
   closePageContextMenu();
-  try {
-    await window.MusTerminalBackground.change();
+}, true);
+$('#pageBackgroundChange').addEventListener('click', () => {
+  if (!backgroundPicker) return;
+  backgroundPicker.hidden = !backgroundPicker.hidden;
+  if (!backgroundPicker.hidden){
     syncBackgroundPicker();
-  } catch (error) {
-    console.warn('background change failed', error);
+    requestAnimationFrame(positionPageContextMenu);
   }
 });
 $('#pageReload').addEventListener('click', () => window.location.reload());
