@@ -500,22 +500,24 @@
   #panel-table .rank { color:rgba(216,228,234,.62); }
   #panel-table .px-search input {
     color:#fff;
-    background:linear-gradient(180deg,rgba(7,11,17,.58),rgba(14,19,27,.44));
-    border-color:rgba(255,255,255,.28);
-    box-shadow:inset 0 1px 0 rgba(255,255,255,.09),0 5px 14px rgba(0,0,0,.13);
-    text-shadow:0 1px 2px rgba(0,0,0,.95);
+    background:linear-gradient(180deg,rgba(255,255,255,.16),rgba(255,255,255,.07));
+    border-color:rgba(255,255,255,.34);
+    -webkit-backdrop-filter:blur(10px) saturate(125%);
+    backdrop-filter:blur(10px) saturate(125%);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.13),0 5px 14px rgba(0,0,0,.08);
+    text-shadow:0 1px 2px rgba(0,0,0,.56);
   }
   #panel-table .px-search input::placeholder {
-    color:rgba(244,249,252,.78);
+    color:rgba(250,253,255,.86);
     font-weight:500;
     opacity:1;
-    text-shadow:0 1px 2px rgba(0,0,0,.92);
+    text-shadow:0 1px 2px rgba(0,0,0,.58);
   }
   #panel-table .px-search input:focus {
     color:#fff;
-    background:linear-gradient(180deg,rgba(7,12,18,.72),rgba(13,20,28,.58));
-    border-color:rgba(155,220,255,.78);
-    box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 0 0 3px rgba(155,220,255,.15),0 8px 22px rgba(0,0,0,.18);
+    background:linear-gradient(180deg,rgba(255,255,255,.22),rgba(255,255,255,.10));
+    border-color:rgba(190,235,255,.86);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 0 0 3px rgba(155,220,255,.15),0 8px 22px rgba(0,0,0,.12);
   }
   #panel-table .sym-cell { min-width:0; flex-wrap:nowrap; }
   #bubbleCanvas { position: relative; z-index: 1; }
@@ -778,9 +780,9 @@
   table.ticker thead th {
     padding-top:5px;
     padding-bottom:5px;
-    background:linear-gradient(180deg,rgba(7,12,18,.64),rgba(11,17,24,.48));
+    background:linear-gradient(180deg,rgba(255,255,255,.13),rgba(255,255,255,.045));
     border-bottom-color:rgba(255,255,255,.15);
-    box-shadow:inset 0 1px 0 rgba(255,255,255,.10),0 4px 12px rgba(0,0,0,.10);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 4px 12px rgba(0,0,0,.06);
     -webkit-backdrop-filter:blur(16px) saturate(130%);
     backdrop-filter:blur(16px) saturate(130%);
   }
@@ -924,6 +926,7 @@
    MUS TERMINAL — vanilla JS
    ============================================================ */
 const $ = (s, r=document) => r.querySelector(s);
+const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[char]));
 const fmtNum = (n, d=2) => Number(n).toLocaleString('en-US',{minimumFractionDigits:d, maximumFractionDigits:d});
 function smartPrice(p){
   p = +p;
@@ -938,21 +941,6 @@ function compact(n){
   if (n >= 1e6) return (n/1e6).toFixed(2)+'M';
   if (n >= 1e3) return (n/1e3).toFixed(2)+'K';
   return n.toFixed(0);
-}
-function bubblePriceLabel(asset){
-  const price=Number(asset?.price);
-  if (!isFinite(price)) return '—';
-  const currency=asset.usd===false ? '' : '$';
-  const suffix=asset.suffix || '';
-  if (asset.cls==='ECONOMIC') return fmtNum(price,Number.isInteger(asset.decimals)?asset.decimals:1)+suffix;
-  if (price<=0) return '—';
-  if (price>=10000) return currency+(price/1000).toFixed(1)+'K'+suffix;
-  if (price>=1000) return currency+fmtNum(price,0)+suffix;
-  if (price>=1) return currency+fmtNum(price,2)+suffix;
-  if (price>=0.01) return currency+fmtNum(price,4)+suffix;
-  if (price>=0.001) return currency+Number(price.toFixed(5)).toString()+suffix;
-  if (price>=0.0001) return currency+Number(price.toFixed(6)).toString()+suffix;
-  return currency+price.toExponential(1).replace('e+','e')+suffix;
 }
 const cacheGet = k => { try { return JSON.parse(localStorage.getItem(k)); } catch(e){ return null; } };
 const cacheSet = (k,v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} };
@@ -1130,6 +1118,15 @@ function trenchDexUrl(value){
     return '';
   }
 }
+function trenchRugUrl(value){
+  try {
+    const url=new URL(String(value||''));
+    const trusted=url.protocol==='https:' && (url.hostname==='rugcheck.xyz' || url.hostname.endsWith('.rugcheck.xyz'));
+    return trusted ? url.href : '';
+  } catch(e){
+    return '';
+  }
+}
 function trenchSymbolLink(token,className='trench-symbol'){
   const symbol=trenchEscape(token?.symbol);
   const dexUrl=trenchDexUrl(token?.dexUrl);
@@ -1178,7 +1175,11 @@ function renderTrenches(payload){
     const bubbleStatus=token?.bubblemaps?.verified
       ? ` · Bubblemaps ${trenchEscape(Math.round(Number(token.bubblemaps.score)))} / 100`
       : token?.bubblemaps?.requested ? ' · Bubblemaps Doğrulanmadı' : '';
-    return `<div class="trench-note"><strong>${trenchSymbolLink(token,'trench-note-symbol')}</strong> — ${trenchEscape(token.reason)}${bubbleStatus}; <a href="${trenchEscape(token.rugUrl)}" target="_blank" rel="noopener noreferrer">RugCheck</a> · <a href="${trenchEscape(token.dexUrl)}" target="_blank" rel="noopener noreferrer">DexScreener</a>${badges}</div>`;
+    const rugUrl=trenchRugUrl(token.rugUrl);
+    const dexUrl=trenchDexUrl(token.dexUrl);
+    const rugLink=rugUrl ? `<a href="${trenchEscape(rugUrl)}" target="_blank" rel="noopener noreferrer">RugCheck</a>` : '<span>RugCheck</span>';
+    const dexLink=dexUrl ? `<a href="${trenchEscape(dexUrl)}" target="_blank" rel="noopener noreferrer">DexScreener</a>` : '<span>DexScreener</span>';
+    return `<div class="trench-note"><strong>${trenchSymbolLink(token,'trench-note-symbol')}</strong> — ${trenchEscape(token.reason)}${bubbleStatus}; ${rugLink} · ${dexLink}${badges}</div>`;
   }).join('');
   const reasons=(payload.eliminationReasons||[]).map(item=>`${trenchEscape(item.reason)} ${Number(item.count)||0}`).join(' · ');
   const eliminated=payload.eliminatedCount
@@ -1213,7 +1214,7 @@ async function loadTrenches(force=false){
     renderTrenches(payload);
   } catch(error){
     console.warn('trenches scan failed',error);
-    if (!cached) trenchState('');
+    if (!cached) trenchState('Tarama şu anda kullanılamıyor.');
   } finally {
     trenchesLoading=false;
     if (button) button.disabled=false;
@@ -1571,36 +1572,19 @@ const bubbles = (function(){
       if (n.r >= 19){
         const fs = Math.max(9, Math.min(n.r*0.36,16));
         const maxTextWidth=n.r*1.72;
-        const priceText=bubblePriceLabel(n);
         const pctText=(n.pct>=0?'+':'')+n.pct.toFixed(1)+'%';
+        const nameFontFamily="'Avenir Next', 'Segoe UI', Arial, sans-serif";
+        const valueFontFamily="'SFMono-Regular', 'Menlo', 'Consolas', monospace";
         ctx.save();
         ctx.fillStyle = c.text;
         ctx.textAlign='center'; ctx.textBaseline='middle';
         ctx.shadowColor='transparent'; ctx.shadowBlur=0;
 
-        setFittedBubbleFont(n.base,700,fs,7.5,maxTextWidth,"'Space Grotesk', sans-serif");
-        ctx.fillText(n.base,n.x,n.y-fs*0.82);
+        const nameFont=setFittedBubbleFont(n.base,750,Math.max(10.5,fs*1.08),8.5,maxTextWidth,nameFontFamily);
+        ctx.fillText(n.base,n.x,n.y-nameFont.size*0.38);
 
-        const priceFont=setFittedBubbleFont(
-          priceText,700,Math.max(9.2,Math.min(fs*0.86,13.5)),8,n.r*1.76,"'JetBrains Mono', monospace"
-        );
-        const pillY=n.y+fs*0.01;
-        const pillHalf=Math.max(1,(priceFont.width-priceFont.size*0.28)/2);
-        ctx.save();
-        ctx.strokeStyle='rgba(255,255,255,.26)';
-        ctx.lineWidth=priceFont.size*1.42;
-        ctx.lineCap='round';
-        ctx.beginPath();
-        ctx.moveTo(n.x-pillHalf,pillY);
-        ctx.lineTo(n.x+pillHalf,pillY);
-        ctx.stroke();
-        ctx.restore();
-        ctx.fillStyle=c.text;
-        ctx.font=`700 ${priceFont.size}px 'JetBrains Mono', monospace`;
-        ctx.fillText(priceText,n.x,pillY);
-
-        setFittedBubbleFont(pctText,700,Math.max(8.5,fs*0.78),7.5,maxTextWidth,"'JetBrains Mono', monospace");
-        ctx.fillText(pctText,n.x,n.y+fs*0.84);
+        const valueFont=setFittedBubbleFont(pctText,800,Math.max(9.5,Math.min(fs*.92,14)),8.5,maxTextWidth,valueFontFamily);
+        ctx.fillText(pctText,n.x,n.y+valueFont.size*0.55);
         ctx.restore();
       }
     }
@@ -1615,11 +1599,12 @@ const bubbles = (function(){
       const suffix = hover.suffix || '';
       const fixedDigits=Number.isInteger(hover.decimals) ? hover.decimals : (isT ? 2 : null);
       const priceTxt = cur+(fixedDigits==null ? smartPrice(hover.price) : fmtNum(hover.price,fixedDigits))+suffix;
-      const hiloTxt = isT
-        ? (hover.high!=null ? `${cur}${fmtNum(hover.high,fixedDigits)}${suffix} / ${cur}${fmtNum(hover.low,fixedDigits)}${suffix}` : '—')
-        : `${fixedDigits==null?smartPrice(hover.high):fmtNum(hover.high,fixedDigits)} / ${fixedDigits==null?smartPrice(hover.low):fmtNum(hover.low,fixedDigits)}`;
-      const symLabel = isT ? (hover.full||hover.base)
-        : `${hover.base}<span style="color:var(--muted2);font-weight:500">${hover.pair||''}</span>`;
+      const formatHilo = value => value==null || !isFinite(Number(value))
+        ? '—'
+        : cur+(fixedDigits==null ? smartPrice(value) : fmtNum(value,fixedDigits))+suffix;
+      const hiloTxt = `${formatHilo(hover.high)} / ${formatHilo(hover.low)}`;
+      const symLabel = isT ? escapeHtml(hover.full||hover.base)
+        : `${escapeHtml(hover.base)}<span style="color:var(--muted2);font-weight:500">${escapeHtml(hover.pair||'')}</span>`;
       let html =
         `<div class="t-sym">${symLabel}</div>`+
         `<div class="t-row"><span class="k">Price</span><span class="num">${priceTxt}</span></div>`+
@@ -2145,13 +2130,15 @@ function performanceLoadingCards(){
   ).join('');
 }
 
-function performanceBaseline(points, target){
+function performanceBaseline(points, target, provider){
   let found = null;
   for (const point of points){
     if (point[0] <= target) found = point;
     else break;
   }
-  const maxGap = 10 * 24 * 60 * 60 * 1000;
+  const maxGap = provider === 'economic'
+    ? 45 * 24 * 60 * 60 * 1000
+    : 10 * 24 * 60 * 60 * 1000;
   return found && target - found[0] <= maxGap ? found[1] : null;
 }
 
@@ -2215,10 +2202,13 @@ async function openPerformance(asset){
   const grid = $('#performanceGrid');
   const status = $('#performanceStatus');
   const requestId = ++performanceRequestId;
+  const isEconomic = asset.historyProvider === 'economic';
   title.textContent = asset.name;
-  sub.textContent = `24H ${asset.chg>=0?'+':''}${(+asset.chg||0).toFixed(2)}% · extended performance`;
+  sub.textContent = isEconomic
+    ? `LATEST RELEASE ${asset.chg>=0?'+':''}${(+asset.chg||0).toFixed(2)} PP · monthly series`
+    : `24H ${asset.chg>=0?'+':''}${(+asset.chg||0).toFixed(2)}% · extended performance`;
   grid.innerHTML = performanceLoadingCards();
-  status.textContent = 'Loading historical closes…';
+  status.textContent = isEconomic ? 'Loading monthly economic observations…' : 'Loading historical closes…';
   status.className = 'perf-status';
   modal.hidden = false;
   $('#performanceClose').focus();
@@ -2226,7 +2216,7 @@ async function openPerformance(asset){
     const points = await loadPerformanceHistory(asset);
     if (requestId !== performanceRequestId) return;
     const cards = performanceTargets().map(period => {
-      const baseline = performanceBaseline(points, period.at);
+      const baseline = performanceBaseline(points, period.at, asset.historyProvider);
       const value = performancePct(asset.price, baseline);
       if (value == null){
         return `<div class="perf-card"><div class="perf-label">${period.label}</div><div class="perf-value na">NO DATA</div></div>`;
@@ -2234,7 +2224,9 @@ async function openPerformance(asset){
       return `<div class="perf-card"><div class="perf-label">${period.label}</div><div class="perf-value ${value>=0?'pos':'neg'}">${value>=0?'+':''}${value.toFixed(2)}%</div></div>`;
     });
     grid.innerHTML = cards.join('');
-    status.textContent = 'Calculated from historical closing prices.';
+    status.textContent = isEconomic
+      ? 'Calculated from monthly BLS observations.'
+      : 'Calculated from historical closing prices.';
   } catch(e){
     if (requestId !== performanceRequestId) return;
     grid.innerHTML = ['1 MONTH','1 YEAR','YTD'].map(label =>
@@ -2365,11 +2357,14 @@ function renderMarketTable(){
     const priceStr = fmtP(r.price)!=null ? cur+fmtP(r.price)+suffix : '<span style="color:var(--muted2)">…</span>';
     const highStr  = fmtP(r.high)!=null ? fmtP(r.high)+suffix : '—';
     const lowStr   = fmtP(r.low) !=null ? fmtP(r.low)+suffix  : '—';
-    const tag = r.cls ? `<span class="kind-tag t-${r.cls}">${r.cls}</span>` : '';
-    return `<tr class="asset-row" data-asset-id="${r.id}" draggable="true" tabindex="0" role="button" aria-label="${r.name} actions; drag to reorder">
-      <td><div class="sym-cell"><span class="rank">${i+1}</span><span class="base">${r.name}</span><span class="quote">${r.sub}</span>${tag}</div></td>
+    const safeName=escapeHtml(r.name);
+    const safeSub=escapeHtml(r.sub);
+    const safeClass=escapeHtml(r.cls);
+    const tag = r.cls ? `<span class="kind-tag t-${safeClass}">${safeClass}</span>` : '';
+    return `<tr class="asset-row" data-asset-id="${escapeHtml(r.id)}" draggable="true" tabindex="0" role="button" aria-label="${safeName} actions; drag to reorder">
+      <td><div class="sym-cell"><span class="rank">${i+1}</span><span class="base">${safeName}</span><span class="quote">${safeSub}</span>${tag}</div></td>
       <td class="pricecell num ${flash}">${priceStr}</td>
-      <td><button class="chgpill perf-trigger num ${r.chg>=0?'pos':'neg'}" type="button" data-performance-id="${r.id}" aria-label="Open ${r.name} extended performance">${r.chg>=0?'+':''}${(r.chg||0).toFixed(2)}%</button></td>
+      <td><button class="chgpill perf-trigger num ${r.chg>=0?'pos':'neg'}" type="button" data-performance-id="${escapeHtml(r.id)}" aria-label="Open ${safeName} extended performance">${r.chg>=0?'+':''}${(r.chg||0).toFixed(2)}%</button></td>
       <td class="num">${highStr}</td>
       <td class="num">${lowStr}</td>
     </tr>`;
@@ -2505,7 +2500,7 @@ async function economicQuoteOne(symbol){
 
 async function cnbcQuoteOne(sym){
   try {
-    const r = await fetch('https://quote.cnbc.com/quote-html-webservice/quote.htm?requestMethod=quick&fund=1&exthrs=1&output=json&symbols='+encodeURIComponent(sym), { cache:'no-store' });
+    const r = await fetchWithTimeout('https://quote.cnbc.com/quote-html-webservice/quote.htm?requestMethod=quick&fund=1&exthrs=1&output=json&symbols='+encodeURIComponent(sym), { cache:'no-store' }, 12000);
     if (!r.ok) return null;
     const j = await r.json();
     let q = j.QuickQuoteResult && j.QuickQuoteResult.QuickQuote; if (!q) return null;
@@ -2520,7 +2515,7 @@ async function cnbcQuoteOne(sym){
 async function commodityFallbackQuote(asset){
   if (asset?.sym!=='SILVER') return null;
   try {
-    const r=await fetch('https://api.gold-api.com/price/XAG', { cache:'no-store' });
+    const r=await fetchWithTimeout('https://api.gold-api.com/price/XAG', { cache:'no-store' }, 12000);
     if (!r.ok) return null;
     const data=await r.json();
     const price=Number(data?.price);
@@ -2554,7 +2549,7 @@ async function coinGeckoMarket(ids){
   const unique = [...new Set(ids.filter(Boolean))];
   if (!unique.length) return [];
   const url = `${COINGECKO_BASE}/coins/markets?vs_currency=usd&ids=${encodeURIComponent(unique.join(','))}&price_change_percentage=24h`;
-  const r = await fetch(url, { cache:'no-store' });
+  const r = await fetchWithTimeout(url, { cache:'no-store' }, 16000);
   if (!r.ok) throw new Error('CoinGecko HTTP '+r.status);
   const data = await r.json();
   return Array.isArray(data) ? data : [];
@@ -2565,7 +2560,7 @@ async function coinGeckoCoinOne(sym){
     const alias = COINGECKO_ALIASES[sym];
     let match = alias ? { id:alias.id, name:alias.name, symbol:sym } : null;
     if (!match){
-      const r = await fetch(`${COINGECKO_BASE}/search?query=${encodeURIComponent(sym)}`, { cache:'no-store' });
+      const r = await fetchWithTimeout(`${COINGECKO_BASE}/search?query=${encodeURIComponent(sym)}`, { cache:'no-store' }, 12000);
       if (!r.ok) throw new Error('CoinGecko search HTTP '+r.status);
       const data = await r.json();
       const exact = (Array.isArray(data.coins) ? data.coins : [])
@@ -2746,7 +2741,7 @@ async function addCustom(){
   // 3) stock via CNBC
   const quote = await cnbcQuoteOne(sym);
   if (quote){
-    customItems.push({ sym, type:'stock', name:quote.name }); customQuotes[sym] = quote; saveCustom();
+    customItems.push({ sym, type:'stock', name:quote.name, tvSymbol:sym, tvExchange:'NASDAQ' }); customQuotes[sym] = quote; saveCustom();
     $('#px-q').value=''; pxMsg(`Added ${quote.name} (${sym})`, 'ok'); renderAll();
   } else {
     pxMsg(`“${sym}” not found as a coin or stock`, 'err');
@@ -2796,7 +2791,7 @@ function updateSortIndicators(){
 /* HYPE (Hyperliquid) — not listed on Binance, sourced from CoinGecko */
 async function fetchHype(){
   try {
-    const r = await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=hyperliquid&price_change_percentage=24h');
+    const r = await fetchWithTimeout('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=hyperliquid&price_change_percentage=24h',{cache:'no-store'},12000);
     if(!r.ok) throw new Error('HTTP '+r.status);
     const c = (await r.json())[0];
     if(!c) throw new Error('empty');
@@ -2820,7 +2815,7 @@ async function fetchTradFi(){
   const refreshedCustomSymbols = new Set();
   const syms = ['.SPX','.IXIC','@CL.1','@GC.1', ...customByCnbcSymbol.keys()];   // TradFi + added stocks/commodities in one batch
   try {
-    const r = await fetch(CNBC_BASE + encodeURIComponent(syms.join('|')), { cache:'no-store' });
+    const r = await fetchWithTimeout(CNBC_BASE + encodeURIComponent(syms.join('|')), { cache:'no-store' }, 12000);
     if (!r.ok) throw new Error('HTTP '+r.status);
     const j = await r.json();
     let q = (j.QuickQuoteResult && j.QuickQuoteResult.QuickQuote) || [];
@@ -2852,7 +2847,7 @@ async function fetchTradFi(){
     if (fallback) customQuotes[item.sym]=fallback;
   }
   if (!gotGold){                                   // CORS-native fallback for gold
-    try { const r = await fetch('https://api.gold-api.com/price/XAU');
+    try { const r = await fetchWithTimeout('https://api.gold-api.com/price/XAU',{},12000);
           if (r.ok){ const g = await r.json();
             tradfiRows.GOLD = { price:g.price, chgPct:0, prev:null, high:null, low:null, vol:null }; ok++; } }
     catch(e){}

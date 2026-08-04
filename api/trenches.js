@@ -205,7 +205,9 @@ function authorityState(...values) {
 }
 
 function contradictoryAuthority(...values) {
-  const present = values.filter((value) => value !== undefined);
+  const present = values
+    .filter((value) => value !== undefined)
+    .map((value) => value === null || value === "" ? null : value);
   if (present.length < 2) return false;
   return present.some((value) => String(value) !== String(present[0]));
 }
@@ -250,7 +252,9 @@ function securitySnapshot(report) {
   const freeze = authorityState(report?.token?.freezeAuthority, report?.freezeAuthority);
   const contradictory = contradictoryAuthority(report?.token?.mintAuthority, report?.mintAuthority)
     || contradictoryAuthority(report?.token?.freezeAuthority, report?.freezeAuthority);
-  const holders = (Array.isArray(report?.topHolders) ? report.topHolders : []).filter((holder) => !knownNonHolder(report, holder));
+  const holders = (Array.isArray(report?.topHolders) ? report.topHolders : [])
+    .filter((holder) => !knownNonHolder(report, holder))
+    .sort((a, b) => number(b?.pct) - number(a?.pct));
   const top1Pct = holders.length ? number(holders[0]?.pct) : null;
   const top10Pct = holders.length ? holders.slice(0, 10).reduce((sum, holder) => sum + number(holder?.pct), 0) : null;
   const insiderPct = holders.length ? holders.filter((holder) => holder?.insider).reduce((sum, holder) => sum + number(holder?.pct), 0) : null;
@@ -521,8 +525,8 @@ function classifyPair(pair, report, discovery, bubblemapsMetrics = null, bubblem
 
   return {
     address: pair.baseToken.address,
-    symbol: (pair?.baseToken?.symbol || discovery?.symbol || "?").slice(0, 12),
-    name: (pair?.baseToken?.name || "").slice(0, 60),
+    symbol: String(pair?.baseToken?.symbol || discovery?.symbol || "?").slice(0, 12),
+    name: String(pair?.baseToken?.name || "").slice(0, 60),
     marketCap,
     liquidity,
     volume,
