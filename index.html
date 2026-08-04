@@ -583,13 +583,31 @@
   a.trench-symbol:focus-visible { outline:2px solid var(--focus); outline-offset:3px; border-radius:3px; }
   .trench-score { display:block; margin-top:3px; color:rgba(220,232,238,.72); font-size:8.5px; }
   .trench-decision { font-size:12px; }
-  .trench-note {
-    padding:9px 10px; border-bottom:1px solid rgba(255,255,255,.075); color:rgba(244,249,250,.92);
-    font:500 10.5px/1.55 'JetBrains Mono',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  .trench-decision-toggle {
+    appearance:none; border:0; border-radius:999px; padding:3px 5px; background:transparent;
+    color:inherit; font-size:16px; line-height:1; cursor:pointer; transition:transform .14s,background .14s;
   }
-  .trench-note strong { color:var(--text-bright); }
-  .trench-note a { color:#6bdcff; text-decoration:none; }
-  .trench-note a:hover { text-decoration:underline; }
+  .trench-decision-toggle:hover,
+  .trench-decision-toggle[aria-expanded="true"] { transform:scale(1.14); background:rgba(255,255,255,.10); }
+  .trench-decision-toggle:focus-visible { outline:2px solid var(--focus); outline-offset:2px; }
+  .trench-detail-row[hidden] { display:none; }
+  .trench-detail-row td {
+    padding:0 10px 9px; text-align:left; white-space:normal; overflow:visible; text-overflow:clip;
+    border-bottom:1px solid rgba(255,255,255,.09);
+  }
+  .trench-popover {
+    display:grid; gap:6px; padding:10px 12px; border:1px solid rgba(255,255,255,.18); border-radius:11px;
+    background:linear-gradient(145deg,rgba(255,255,255,.12),rgba(255,255,255,.045));
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 8px 20px rgba(0,0,0,.14);
+    color:rgba(244,249,250,.92); font:500 10px/1.5 'JetBrains Mono',monospace;
+  }
+  .trench-popover-head { display:flex; align-items:center; gap:8px; min-width:0; }
+  .trench-popover-head strong { color:var(--text-bright); }
+  .trench-popover-score { margin-left:auto; color:var(--muted); white-space:nowrap; }
+  .trench-popover-reason { color:rgba(244,249,250,.92); }
+  .trench-popover-links { color:var(--muted); white-space:normal; }
+  .trench-popover-links a { color:#6bdcff; text-decoration:none; }
+  .trench-popover-links a:hover { text-decoration:underline; }
   .trench-change { color:#ffd66b; margin-left:5px; }
   .trench-eliminated, .trench-state {
     padding:10px; color:rgba(228,238,242,.84); font:500 10.5px/1.5 'JetBrains Mono',monospace;
@@ -967,15 +985,6 @@
     #panel-trenches table.trenches td { font-size:9px; padding-top:8px; padding-bottom:8px; }
     #panel-trenches .trench-symbol { font-size:10px; }
     #panel-trenches .trench-score { font-size:7px; }
-    #panel-trenches .trench-note {
-      white-space:normal;
-      overflow:visible;
-      text-overflow:clip;
-      word-break:break-word;
-      line-height:1.45;
-      padding:8px;
-      font-size:9px;
-    }
     #panel-trenches .trench-change { display:inline; }
   }
 
@@ -1327,18 +1336,22 @@ function isTrenchesPayload(payload){
     && typeof payload.generatedAt==='string'
     && Number.isFinite(Date.parse(payload.generatedAt)));
 }
+function trenchTokenKey(token){
+  return String(token?.address||token?.symbol||'').trim();
+}
 function renderTrenches(payload,{persist=true}={}){
   const content=$('#trench-content');
   const time=$('#trench-time');
   if (!content || !time || !isTrenchesPayload(payload)) return false;
   const previousPayload=cacheGet(TRENCH_PREVIOUS_KEY);
   const previousTokens=Array.isArray(previousPayload?.tokens)?previousPayload.tokens:[];
-  const previousMap=new Map(previousTokens.filter(token=>token && typeof token==='object').map(token=>[token.address,token]));
+  const previousMap=new Map(previousTokens.filter(token=>token && typeof token==='object').map(token=>[trenchTokenKey(token),token]));
   const tokens=payload.tokens.filter(token=>token && typeof token==='object');
   const changesByAddress=new Map();
   const rows=tokens.map(token=>{
-    const changes=trenchChanges(token,previousMap.get(token.address));
-    changesByAddress.set(String(token.address||''),changes);
+    const tokenKey=trenchTokenKey(token);
+    const changes=trenchChanges(token,previousMap.get(tokenKey));
+    changesByAddress.set(tokenKey,changes);
     const decisionIcon=token.decision==='green'?'🟢':'🟡';
     return `<tr title="${trenchEscape(token.decisionLabel)}">
       <td>${trenchSymbolLink(token)}<span class="trench-score">${Number(token.score)||0}/100</span></td>
@@ -1346,17 +1359,25 @@ function renderTrenches(payload,{persist=true}={}){
       <td>${trenchMoney(token.liquidity)}</td>
       <td>${trenchMoney(token.volume?.h1)} / ${trenchMoney(token.volume?.h6)} / ${trenchMoney(token.volume?.h24)}</td>
       <td><span class="${Number(token.price?.h6)>=0?'pos':'neg'}">${trenchPercent(token.price?.h6)}</span> / <span class="${Number(token.price?.h24)>=0?'pos':'neg'}">${trenchPercent(token.price?.h24)}</span></td>
-      <td class="trench-decision">${decisionIcon}</td>
+      <td class="trench-decision"><button class="trench-decision-toggle" type="button" data-trench-info="${trenchEscape(tokenKey)}" aria-expanded="false" title="Detayları göster" aria-label="${trenchEscape(token.symbol||'Token')} detaylarını göster">${decisionIcon}</button></td>
     </tr>`;
   }).join('');
-  const notes=tokens.map(token=>{
-    const changes=changesByAddress.get(String(token.address||'')) || [];
+  const details=tokens.map(token=>{
+    const tokenKey=trenchTokenKey(token);
+    const detailId=`trench-detail-${tokenKey}`;
+    const changes=changesByAddress.get(tokenKey) || [];
     const badges=changes.length?`<span class="trench-change">${changes.map(trenchEscape).join(' · ')}</span>`:'';
     const bubbleStatus=token?.bubblemaps?.verified
       ? ` · Bubblemaps ${trenchEscape(Math.round(Number(token.bubblemaps.score)))} / 100`
       : token?.bubblemaps?.requested ? ' · Bubblemaps Doğrulanmadı' : '';
     const externalLinks=trenchExternalLinks(token);
-    return `<div class="trench-note"><strong>${trenchSymbolLink(token,'trench-note-symbol')}</strong> — ${trenchEscape(token.reason)}${bubbleStatus}; ${externalLinks}${badges}</div>`;
+    return `<tr class="trench-detail-row" id="${trenchEscape(detailId)}" data-trench-detail="${trenchEscape(tokenKey)}" hidden>
+      <td colspan="6"><div class="trench-popover">
+        <div class="trench-popover-head"><strong>${trenchSymbolLink(token,'trench-symbol')}</strong><span class="trench-popover-score">${trenchEscape(token.decisionLabel||'Karar')} · ${Number(token.score)||0}/100</span></div>
+        <div class="trench-popover-reason">${trenchEscape(token.reason)}${bubbleStatus}${badges}</div>
+        <div class="trench-popover-links">${externalLinks}</div>
+      </div></td>
+    </tr>`;
   }).join('');
   const reasons=(Array.isArray(payload.eliminationReasons)?payload.eliminationReasons:[])
     .map(item=>`${trenchEscape(item?.reason)} ${Number(item?.count)||0}`).join(' · ');
@@ -1365,8 +1386,8 @@ function renderTrenches(payload,{persist=true}={}){
   const warning=payload.warning?`<div class="trench-state">${trenchEscape(payload.warning)}</div>`:'';
   const empty=!tokens.length?'<div class="trench-state">Uygun 🟢 veya 🟡 sonuç bulunamadı.</div>':'';
   content.outerHTML=`<div id="trench-content">
-    <table class="trenches" aria-label="SOL Meme Trenches results"><thead><tr><th>Token</th><th>MC</th><th>LP</th><th>Hacim 1s / 6s / 24s</th><th>Fiyat 6s / 24s</th><th>Karar</th></tr></thead><tbody>${rows}</tbody></table>
-    ${empty}${notes}${eliminated}${warning}
+    <table class="trenches" aria-label="SOL Meme Trenches results"><thead><tr><th>Token</th><th>MC</th><th>LP</th><th>Hacim 1s / 6s / 24s</th><th>Fiyat 6s / 24s</th><th>Karar</th></tr></thead><tbody>${rows}${details}</tbody></table>
+    ${empty}${eliminated}${warning}
   </div>`;
   const date=new Date(payload.generatedAt);
   time.textContent=isNaN(date)?'—':date.toLocaleString('tr-TR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
@@ -1376,6 +1397,34 @@ function renderTrenches(payload,{persist=true}={}){
   }
   return true;
 }
+const trenchScroll=$('#trench-scroll');
+function closeTrenchDetails(){
+  trenchScroll?.querySelectorAll('.trench-detail-row').forEach(row=>{ row.hidden=true; });
+  trenchScroll?.querySelectorAll('.trench-decision-toggle').forEach(button=>button.setAttribute('aria-expanded','false'));
+}
+trenchScroll?.addEventListener('click',event=>{
+  const toggle=event.target.closest?.('.trench-decision-toggle');
+  if (!toggle) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const key=toggle.dataset.trenchInfo||'';
+  const detail=[...trenchScroll.querySelectorAll('.trench-detail-row')]
+    .find(row=>row.dataset.trenchDetail===key);
+  if (!detail) return;
+  const willOpen=detail.hidden;
+  closeTrenchDetails();
+  if (willOpen){
+    detail.hidden=false;
+    toggle.setAttribute('aria-expanded','true');
+    detail.scrollIntoView({behavior:'smooth',block:'nearest'});
+  }
+});
+document.addEventListener('click',event=>{
+  if (trenchScroll && !trenchScroll.contains(event.target)) closeTrenchDetails();
+});
+document.addEventListener('keydown',event=>{
+  if (event.key==='Escape') closeTrenchDetails();
+});
 function trenchState(message,isError=false){
   const content=$('#trench-content');
   if (content) content.outerHTML=`<div id="trench-content" class="trench-state${isError?' err':''}">${trenchEscape(message)}</div>`;
