@@ -1538,6 +1538,11 @@ function renderAll(){
 // bubble dataset = everything in the Prices table (crypto + TradFi),
 // sized by |24h % change| → biggest movers (up OR down) get the biggest bubbles.
 const TRADFI_BUBBLE = { SPX:'S&P', NDX:'NASDAQ', GOLD:'GOLD', OIL:'OIL' };
+const BUBBLE_LOGO_CDN = 'https://cdn.jsdelivr.net/gh/spothq/cryptocurrency-icons@master/128/color';
+function bubbleLogoUrl(symbol){
+  const key=String(symbol||'').trim().toLowerCase().replace(/[^a-z0-9]/g,'');
+  return key.length >= 2 && key.length <= 12 ? `${BUBBLE_LOGO_CDN}/${key}.png` : null;
+}
 function refreshBubbles(){
   const items = [];
   CRYPTO_LIST.forEach(c => {
@@ -1545,12 +1550,12 @@ function refreshBubbles(){
     const t = tickerMap[c.base];
     if (!t) return;
     const pct = +t.priceChangePercent;
-    items.push({ id:c.base, base:c.base, name:c.base, pair:'/USDT', kind:'crypto', cls:'COIN', usd:true, pct,
+    items.push({ id:c.base, base:c.base, name:c.base, pair:'/USDT', kind:'crypto', cls:'COIN', usd:true, logoUrl:bubbleLogoUrl(c.base), pct,
       price:+t.lastPrice, vol:+t.quoteVolume, high:+t.highPrice, low:+t.lowPrice, size:Math.abs(pct) });
   });
   if (hypeRow && !isAssetHidden('HYPE')){
     const pct = finiteValue(hypeRow.chg,0);
-    items.push({ id:'HYPE', base:'HYPE', name:'HYPE', pair:'/USD', kind:'crypto', cls:'COIN', usd:true, pct,
+    items.push({ id:'HYPE', base:'HYPE', name:'HYPE', pair:'/USD', kind:'crypto', cls:'COIN', usd:true, logoUrl:hypeRow.logo || bubbleLogoUrl('HYPE'), pct,
       price:finiteValue(hypeRow.price), vol:finiteValue(hypeRow.vol), high:finiteValue(hypeRow.high), low:finiteValue(hypeRow.low), size:Math.abs(pct) });
   }
   TRADFI.forEach(f => {
@@ -1594,7 +1599,51 @@ const bubbles = (function(){
   let drag = null;   // { node, dx, dy, lastX, lastY } while a bubble is being dragged
   let animationFrame=0, lastFrameAt=0, pageVisible=!document.hidden;
   let tooltipKey='', tooltipSize={ width:0, height:0 }, canvasCursor='default';
+  const logoCache = new Map();
+  const MAX_BUBBLE_LOGOS = 48;
   const EDGE = 12, EDGE_TOP = 12;   // keep bubbles inside the canvas
+
+  function nodeLogoUrl(item){
+    if (item.logoUrl) return item.logoUrl;
+    return item.kind === 'crypto' ? bubbleLogoUrl(item.rmsym || item.base) : null;
+  }
+
+  function pruneLogoCache(items){
+    const active = new Set(items.map(nodeLogoUrl).filter(Boolean));
+    for (const [url, entry] of logoCache){
+      if (!active.has(url)){
+        entry.image.src='';
+        logoCache.delete(url);
+      }
+    }
+    while (logoCache.size > MAX_BUBBLE_LOGOS){
+      const oldest = logoCache.keys().next().value;
+      if (!oldest) break;
+      const entry=logoCache.get(oldest);
+      entry?.image && (entry.image.src='');
+      logoCache.delete(oldest);
+    }
+  }
+
+  function loadNodeLogo(node){
+    if (node.r < 28) return null;
+    const url=nodeLogoUrl(node);
+    if (!url) return null;
+    let entry=logoCache.get(url);
+    if (!entry){
+      const image=new Image();
+      entry={ image, state:'loading' };
+      logoCache.set(url,entry);
+      image.decoding='async';
+      image.onload=()=>{
+        entry.state='ready';
+        if (pageVisible && !animationFrame) animationFrame=requestAnimationFrame(loop);
+      };
+      image.onerror=()=>{ entry.state='failed'; };
+      image.src=url;
+    }
+    return entry.state==='ready' ? entry.image : null;
+  }
 
   function setCanvasCursor(value){
     if (canvasCursor === value) return;
@@ -1632,6 +1681,7 @@ const bubbles = (function(){
   // `size` (= |24h % change|) drives the radius; `vol` is shown in the tooltip only.
   function setData(items){
     raw = items;
+    pruneLogoCache(raw);
     if (!raw.length){ nodes=[]; return; }
     layoutRadii();
   }
@@ -1661,7 +1711,7 @@ const bubbles = (function(){
         id:c.id||base, base, name:c.name||c.full||base, cls:c.cls,
         pair:c.pair, pct:c.pct, kind:c.kind, usd:c.usd, full:c.full, decimals:c.decimals, suffix:c.suffix,
         custom:Boolean(c.custom), rmsym:c.rmsym, source:c.source, cgId:c.cgId,
-        tvSymbol:c.tvSymbol, tvExchange:c.tvExchange,
+        tvSymbol:c.tvSymbol, tvExchange:c.tvExchange, logoUrl:c.logoUrl || '',
         price: c.price, vol: c.vol,
         high: c.high, low: c.low,
         r,
@@ -1763,73 +1813,56 @@ const bubbles = (function(){
     const hover = mouse.over ? bubbleAt(mouse.x, mouse.y) : null;
     for (const n of nodes){
       const c = colorFor(n.pct);
+      // One compact gradient and two clipped highlights keep the Crypto
+      // Bubbles look while avoiding per-frame shadows and extra gradients.
       const grad = ctx.createRadialGradient(
-        n.x-n.r*0.36, n.y-n.r*0.42, n.r*0.03,
-        n.x+n.r*0.12, n.y+n.r*0.14, n.r*1.08
+        n.x-n.r*0.34, n.y-n.r*0.38, n.r*0.04,
+        n.x+n.r*0.10, n.y+n.r*0.12, n.r*1.06
       );
       grad.addColorStop(0, c.core);
-      grad.addColorStop(0.34, c.core);
-      grad.addColorStop(0.62, c.body);
+      grad.addColorStop(0.58, c.body);
       grad.addColorStop(1, c.edge);
-
-      // Directional body gradient creates depth without a detached floor shadow.
-      ctx.save();
-      ctx.shadowColor = c.glow;
-      ctx.shadowBlur = Math.max(14,Math.min(22,n.r*0.34));
-      ctx.shadowOffsetY = 0;
       ctx.beginPath();
       ctx.arc(n.x, n.y, n.r, 0, Math.PI*2);
-      ctx.fillStyle = grad;
+      ctx.fillStyle=grad;
       ctx.fill();
-      ctx.restore();
 
-      // Glassy highlight, lower vignette and soft reflected light stay clipped
-      // inside the bubble so the surface reads as a polished 3D object.
       ctx.save();
       ctx.beginPath();
       ctx.arc(n.x,n.y,n.r-0.7,0,Math.PI*2);
       ctx.clip();
-      const depth=ctx.createLinearGradient(n.x,n.y-n.r,n.x,n.y+n.r);
-      depth.addColorStop(0,'rgba(255,255,255,.10)');
-      depth.addColorStop(0.52,'rgba(255,255,255,0)');
-      depth.addColorStop(1,'rgba(0,0,0,.11)');
-      ctx.fillStyle=depth;
-      ctx.fillRect(n.x-n.r,n.y-n.r,n.r*2,n.r*2);
-
-      const gloss=ctx.createRadialGradient(
-        n.x-n.r*0.38,n.y-n.r*0.43,0,
-        n.x-n.r*0.32,n.y-n.r*0.34,n.r*0.72
-      );
-      gloss.addColorStop(0,'rgba(255,255,255,.72)');
-      gloss.addColorStop(0.16,'rgba(255,255,255,.30)');
-      gloss.addColorStop(0.52,'rgba(255,255,255,.06)');
-      gloss.addColorStop(1,'rgba(255,255,255,0)');
-      ctx.fillStyle=gloss;
-      ctx.fillRect(n.x-n.r,n.y-n.r,n.r*2,n.r*2);
-
       ctx.beginPath();
-      ctx.ellipse(n.x-n.r*0.30,n.y-n.r*0.38,n.r*0.22,n.r*0.095,-0.42,0,Math.PI*2);
-      ctx.fillStyle='rgba(255,255,255,.40)';
+      ctx.ellipse(n.x-n.r*0.32,n.y-n.r*0.38,n.r*0.25,n.r*0.11,-0.42,0,Math.PI*2);
+      ctx.fillStyle='rgba(255,255,255,.32)';
       ctx.fill();
-
-      const reflection=ctx.createRadialGradient(
-        n.x+n.r*0.16,n.y+n.r*0.68,0,
-        n.x+n.r*0.16,n.y+n.r*0.68,n.r*0.62
-      );
-      reflection.addColorStop(0,'rgba(255,255,255,.13)');
-      reflection.addColorStop(1,'rgba(255,255,255,0)');
-      ctx.fillStyle=reflection;
-      ctx.fillRect(n.x-n.r,n.y,n.r*2,n.r);
+      ctx.beginPath();
+      ctx.ellipse(n.x+n.r*0.16,n.y+n.r*0.66,n.r*0.72,n.r*0.28,0,0,Math.PI*2);
+      ctx.fillStyle='rgba(0,0,0,.10)';
+      ctx.fill();
       ctx.restore();
 
-      // A single restrained outline keeps the sphere clean without split arcs.
-      ctx.save();
-      ctx.lineWidth=0.7;
-      ctx.strokeStyle='rgba(255,255,255,.20)';
+      ctx.lineWidth=0.8;
+      ctx.strokeStyle='rgba(255,255,255,.28)';
       ctx.beginPath();
       ctx.arc(n.x,n.y,n.r-0.65,0,Math.PI*2);
       ctx.stroke();
-      ctx.restore();
+
+      const logo=loadNodeLogo(n);
+      const hasLogo=Boolean(logo);
+      if (hasLogo){
+        const logoSize=Math.min(42,n.r*0.58);
+        const logoY=n.y-n.r*0.31;
+        ctx.beginPath();
+        ctx.arc(n.x,logoY,logoSize*0.56,0,Math.PI*2);
+        ctx.fillStyle='rgba(255,255,255,.90)';
+        ctx.fill();
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(n.x,logoY,logoSize*0.48,0,Math.PI*2);
+        ctx.clip();
+        ctx.drawImage(logo,n.x-logoSize*0.48,logoY-logoSize*0.48,logoSize,logoSize);
+        ctx.restore();
+      }
       // labels
       if (n.r >= 19){
         const fs = Math.max(9, Math.min(n.r*0.36,16));
@@ -1843,10 +1876,12 @@ const bubbles = (function(){
         ctx.shadowColor='transparent'; ctx.shadowBlur=0;
 
         const nameFont=setFittedBubbleFont(n.base,750,Math.max(10.5,fs*1.08),8.5,maxTextWidth,nameFontFamily);
-        ctx.fillText(n.base,n.x,n.y-nameFont.size*0.38);
+        const nameY=hasLogo ? n.y+n.r*0.18 : n.y-nameFont.size*0.38;
+        ctx.fillText(n.base,n.x,nameY);
 
         const valueFont=setFittedBubbleFont(pctText,800,Math.max(9.5,Math.min(fs*.92,14)),8.5,maxTextWidth,valueFontFamily);
-        ctx.fillText(pctText,n.x,n.y+valueFont.size*0.55);
+        const valueY=hasLogo ? n.y+n.r*0.47 : n.y+valueFont.size*0.55;
+        ctx.fillText(pctText,n.x,valueY);
         ctx.restore();
       }
     }
@@ -2088,6 +2123,7 @@ function normalizeCustomItem(item){
     binanceSymbol:persistedText(item.binanceSymbol,32).toUpperCase(),
     tvSymbol:persistedText(item.tvSymbol,40),
     tvExchange:persistedText(item.tvExchange,32),
+    logoUrl:persistedText(item.logoUrl,240),
     usd:item.usd !== false,
     decimals:Number.isInteger(item.decimals) && item.decimals >= 0 && item.decimals <= 12 ? item.decimals : undefined,
     suffix:persistedText(item.suffix,8)
@@ -2180,6 +2216,7 @@ function customAssetSnapshot(c){
     cgId:c.cgId,
     tvSymbol:c.tvSymbol,
     tvExchange:c.tvExchange,
+    logoUrl:c.logoUrl || '',
     usd:c.usd !== false,
     decimals:c.decimals,
     suffix:c.suffix || ''
@@ -3012,6 +3049,7 @@ async function coinGeckoCoinOne(sym){
         source:'coingecko',
         cgId:match.id,
         name:match.name || sym,
+        logoUrl:market?.image || '',
         tvSymbol:alias && alias.tvSymbol,
         tvExchange:alias && alias.tvExchange
       },
@@ -3235,7 +3273,7 @@ async function fetchHype(){
     const c = Array.isArray(payload) ? payload[0] : null;
     const price=finiteValue(c?.current_price);
     if(price===null) throw new Error('empty or invalid');
-    hypeRow = { price, chg:finiteValue(c.price_change_percentage_24h,0), high:finiteValue(c.high_24h), low:finiteValue(c.low_24h), vol:finiteValue(c.total_volume), mcap:finiteValue(c.market_cap,0) };
+    hypeRow = { price, chg:finiteValue(c.price_change_percentage_24h,0), high:finiteValue(c.high_24h), low:finiteValue(c.low_24h), vol:finiteValue(c.total_volume), mcap:finiteValue(c.market_cap,0), logo:c.image || '' };
     cacheSet('cc_hype', hypeRow);
     renderAll();
   } catch(e){ console.warn('hype failed', e); }   // fall back to cached value
