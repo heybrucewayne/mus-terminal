@@ -4,15 +4,34 @@ const DEX_BATCH_LIMIT = 30;
 const REPORT_LIMIT = 24;
 const VISIBLE_LIMIT = 12;
 const BUBBLEMAPS_LIMIT = 16;
+const BIRDEYE_LIMIT = 12;
+const GOPLUS_LIMIT = 16;
 const REQUEST_TIMEOUT_MS = 8500;
+const SOURCE_CACHE_MS = 10 * 60 * 1000;
 const GREEN_SCORE_MIN = 76;
 const MIN_GREEN_AGE_HOURS = 6;
 const HIGH_RUGCHECK_RISK = 70;
 const BUBBLEMAPS_API_KEY = typeof process !== "undefined"
   ? String(process.env?.BUBBLEMAPS_API_KEY || "").trim()
   : "";
+const BIRDEYE_API_KEY = typeof process !== "undefined"
+  ? String(process.env?.BIRDEYE_API_KEY || "").trim()
+  : "";
+const GOPLUS_API_TOKEN = typeof process !== "undefined"
+  ? String(process.env?.GOPLUS_API_TOKEN || "").trim()
+  : "";
+const HELIUS_API_KEY = typeof process !== "undefined"
+  ? String(process.env?.HELIUS_API_KEY || "").trim()
+  : "";
+const SOLANA_RPC_URL = typeof process !== "undefined"
+  ? String(process.env?.SOLANA_RPC_URL || "").trim()
+  : "";
+const ONCHAIN_RPC_URL = SOLANA_RPC_URL || (HELIUS_API_KEY
+  ? `https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(HELIUS_API_KEY)}`
+  : "");
 
 let runtimeCache = { updatedAt: 0, payload: null };
+const sourceCache = new Map();
 
 const number = (value) => {
   const parsed = Number(value);
@@ -22,14 +41,15 @@ const number = (value) => {
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const addressPattern = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
-async function fetchJson(url, timeout = REQUEST_TIMEOUT_MS, extraHeaders = {}) {
+async function fetchJson(url, timeout = REQUEST_TIMEOUT_MS, extraHeaders = {}, init = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
 
   try {
     const response = await fetch(url, {
+      ...init,
       signal: controller.signal,
-      headers: { Accept: "application/json", "User-Agent": "MUS-Terminal/1.0", ...extraHeaders }
+      headers: { Accept: "application/json", "User-Agent": "MUS-Terminal/1.0", ...(init.headers || {}), ...extraHeaders }
     });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return await response.json();
@@ -38,11 +58,19 @@ async function fetchJson(url, timeout = REQUEST_TIMEOUT_MS, extraHeaders = {}) {
   }
 }
 
+async function cachedSource(key, worker, ttl = SOURCE_CACHE_MS) {
+  const hit = sourceCache.get(key);
+  if (hit && Date.now() - hit.updatedAt < ttl) return hit.value;
+  const value = await worker();
+  if (value?.ok || value?.verified) sourceCache.set(key, { updatedAt: Date.now(), value });
+  return value;
+}
+
 async function settleJson(url, options = {}) {
   try {
     return {
       ok: true,
-      data: await fetchJson(url, options.timeout || REQUEST_TIMEOUT_MS, options.headers || {})
+      data: await fetchJson(url, options.timeout || REQUEST_TIMEOUT_MS, options.headers || {}, options.init || {})
     };
   } catch (error) {
     return { ok: false, data: null, error: error?.name === "AbortError" ? "timeout" : error?.message || "request failed" };
@@ -124,6 +152,222 @@ function optionalNumber(value) {
   if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function firstArray(...values) {
+  return values.find((value) => Array.isArray(value)) || [];
+}
+
+function responseData(payload) {
+  if (payload?.data && typeof payload.data === "object") return payload.data;
+  if (payload?.result && typeof payload.result === "object") return payload.result;
+  return payload || {};
+}
+
+function providerPercent(value, fraction = false) {
+  const parsed = optionalNumber(value);
+  if (parsed === null) return null;
+  return fraction && parsed >= 0 && parsed <= 1 ? parsed * 100 : parsed;
+}
+
+function providerStatus(value) {
+  if (value === undefined || value === null || value === "") return "unknown";
+  const normalized = String(value).toLowerCase();
+  if (["1", "true", "open", "enabled", "available"].includes(normalized)) return "open";
+  if (["0", "false", "closed", "disabled", "revoked"].includes(normalized)) return "revoked";
+  return "unknown";
+}
+
+function emptyBirdeyeSnapshot(requested = false) {
+  return {
+    requested,
+    verified: false,
+    top1Pct: null,
+    top10Pct: null,
+    holderCount: null,
+    firstBuyersVerified: false,
+    firstBuyerCount: 0,
+    bundlerCount: 0,
+    insiderCount: 0,
+    devCount: 0,
+    sniperCount: 0,
+    smartTraderCount: 0,
+    buyMoreCount: 0,
+    holdCount: 0,
+    sellPartialCount: 0,
+    sellAllCount: 0,
+    bundledRatio: null,
+    notableRisk: requested ? "Birdeye verisi Doğrulanmadı" : "Birdeye etkin değil"
+  };
+}
+
+function parseBirdeyeHolder(payload) {
+  const data = responseData(payload);
+  const summary = data?.summary || data?.stats || {};
+  const holders = firstArray(data?.items, data?.holders, data?.list, data?.data);
+  const percentages = holders
+    .map((holder) => providerPercent(holder?.percent_of_supply ?? holder?.percentage ?? holder?.percent ?? holder?.pct))
+    .filter((value) => value !== null);
+  const top1Pct = percentages.length ? Math.max(...percentages) : null;
+  const summaryPct = providerPercent(summary?.percent_of_supply ?? summary?.percentage ?? summary?.percent);
+  const top10Pct = summaryPct !== null ? summaryPct : percentages.length ? percentages.reduce((sum, value) => sum + value, 0) : null;
+  return {
+    verified: top10Pct !== null || holders.length > 0,
+    top1Pct,
+    top10Pct,
+    holderCount: optionalNumber(summary?.wallet_count ?? summary?.holder_count ?? summary?.count)
+  };
+}
+
+function parseBirdeyeFirstBuyers(payload) {
+  const data = responseData(payload);
+  const summary = data?.summary || data?.stats || {};
+  const buyers = firstArray(data?.items, data?.buyers, data?.first_buyers, data?.list);
+  const tagCounts = { bundler: 0, insider: 0, dev: 0, sniper: 0, smartTrader: 0 };
+  const statusCounts = { buyMore: 0, hold: 0, sellPartial: 0, sellAll: 0 };
+  for (const buyer of buyers) {
+    const tags = [buyer?.tag, buyer?.tags, buyer?.labels, buyer?.wallet_tags]
+      .flatMap((value) => Array.isArray(value) ? value : [value])
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    for (const key of ["bundler", "insider", "dev", "sniper"]) {
+      if (tags.includes(key)) tagCounts[key] += 1;
+    }
+    if (tags.includes("smart_trader") || tags.includes("smart trader")) tagCounts.smartTrader += 1;
+    const status = String(buyer?.position_status ?? buyer?.positionStatus ?? buyer?.status ?? "").toLowerCase();
+    if (status === "buy_more") statusCounts.buyMore += 1;
+    else if (status === "hold") statusCounts.hold += 1;
+    else if (status === "sell_partial") statusCounts.sellPartial += 1;
+    else if (status === "sell_all") statusCounts.sellAll += 1;
+  }
+  const summaryCount = optionalNumber(summary?.total_count ?? summary?.count ?? summary?.buyer_count);
+  const firstBuyerCount = buyers.length || summaryCount || 0;
+  return {
+    verified: buyers.length > 0 || summaryCount !== null,
+    firstBuyerCount,
+    bundlerCount: tagCounts.bundler,
+    insiderCount: tagCounts.insider,
+    devCount: tagCounts.dev,
+    sniperCount: tagCounts.sniper,
+    smartTraderCount: tagCounts.smartTrader,
+    buyMoreCount: statusCounts.buyMore,
+    holdCount: statusCounts.hold,
+    sellPartialCount: statusCounts.sellPartial,
+    sellAllCount: statusCounts.sellAll,
+    bundledRatio: firstBuyerCount ? tagCounts.bundler / firstBuyerCount : null
+  };
+}
+
+async function fetchBirdeye(address) {
+  if (!BIRDEYE_API_KEY) return { holder: emptyBirdeyeSnapshot(false), firstBuyers: emptyBirdeyeSnapshot(false) };
+  return cachedSource(`birdeye:${address}`, async () => {
+    const query = new URLSearchParams({
+      token_address: address,
+      address_type: "wallet",
+      mode: "top",
+      top_n: "10",
+      include_list: "true",
+      limit: "10"
+    });
+    const headers = { "X-API-KEY": BIRDEYE_API_KEY, "x-chain": "solana" };
+    const [holderResult, buyersResult] = await Promise.all([
+      settleJson(`https://public-api.birdeye.so/holder/v1/distribution?${query}`, { headers }),
+      settleJson(`https://public-api.birdeye.so/token/v1/first-buyers?token_address=${encodeURIComponent(address)}&offset=0&limit=50`, { headers })
+    ]);
+    return {
+      ok: holderResult.ok || buyersResult.ok,
+      holder: holderResult.ok ? parseBirdeyeHolder(holderResult.data) : emptyBirdeyeSnapshot(true),
+      firstBuyers: buyersResult.ok ? parseBirdeyeFirstBuyers(buyersResult.data) : { verified: false, firstBuyerCount: 0, bundlerCount: 0, insiderCount: 0, devCount: 0, sniperCount: 0, smartTraderCount: 0, buyMoreCount: 0, holdCount: 0, sellPartialCount: 0, sellAllCount: 0, bundledRatio: null }
+    };
+  });
+}
+
+function parseGoplus(payload, address) {
+  const data = responseData(payload);
+  const token = data?.[address] || data?.[address.toLowerCase()] || (data?.token_security && (data.token_security[address] || data.token_security[address.toLowerCase()])) || (Array.isArray(data) ? data[0] : data);
+  if (!token || typeof token !== "object") return { verified: false, mint: "unknown", freeze: "unknown", top1Pct: null, top10Pct: null, lpLockedPct: null, creatorMalicious: false, transferHookMalicious: false, notableRisk: "GoPlus verisi Doğrulanmadı" };
+  const holders = firstArray(token?.holders, token?.top_holders).map((holder) => providerPercent(holder?.percent, true)).filter((value) => value !== null);
+  const lpHolders = firstArray(token?.lp_holders, token?.lpHolders);
+  const lpLockedPct = lpHolders.length
+    ? lpHolders.filter((holder) => providerStatus(holder?.is_locked) === "open").reduce((sum, holder) => sum + (providerPercent(holder?.percent, true) || 0), 0)
+    : null;
+  const risks = [
+    token?.other_potential_risks,
+    token?.note,
+    token?.transfer_hook?.malicious_address === "1" ? "malicious transfer hook" : "",
+    token?.creator?.malicious_address === "1" ? "malicious creator" : ""
+  ].filter(Boolean).join(" ");
+  const mint = providerStatus(token?.mintable?.status ?? token?.mintable);
+  const freeze = providerStatus(token?.freezable?.status ?? token?.freezable);
+  return {
+    verified: Boolean(token?.metadata || token?.mintable || token?.freezable || holders.length || token?.dexname),
+    mint,
+    freeze,
+    top1Pct: holders.length ? Math.max(...holders) : null,
+    top10Pct: holders.length ? holders.reduce((sum, value) => sum + value, 0) : null,
+    lpLockedPct,
+    creatorMalicious: String(token?.creator?.malicious_address || "") === "1",
+    transferHookMalicious: String(token?.transfer_hook?.malicious_address || "") === "1",
+    metadataMutable: providerStatus(token?.metadata_mutable?.status ?? token?.metadata_mutable),
+    transferFeeRate: optionalNumber(token?.transfer_fee?.current_fee_rate),
+    notableRisk: risks || "Belirgin GoPlus uyarısı yok"
+  };
+}
+
+async function fetchGoplus(address) {
+  if (!GOPLUS_API_TOKEN) return { verified: false, mint: "unknown", freeze: "unknown", top1Pct: null, top10Pct: null, lpLockedPct: null, notableRisk: "GoPlus etkin değil" };
+  return cachedSource(`goplus:${address}`, async () => {
+    const authorization = GOPLUS_API_TOKEN.toLowerCase().startsWith("bearer ")
+      ? GOPLUS_API_TOKEN
+      : `Bearer ${GOPLUS_API_TOKEN}`;
+    const result = await settleJson(
+      `https://api.gopluslabs.io/api/v1/solana/token_security?contract_addresses=${encodeURIComponent(address)}`,
+      { headers: { Authorization: authorization } }
+    );
+    return result.ok ? { ok: true, ...parseGoplus(result.data, address) } : { ok: false, verified: false, mint: "unknown", freeze: "unknown", top1Pct: null, top10Pct: null, lpLockedPct: null, notableRisk: "GoPlus verisi Doğrulanmadı" };
+  });
+}
+
+function parseMintAuthorities(accountInfo) {
+  const raw = accountInfo?.value?.data;
+  if (!Array.isArray(raw) || raw[1] !== "base64" || typeof Buffer === "undefined") return { mint: "unknown", freeze: "unknown" };
+  const bytes = Buffer.from(raw[0], "base64");
+  if (bytes.length < 82) return { mint: "unknown", freeze: "unknown" };
+  const optionAt = (offset) => bytes.readUInt32LE(offset) === 0 ? "revoked" : "open";
+  return { mint: optionAt(0), freeze: optionAt(46) };
+}
+
+async function fetchOnchain(address) {
+  if (!ONCHAIN_RPC_URL) return { verified: false, mint: "unknown", freeze: "unknown", top1Pct: null, top10Pct: null, notableRisk: "On-chain doğrulama etkin değil" };
+  return cachedSource(`onchain:${address}`, async () => {
+    const batch = [
+      { jsonrpc: "2.0", id: 1, method: "getTokenLargestAccounts", params: [address] },
+      { jsonrpc: "2.0", id: 2, method: "getTokenSupply", params: [address] },
+      { jsonrpc: "2.0", id: 3, method: "getAccountInfo", params: [address, { encoding: "base64" }] }
+    ];
+    const result = await settleJson(ONCHAIN_RPC_URL, {
+      timeout: 8000,
+      headers: { "Content-Type": "application/json" },
+      init: { method: "POST", body: JSON.stringify(batch) }
+    });
+    if (!result.ok || !Array.isArray(result.data)) return { ok: false, verified: false, mint: "unknown", freeze: "unknown", top1Pct: null, top10Pct: null, notableRisk: "On-chain verisi Doğrulanmadı" };
+    const byId = new Map(result.data.map((item) => [item.id, item.result]));
+    const supply = byId.get(2)?.value;
+    const decimals = Number(supply?.decimals);
+    const total = optionalNumber(supply?.uiAmountString ?? supply?.uiAmount);
+    const accounts = Array.isArray(byId.get(1)?.value) ? byId.get(1).value : [];
+    const amounts = accounts.map((item) => {
+      const ui = optionalNumber(item?.uiAmountString ?? item?.uiAmount);
+      if (ui !== null) return ui;
+      const rawAmount = optionalNumber(item?.amount);
+      return rawAmount !== null && Number.isFinite(decimals) ? rawAmount / (10 ** decimals) : null;
+    }).filter((value) => value !== null);
+    const top1Pct = total && amounts.length ? amounts[0] / total * 100 : null;
+    const top10Pct = total && amounts.length ? amounts.slice(0, 10).reduce((sum, value) => sum + value, 0) / total * 100 : null;
+    const authorities = parseMintAuthorities(byId.get(3));
+    return { ok: true, verified: top10Pct !== null || authorities.mint !== "unknown" || authorities.freeze !== "unknown", ...authorities, top1Pct, top10Pct, notableRisk: "On-chain doğrulama mevcut" };
+  });
 }
 
 function bubblemapsSnapshot(metrics, requested = false) {
@@ -306,6 +550,52 @@ function securitySnapshot(report) {
   };
 }
 
+function mergeSecuritySources(security, sources = {}) {
+  const holder = sources?.birdeye?.holder || emptyBirdeyeSnapshot(Boolean(BIRDEYE_API_KEY));
+  const firstBuyers = sources?.birdeye?.firstBuyers || {};
+  const birdeye = {
+    ...emptyBirdeyeSnapshot(Boolean(BIRDEYE_API_KEY)),
+    ...holder,
+    ...firstBuyers,
+    holderVerified: Boolean(holder.verified),
+    firstBuyersVerified: Boolean(firstBuyers.verified),
+    verified: Boolean(holder.verified || firstBuyers.verified)
+  };
+  const goplus = sources?.goplus || { verified: false, mint: "unknown", freeze: "unknown", top1Pct: null, top10Pct: null, lpLockedPct: null, notableRisk: GOPLUS_API_TOKEN ? "GoPlus verisi Doğrulanmadı" : "GoPlus etkin değil" };
+  const onchain = sources?.onchain || { verified: false, mint: "unknown", freeze: "unknown", top1Pct: null, top10Pct: null, notableRisk: ONCHAIN_RPC_URL ? "On-chain verisi Doğrulanmadı" : "On-chain doğrulama etkin değil" };
+  const authoritySources = [security.mint, security.freeze, birdeye.mint, birdeye.freeze, goplus.mint, goplus.freeze, onchain.mint, onchain.freeze]
+    .filter((value) => value && value !== "unknown");
+  const mintValues = [security.mint, goplus.mint, onchain.mint].filter((value) => value && value !== "unknown");
+  const freezeValues = [security.freeze, goplus.freeze, onchain.freeze].filter((value) => value && value !== "unknown");
+  const authorityConflict = new Set(mintValues).size > 1 || new Set(freezeValues).size > 1;
+  const resolvedMint = mintValues.includes("open") ? "open" : mintValues.includes("revoked") ? "revoked" : "unknown";
+  const resolvedFreeze = freezeValues.includes("open") ? "open" : freezeValues.includes("revoked") ? "revoked" : "unknown";
+  // RPC largest-account data is a useful cross-check, but may include LP or
+  // program-owned token accounts that providers exclude from holder metrics.
+  // Keep it out of the contradiction test to avoid false eliminations.
+  const holderValues = [security.top10Pct, birdeye.top10Pct, goplus.top10Pct].filter((value) => value !== null && value !== undefined);
+  const holderConflict = holderValues.length >= 2 && Math.max(...holderValues) - Math.min(...holderValues) > 25;
+  const externalVerifiedCount = [birdeye.verified, goplus.verified, onchain.verified].filter(Boolean).length;
+  const compositeVerified = !authorityConflict && !holderConflict
+    && (security.verified && externalVerifiedCount >= 1 || externalVerifiedCount >= 2);
+
+  return {
+    ...security,
+    mint: resolvedMint,
+    freeze: resolvedFreeze,
+    birdeye,
+    goplus,
+    onchain,
+    authoritySources,
+    externalVerifiedCount,
+    compositeVerified,
+    crossSourceConflict: authorityConflict || holderConflict,
+    effectiveTop1Pct: Math.max(...[security.top1Pct, birdeye.top1Pct, goplus.top1Pct].filter((value) => value !== null && value !== undefined), 0),
+    effectiveTop10Pct: Math.max(...[security.top10Pct, birdeye.top10Pct, goplus.top10Pct].filter((value) => value !== null && value !== undefined), 0),
+    notableRisk: security.verified ? security.notableRisk : birdeye.verified ? "Birdeye holder verisi mevcut" : goplus.verified ? goplus.notableRisk : onchain.notableRisk
+  };
+}
+
 function volumeSnapshot(pair, ageHours = null) {
   const m5 = number(pair?.volume?.m5);
   const h1 = number(pair?.volume?.h1);
@@ -396,6 +686,10 @@ function qualityScore({ marketCap, liquidity, lpRatio, ageHours, volume, txns, p
     + (security.freeze === "revoked" ? 2 : 0)
     + (security.lpLockedPct !== null && security.lpLockedPct >= 80 ? 3 : 0)
     + riskQuality;
+  if (security.birdeye?.holderVerified) securityScore += 1;
+  if (security.goplus?.verified) securityScore += 2;
+  if (security.onchain?.verified) securityScore += 1;
+  if (security.compositeVerified) securityScore += 2;
   securityScore -= Math.min(4, security.riskWarningCount * 2);
   if (security.copycat) securityScore -= 3;
   if (security.lowLiquidityWarning) securityScore -= 2;
@@ -404,7 +698,7 @@ function qualityScore({ marketCap, liquidity, lpRatio, ageHours, volume, txns, p
   if (security.top1Pct !== null && security.top1Pct > 12) securityScore -= 2;
   if (security.top10Pct !== null && security.top10Pct > 45) securityScore -= 2;
   if (security.insiderPct !== null && security.insiderPct > 5) securityScore -= 3;
-  securityScore = clamp(securityScore, 0, 14);
+  securityScore = clamp(securityScore, 0, 18);
 
   const components = {
     liquidity: liquidityScore,
@@ -422,7 +716,7 @@ function qualityScore({ marketCap, liquidity, lpRatio, ageHours, volume, txns, p
   };
 }
 
-function classifyPair(pair, report, discovery, bubblemapsMetrics = null, bubblemapsRequested = false) {
+function classifyPair(pair, report, discovery, bubblemapsMetrics = null, bubblemapsRequested = false, externalSources = {}) {
   const marketCap = number(pair?.marketCap) || number(pair?.fdv);
   const liquidity = number(pair?.liquidity?.usd) || number(report?.totalMarketLiquidity);
   const ageHours = pair?.pairCreatedAt ? Math.max(0, (Date.now() - number(pair.pairCreatedAt)) / 3600000) : null;
@@ -433,10 +727,11 @@ function classifyPair(pair, report, discovery, bubblemapsMetrics = null, bubblem
     h6: number(pair?.priceChange?.h6),
     h24: number(pair?.priceChange?.h24)
   };
-  const security = securitySnapshot(report);
+  const security = mergeSecuritySources(securitySnapshot(report), externalSources);
   const bubblemaps = bubblemapsSnapshot(bubblemapsMetrics, bubblemapsRequested);
   const bubbleAssessment = bubblemapsAssessment(bubblemaps, security);
   const lpRatio = marketCap ? liquidity / marketCap : 0;
+  const effectiveLpLockedPct = security.lpLockedPct !== null ? security.lpLockedPct : security.goplus?.lpLockedPct;
   const criticalLpFloor = marketCap ? Math.max(5000, Math.min(30000, marketCap * 0.005)) : 6000;
   const greenLpFloor = marketCap ? Math.max(15000, Math.min(120000, marketCap * 0.015)) : 20000;
   const unsupportedSpike = price.h6 > 100 && (volume.trend === "falling" || (marketCap && volume.h6 / marketCap < 0.12));
@@ -447,14 +742,19 @@ function classifyPair(pair, report, discovery, bubblemapsMetrics = null, bubblem
   const hardReasons = [];
 
   if (security.rugged) hardReasons.push("RugCheck rugged işareti");
-  if (security.contradictory) hardReasons.push("Çelişkili güvenlik verisi");
+  if (security.contradictory || security.crossSourceConflict) hardReasons.push("Çelişkili güvenlik verisi");
   if (security.mint === "open") hardReasons.push("Mint authority açık");
   if (security.freeze === "open") hardReasons.push("Freeze authority açık");
+  if (security.goplus?.mint === "open") hardReasons.push("GoPlus mintable açık");
+  if (security.goplus?.freeze === "open") hardReasons.push("GoPlus freezable açık");
+  if (security.goplus?.creatorMalicious) hardReasons.push("GoPlus kötü niyetli geliştirici işareti");
+  if (security.goplus?.transferHookMalicious) hardReasons.push("GoPlus kötü niyetli transfer hook");
   if (liquidity < criticalLpFloor || lpRatio > 0 && lpRatio < 0.003) hardReasons.push("Likidite çok düşük");
-  if (security.top1Pct !== null && security.top1Pct > 22) hardReasons.push("Tek holder yoğunluğu aşırı");
-  if (security.top10Pct !== null && security.top10Pct > 65) hardReasons.push("Top holder yoğunluğu aşırı");
+  if (security.effectiveTop1Pct > 22) hardReasons.push("Tek holder yoğunluğu aşırı");
+  if (security.effectiveTop10Pct > 65) hardReasons.push("Top holder yoğunluğu aşırı");
   if (security.insiderPct !== null && security.insiderPct > 15) hardReasons.push("Insider yoğunluğu yüksek");
   if (security.bundled === "flagged") hardReasons.push("Bundled buy işareti");
+  if (security.birdeye?.bundledRatio !== null && security.birdeye.bundledRatio >= 0.30) hardReasons.push("Birdeye bundled buy yoğunluğu yüksek");
   if (security.wash === "flagged") hardReasons.push("Wash trading işareti");
   if (security.devSale === "flagged") hardReasons.push("Geliştirici satışı işareti");
   if (security.creatorRugHistory) hardReasons.push("Geliştiricinin rug geçmişi");
@@ -465,9 +765,10 @@ function classifyPair(pair, report, discovery, bubblemapsMetrics = null, bubblem
   hardReasons.push(...bubbleAssessment.hardReasons);
 
   const cautionReasons = [];
-  if (!security.verified) cautionReasons.push("Güvenlik verisi Doğrulanmadı");
-  if (security.lpLockedPct === null) cautionReasons.push("LP kilidi Doğrulanmadı");
-  else if (security.lpLockedPct < 80) cautionReasons.push("LP kilidi yetersiz");
+  if (!security.compositeVerified && !bubblemaps.verified) cautionReasons.push("Bağımsız güvenlik doğrulaması Doğrulanmadı");
+  if (security.crossSourceConflict) cautionReasons.push("Güvenlik kaynakları çelişiyor");
+  if (effectiveLpLockedPct === null) cautionReasons.push("LP kilidi Doğrulanmadı");
+  else if (effectiveLpLockedPct < 80) cautionReasons.push("LP kilidi yetersiz");
   if (ageHours === null) cautionReasons.push("Token yaşı Doğrulanmadı");
   else if (ageHours < MIN_GREEN_AGE_HOURS) cautionReasons.push("Token çok yeni");
   if (liquidity < greenLpFloor || lpRatio > 0 && lpRatio < 0.01) cautionReasons.push("Yeşil için likidite yetersiz");
@@ -481,10 +782,12 @@ function classifyPair(pair, report, discovery, bubblemapsMetrics = null, bubblem
   if (security.riskScore === null) cautionReasons.push("RugCheck puanı Doğrulanmadı");
   else if (security.riskScore > 30) cautionReasons.push("RugCheck riski düşük değil");
   if (security.riskWarningCount > 0) cautionReasons.push(`RugCheck: ${security.notableRisk}`);
-  if (security.top1Pct !== null && security.top1Pct > 12) cautionReasons.push("Tek holder yoğunluğu yüksek");
-  if (security.top10Pct !== null && security.top10Pct > 45) cautionReasons.push("Top holder yoğunluğu yüksek");
+  if (security.effectiveTop1Pct > 12) cautionReasons.push("Tek holder yoğunluğu yüksek");
+  if (security.effectiveTop10Pct > 45) cautionReasons.push("Top holder yoğunluğu yüksek");
   if (security.insiderPct !== null && security.insiderPct > 5) cautionReasons.push("Insider yoğunluğu dikkat istiyor");
   if (security.graphInsiders > 10) cautionReasons.push("Cluster/insider sayısı yüksek");
+  if (security.birdeye?.bundledRatio !== null && security.birdeye.bundledRatio >= 0.15 && security.birdeye.bundledRatio < 0.30) cautionReasons.push("Birdeye bundled buy oranı yüksek");
+  if (security.birdeye?.devCount > 0 && security.birdeye.sellAllCount > 0) cautionReasons.push("Erken geliştirici/ilk alıcı çıkışı işareti");
   cautionReasons.push(...bubbleAssessment.cautionReasons);
 
   const quality = qualityScore({
@@ -503,7 +806,7 @@ function classifyPair(pair, report, discovery, bubblemapsMetrics = null, bubblem
 
   let decision = "yellow";
   if (hardReasons.length) decision = "red";
-  else if (score >= GREEN_SCORE_MIN && cautionReasons.length === 0) decision = "green";
+  else if (score >= GREEN_SCORE_MIN && cautionReasons.length === 0 && (security.compositeVerified || bubblemaps.verified)) decision = "green";
 
   const volumeComment = volume.trend === "rising"
     ? "hacim kademeli ivmeleniyor"
@@ -512,8 +815,8 @@ function classifyPair(pair, report, discovery, bubblemapsMetrics = null, bubblem
       : volume.trend === "unconfirmed"
         ? "hacim geçmişi henüz yetersiz"
         : "hacim dengeli seyrediyor";
-  const importantRisk = !security.verified
-    ? "güvenlik verisi Doğrulanmadı"
+  const importantRisk = !security.compositeVerified && !bubblemaps.verified
+    ? "bağımsız güvenlik verisi Doğrulanmadı"
     : bubblemaps.requested && !bubblemaps.verified
       ? "Bubblemaps verisi Doğrulanmadı"
       : bubblemaps.verified && bubblemaps.notableRisk !== "Belirgin Bubblemaps dağılım uyarısı yok"
@@ -537,7 +840,7 @@ function classifyPair(pair, report, discovery, bubblemapsMetrics = null, bubblem
     scoreBreakdown: { ...quality.components, bubblemaps: bubbleAssessment.adjustment, hardPenalty: -hardPenalty },
     decision,
     decisionLabel: decision === "green" ? "🟢 İzlemeye değer" : decision === "yellow" ? "🟡 Şartlı izleme" : "🔴 Elendi",
-    reason: `${volumeComment}; Mint ${security.mint === "revoked" ? "✅" : "⚠️"} Freeze ${security.freeze === "revoked" ? "✅" : "⚠️"} LP ${security.lpLockedPct !== null && security.lpLockedPct >= 80 && liquidity >= greenLpFloor ? "✅" : "⚠️"}; ${importantRisk}`,
+    reason: `${volumeComment}; Mint ${security.mint === "revoked" ? "✅" : "⚠️"} Freeze ${security.freeze === "revoked" ? "✅" : "⚠️"} LP ${effectiveLpLockedPct !== null && effectiveLpLockedPct >= 80 && liquidity >= greenLpFloor ? "✅" : "⚠️"}; ${importantRisk}`,
     hardReasons,
     cautionReasons,
     security,
@@ -615,6 +918,28 @@ async function buildScan() {
   });
   const preliminary = ranked.map((item, index) => classifyPair(item.pair, reports[index], item.discovery));
   const bubblemapsByAddress = new Map();
+  const externalByAddress = new Map();
+
+  const externalTargets = preliminary
+    .filter((token) => token.decision !== "red")
+    .sort((a, b) => b.score - a.score)
+    .slice(0, Math.max(BIRDEYE_LIMIT, GOPLUS_LIMIT));
+  if (BIRDEYE_API_KEY || GOPLUS_API_TOKEN || ONCHAIN_RPC_URL) {
+    const externalResults = await mapLimit(externalTargets, 4, async (token) => {
+      const [birdeye, goplus, onchain] = await Promise.all([
+        fetchBirdeye(token.address),
+        fetchGoplus(token.address),
+        fetchOnchain(token.address)
+      ]);
+      return { address: token.address, birdeye, goplus, onchain };
+    });
+    for (const result of externalResults) externalByAddress.set(result.address, result);
+    if (BIRDEYE_API_KEY && externalResults.some((result) => result.birdeye?.ok === false)) {
+      warnings.push("Bazı Birdeye verileri alınamadı.");
+    }
+    if (GOPLUS_API_TOKEN && externalResults.some((result) => result.goplus?.ok === false)) warnings.push("Bazı GoPlus verileri alınamadı.");
+    if (ONCHAIN_RPC_URL && externalResults.some((result) => result.onchain?.ok === false)) warnings.push("Bazı on-chain doğrulamaları alınamadı.");
+  }
 
   if (BUBBLEMAPS_API_KEY) {
     const bubbleTargets = preliminary
@@ -639,7 +964,8 @@ async function buildScan() {
     reports[index],
     item.discovery,
     bubblemapsByAddress.get(item.discovery.address) || null,
-    Boolean(BUBBLEMAPS_API_KEY)
+    Boolean(BUBBLEMAPS_API_KEY),
+    externalByAddress.get(item.discovery.address) || {}
   ));
   const visible = classified
     .filter((token) => token.decision !== "red")
@@ -648,7 +974,7 @@ async function buildScan() {
   const eliminated = classified.filter((token) => token.decision === "red");
 
   return {
-    modelVersion: 3,
+    modelVersion: 4,
     generatedAt: new Date().toISOString(),
     autoRefreshMs: 16 * 60 * 1000,
     candidateCount: candidates.length,
@@ -657,6 +983,14 @@ async function buildScan() {
     eliminatedCount: eliminated.length,
     eliminationReasons: reasonSummary(eliminated),
     bubblemapsEnabled: Boolean(BUBBLEMAPS_API_KEY),
+    providers: {
+      dexScreener: true,
+      rugCheck: true,
+      bubblemaps: Boolean(BUBBLEMAPS_API_KEY),
+      birdeye: Boolean(BIRDEYE_API_KEY),
+      goPlus: Boolean(GOPLUS_API_TOKEN),
+      onchainRpc: Boolean(ONCHAIN_RPC_URL)
+    },
     warning: warnings.length ? "Bazı veri kaynakları yanıt vermedi; mevcut verilerle tarandı." : ""
   };
 }
