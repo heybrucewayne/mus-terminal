@@ -1363,16 +1363,10 @@ function renderTrenches(payload,{persist=true}={}){
   const eliminated=payload.eliminatedCount
     ? `<div class="trench-eliminated">🔴 ${Number(payload.eliminatedCount)} elendi${reasons?` — ${reasons}`:''}</div>`:'';
   const warning=payload.warning?`<div class="trench-state">${trenchEscape(payload.warning)}</div>`:'';
-  const sourceLabels={dexScreener:'Dex',rugCheck:'Rug',geckoTerminal:'Gecko',helius:'Helius'};
-  const sourceStatus=payload.sourceStatus && typeof payload.sourceStatus==='object' ? payload.sourceStatus : {};
-  const sourceIssues=Object.entries(sourceStatus)
-    .map(([name,status])=>`${trenchEscape(sourceLabels[name]||name)}: ${trenchEscape(status?.status||'Doğrulanmadı')}`)
-    .join(' · ');
-  const sourceState=sourceIssues?`<div class="trench-state trench-source-status">Kaynaklar: ${sourceIssues}</div>`:'';
   const empty=!tokens.length?'<div class="trench-state">Uygun 🟢 veya 🟡 sonuç bulunamadı.</div>':'';
   content.outerHTML=`<div id="trench-content">
     <table class="trenches" aria-label="SOL Meme Trenches results"><thead><tr><th>Token</th><th>MC</th><th>LP</th><th>Hacim 1s / 6s / 24s</th><th>Fiyat 6s / 24s</th><th>Karar</th></tr></thead><tbody>${rows}</tbody></table>
-    ${empty}${notes}${eliminated}${warning}${sourceState}
+    ${empty}${notes}${eliminated}${warning}
   </div>`;
   const date=new Date(payload.generatedAt);
   time.textContent=isNaN(date)?'—':date.toLocaleString('tr-TR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
