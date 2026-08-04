@@ -1668,15 +1668,13 @@ async function buildScan() {
       goPlus: Boolean(GOPLUS_API_TOKEN),
       onchainRpc: Boolean(ONCHAIN_RPC_URL),
       helius: Boolean(HELIUS_API_KEY),
-      geckoTerminal: true,
-      gmgn: false
+      geckoTerminal: true
     },
     sourceStatus: {
       dexScreener: { requested: true, status: "Aktif" },
       rugCheck: { requested: true, status: reports.some((item) => !item.report) ? "Doğrulanmadı" : "Aktif" },
       geckoTerminal: { requested: true, status: sourceHealth(true, geckoResults.map((item) => item.result), (value) => Boolean(value?.verified)) },
-      helius: { requested: Boolean(HELIUS_API_KEY), status: sourceHealth(Boolean(HELIUS_API_KEY), [...externalByAddress.values()].map((item) => item.onchain), (value) => Boolean(value?.helius?.verified || value?.helius?.activity?.verified)) },
-      gmgn: { requested: false, status: "public API yok" }
+      helius: { requested: Boolean(HELIUS_API_KEY), status: sourceHealth(Boolean(HELIUS_API_KEY), [...externalByAddress.values()].map((item) => item.onchain), (value) => Boolean(value?.helius?.verified || value?.helius?.activity?.verified)) }
     },
     warning: warnings.length ? "Bazı veri kaynakları yanıt vermedi; mevcut verilerle tarandı." : ""
   };

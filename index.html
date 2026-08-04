@@ -1294,8 +1294,7 @@ function trenchExternalLinks(token){
     ['Bird',`https://birdeye.so/solana/token/${address}`,'Birdeye token analytics'],
     ['Scan',`https://solscan.io/token/${address}`,'Solscan token explorer'],
     ['Map',`https://app.bubblemaps.io/sol/token/${address}`,'Bubblemaps holder clusters'],
-    ['Gecko',`https://www.geckoterminal.com/solana/tokens/${address}`,'GeckoTerminal pool data'],
-    ['GMGN',`https://gmgn.ai/sol/token/${address}`,'GMGN token page']
+    ['Gecko',`https://www.geckoterminal.com/solana/tokens/${address}`,'GeckoTerminal pool data']
   ].filter(([,url])=>url);
   return links.map(([label,url,title]) => `<a href="${trenchEscape(url)}" target="_blank" rel="noopener noreferrer" title="${trenchEscape(title)}">${label}</a>`).join(' · ');
 }
@@ -1364,7 +1363,7 @@ function renderTrenches(payload,{persist=true}={}){
   const eliminated=payload.eliminatedCount
     ? `<div class="trench-eliminated">🔴 ${Number(payload.eliminatedCount)} elendi${reasons?` — ${reasons}`:''}</div>`:'';
   const warning=payload.warning?`<div class="trench-state">${trenchEscape(payload.warning)}</div>`:'';
-  const sourceLabels={dexScreener:'Dex',rugCheck:'Rug',geckoTerminal:'Gecko',helius:'Helius',gmgn:'GMGN'};
+  const sourceLabels={dexScreener:'Dex',rugCheck:'Rug',geckoTerminal:'Gecko',helius:'Helius'};
   const sourceStatus=payload.sourceStatus && typeof payload.sourceStatus==='object' ? payload.sourceStatus : {};
   const sourceIssues=Object.entries(sourceStatus)
     .map(([name,status])=>`${trenchEscape(sourceLabels[name]||name)}: ${trenchEscape(status?.status||'Doğrulanmadı')}`)
