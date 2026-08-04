@@ -2243,7 +2243,10 @@ function tradingViewSymbol(asset){
     return `${exchange}:${symbol}`;
   }
   const map = {
-    SPX:  'SP:SPX',
+    // TVC:SPX is the TradingView CFD/index feed that renders reliably in the
+    // embedded Advanced Chart widget; SP:SPX can resolve to a component index
+    // page but may return an empty embedded chart for some sessions.
+    SPX:  'TVC:SPX',
     NDX:  'NASDAQ:NDX',
     GOLD: 'OANDA:XAUUSD',
     OIL:  'TVC:USOIL'
