@@ -66,10 +66,11 @@
 
     applyBackground(selected);
 
-    // Warm the remaining images only after the visible page has loaded.
+    // Warm only the next couple of likely choices. Prefetching every wallpaper
+    // competes with market/API requests and can make the first interaction lag.
     window.addEventListener('load', () => {
       const warmRemaining = () => {
-        backgrounds.filter(path => path !== selected).forEach(path => {
+        backgrounds.filter(path => path !== selected).slice(0, 2).forEach(path => {
           const prefetch = document.createElement('link');
           prefetch.rel = 'prefetch';
           prefetch.as = 'image';
@@ -135,6 +136,7 @@
       radial-gradient(54% 60% at 12% 96%, rgba(255,80,130,0.46), transparent 70%),
       radial-gradient(46% 48% at 50% 50%, rgba(0,220,255,0.30), transparent 72%);
     filter: saturate(145%);
+    will-change: transform;
     animation: auroraDrift 26s ease-in-out infinite alternate;
   }
   @keyframes auroraDrift {
@@ -168,8 +170,8 @@
 
   .panel {
     background: var(--panel);
-    -webkit-backdrop-filter: blur(9px) saturate(135%);
-    backdrop-filter: blur(9px) saturate(135%);
+    -webkit-backdrop-filter: blur(7px) saturate(135%);
+    backdrop-filter: blur(7px) saturate(135%);
     border: 1px solid var(--border);
     border-radius: 16px;
     box-shadow:
@@ -211,7 +213,7 @@
     z-index: 50;
     pointer-events: none;
     background: rgba(16,22,30,.58);
-    -webkit-backdrop-filter: blur(18px) saturate(145%); backdrop-filter: blur(18px) saturate(145%);
+    -webkit-backdrop-filter: blur(12px) saturate(145%); backdrop-filter: blur(12px) saturate(145%);
     border: 1px solid var(--border);
     border-radius: 11px;
     padding: 9px 11px;
@@ -461,8 +463,8 @@
     border-radius:16px;
     background:var(--panel);
     box-shadow:0 18px 48px rgba(0,0,0,.28),inset 0 1px 0 var(--glass-highlight),inset 0 -1px 0 rgba(255,255,255,.045);
-    -webkit-backdrop-filter:blur(9px) saturate(135%);
-    backdrop-filter:blur(9px) saturate(135%);
+    -webkit-backdrop-filter:blur(7px) saturate(135%);
+    backdrop-filter:blur(7px) saturate(135%);
     color:var(--text);
     text-shadow:0 1px 3px rgba(0,0,0,.54);
   }
@@ -556,7 +558,7 @@
     letter-spacing:.08em; text-align:right; white-space:nowrap;
     border-bottom-color:rgba(255,255,255,.15);
     box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 4px 12px rgba(0,0,0,.06);
-    -webkit-backdrop-filter:blur(16px) saturate(130%); backdrop-filter:blur(16px) saturate(130%);
+    -webkit-backdrop-filter:blur(10px) saturate(130%); backdrop-filter:blur(10px) saturate(130%);
   }
   table.trenches th:first-child, table.trenches td:first-child { text-align:left; padding-left:10px; width:14%; }
   table.trenches th:nth-child(2), table.trenches td:nth-child(2) { width:12%; }
@@ -787,8 +789,8 @@
     background:linear-gradient(180deg,rgba(255,255,255,.13),rgba(255,255,255,.045));
     border-bottom-color:rgba(255,255,255,.15);
     box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 4px 12px rgba(0,0,0,.06);
-    -webkit-backdrop-filter:blur(16px) saturate(130%);
-    backdrop-filter:blur(16px) saturate(130%);
+    -webkit-backdrop-filter:blur(10px) saturate(130%);
+    backdrop-filter:blur(10px) saturate(130%);
   }
   table.ticker tbody td { padding-top:8px; padding-bottom:8px; font-size:12.5px; }
 
@@ -1239,6 +1241,7 @@ function focusTrenches(force=false){
 let tickerMap = {};        // BASE -> ticker obj (USDT quoted assets)
 let tickerSymbolMap = {};  // exact Binance symbol -> ticker obj
 let tickerFetchInFlight = false;
+let renderFrame=0;
 const EXCLUDE = /(UPUSDT|DOWNUSDT|BULLUSDT|BEARUSDT)$/;
 
 function rebuildTickerMaps(rows){
@@ -1286,8 +1289,14 @@ async function fetchTickers(){
 }
 
 function renderAll(){
-  refreshBubbles();
-  renderMarketTable();
+  // Several quote sources can resolve in the same frame. Batch their UI work
+  // so the canvas and table are rebuilt once instead of repeatedly.
+  if (renderFrame) return;
+  renderFrame=requestAnimationFrame(()=>{
+    renderFrame=0;
+    refreshBubbles();
+    renderMarketTable();
+  });
 }
 
 // bubble dataset = everything in the Prices table (crypto + TradFi),
@@ -1338,11 +1347,21 @@ const bubbles = (function(){
   const canvas = $('#bubbleCanvas');
   const ctx = canvas.getContext('2d');
   const tip = $('#bubbleTip');
-  let W=0, H=0, dpr = window.devicePixelRatio || 1;
+  // Retina displays otherwise make the canvas 4x more expensive while the
+  // bubbles are small enough that a capped backing resolution looks identical.
+  let W=0, H=0, dpr = Math.min(window.devicePixelRatio || 1, 1.5);
   let nodes = [];
   let mouse = { x:-999, y:-999, over:false };
   let drag = null;   // { node, dx, dy, lastX, lastY } while a bubble is being dragged
+  let animationFrame=0, lastFrameAt=0, pageVisible=!document.hidden;
+  let tooltipKey='', tooltipSize={ width:0, height:0 }, canvasCursor='default';
   const EDGE = 12, EDGE_TOP = 12;   // keep bubbles inside the canvas
+
+  function setCanvasCursor(value){
+    if (canvasCursor === value) return;
+    canvasCursor = value;
+    canvas.style.cursor = value;
+  }
 
   function confine(n, bounce=false){
     const minX = n.r + EDGE;
@@ -1595,7 +1614,7 @@ const bubbles = (function(){
     // tooltip + cursor
     if (drag){
       tip.style.display='none';
-      canvas.style.cursor='grabbing';
+      setCanvasCursor('grabbing');
     } else if (hover && mouse.over){
       tip.style.display='block';
       const isT = hover.kind === 'tradfi' || hover.kind === 'stock';
@@ -1615,28 +1634,52 @@ const bubbles = (function(){
         `<div class="t-row"><span class="k">24h Chg</span><span class="num ${hover.pct>=0?'pos':'neg'}">${hover.pct>=0?'+':''}${hover.pct.toFixed(2)}%</span></div>`;
       if (hover.vol) html += `<div class="t-row"><span class="k">${isT?'Volume':'24h Vol'}</span><span class="num">${isT || hover.usd===false?'':'$'}${compact(hover.vol)}</span></div>`;
       html += `<div class="t-row"><span class="k">${isT?'Day H/L':'H / L'}</span><span class="num">${hiloTxt}</span></div>`;
-      tip.innerHTML = html;
+      const nextTooltipKey = [hover.id, hover.pct, hover.price, hover.high, hover.low, hover.vol, hover.kind, hover.pair, hover.suffix].join('|');
+      if (nextTooltipKey !== tooltipKey){
+        tip.innerHTML = html;
+        tooltipKey = nextTooltipKey;
+        tooltipSize = { width:tip.offsetWidth, height:tip.offsetHeight };
+      }
       const pad=14;
       let tx = mouse.clientX + pad, ty = mouse.clientY + pad;
-      const tw = tip.offsetWidth, th = tip.offsetHeight;
+      const tw = tooltipSize.width, th = tooltipSize.height;
       if (tx + tw > window.innerWidth) tx = mouse.clientX - tw - pad;
       if (ty + th > window.innerHeight) ty = mouse.clientY - th - pad;
       tip.style.left = tx+'px'; tip.style.top = ty+'px';
-      canvas.style.cursor='grab';
+      setCanvasCursor('grab');
     } else {
       tip.style.display='none';
-      canvas.style.cursor='default';
+      setCanvasCursor('default');
     }
   }
 
-  function loop(){ step(); draw(); requestAnimationFrame(loop); }
+  function loop(timestamp){
+    animationFrame=0;
+    if (!pageVisible) return;
+    // 30fps is enough for this slow-moving layout and halves canvas work on
+    // high-refresh displays without affecting pointer interaction.
+    if (timestamp-lastFrameAt < 33){
+      animationFrame=requestAnimationFrame(loop);
+      return;
+    }
+    lastFrameAt=timestamp;
+    step(); draw();
+    animationFrame=requestAnimationFrame(loop);
+  }
+  function startLoop(){
+    if (pageVisible && !animationFrame) animationFrame=requestAnimationFrame(loop);
+  }
 
   canvas.addEventListener('mousemove', e=>{
     const r = canvas.getBoundingClientRect();
     mouse.x = e.clientX - r.left; mouse.y = e.clientY - r.top;
     mouse.clientX = e.clientX; mouse.clientY = e.clientY; mouse.over = true;
   });
-  canvas.addEventListener('mouseleave', ()=>{ mouse.over=false; });
+  canvas.addEventListener('mouseleave', ()=>{ mouse.over=false; tip.style.display='none'; tooltipKey=''; });
+  document.addEventListener('visibilitychange', ()=>{
+    pageVisible=!document.hidden;
+    if (pageVisible){ lastFrameAt=0; startLoop(); }
+  });
 
   // --- drag & drop: grab a bubble and move it anywhere ---
   function bubbleAt(mx, my){
@@ -1684,7 +1727,7 @@ const bubbles = (function(){
 
   new ResizeObserver(resize).observe(canvas.parentElement);
   setTimeout(resize, 50);
-  requestAnimationFrame(loop);
+  startLoop();
 
   return { setData };
 })();
@@ -2801,8 +2844,7 @@ async function fetchHype(){
     if(!c) throw new Error('empty');
     hypeRow = { price:c.current_price, chg:c.price_change_percentage_24h||0, high:c.high_24h, low:c.low_24h, vol:c.total_volume, mcap:c.market_cap };
     cacheSet('cc_hype', hypeRow);
-    renderMarketTable();
-    refreshBubbles();
+    renderAll();
   } catch(e){ console.warn('hype failed', e); }   // fall back to cached value
 }
 
@@ -2858,8 +2900,7 @@ async function fetchTradFi(){
   }
   if (ok) cacheSet('cc_tradfi', tradfiRows);
   cacheSet('cc_customq', customQuotes);
-  renderMarketTable();
-  refreshBubbles();
+  renderAll();
 }
 
 /* ============================================================
@@ -2898,13 +2939,23 @@ loadTrenches(false);
 setTimeout(() => { if (!Object.keys(tradfiRows).length) fetchTradFi(); }, 5000);
 setTimeout(() => { if (!Object.keys(tradfiRows).length) fetchTradFi(); }, 15000);
 
-setInterval(fetchTickers, 5000);      // 5s price refresh (Binance)
-setInterval(fetchHype, 60*1000);      // 60s (CoinGecko — HYPE)
-setInterval(fetchCustomCoinGecko, 60*1000); // 60s (added CoinGecko coins)
-setInterval(fetchCustomForex, 60*1000); // 60s (added FX pairs)
-setInterval(fetchCustomEconomic, 60*60*1000); // 60m (BLS economic indicators)
-setInterval(fetchTradFi, 60*1000);    // 60s (CNBC — S&P/NASDAQ/Gold/Oil)
-setInterval(() => loadTrenches(false), TRENCH_AUTO_MS); // 16m SOL Meme Trenches scan
+const pollWhenVisible = (fn, ms) => window.setInterval(() => {
+  if (!document.hidden) fn();
+}, ms);
+
+pollWhenVisible(fetchTickers, 5000);      // 5s price refresh (Binance)
+pollWhenVisible(fetchHype, 60*1000);      // 60s (CoinGecko — HYPE)
+pollWhenVisible(fetchCustomCoinGecko, 60*1000); // 60s (added CoinGecko coins)
+pollWhenVisible(fetchCustomForex, 60*1000); // 60s (added FX pairs)
+pollWhenVisible(fetchCustomEconomic, 60*60*1000); // 60m (BLS economic indicators)
+pollWhenVisible(fetchTradFi, 60*1000);    // 60s (CNBC — S&P/NASDAQ/Gold/Oil)
+pollWhenVisible(() => loadTrenches(false), TRENCH_AUTO_MS); // 16m SOL Meme Trenches scan
+
+// Refresh the fast market feed once when returning to the tab, instead of
+// keeping all timers and canvas work active while the page is backgrounded.
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) fetchTickers();
+});
 </script>
 </body>
 </html>
