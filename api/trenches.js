@@ -6,9 +6,7 @@ const BUBBLEMAPS_LIMIT = 16;
 const BIRDEYE_LIMIT = 12;
 const GOPLUS_LIMIT = 16;
 const ONCHAIN_LIMIT = 16;
-const SOLANA_TRACKER_LIMIT = 12;
 const GECKO_LIMIT = 8;
-const BITQUERY_LIMIT = 8;
 const HELIUS_ACTIVITY_LIMIT = 8;
 const REQUEST_TIMEOUT_MS = 8500;
 const SOURCE_CACHE_MS = 10 * 60 * 1000;
@@ -26,15 +24,6 @@ const BIRDEYE_API_KEY = typeof process !== "undefined"
 const GOPLUS_API_TOKEN = typeof process !== "undefined"
   ? String(process.env?.GOPLUS_API_TOKEN || "").trim()
   : "";
-const SOLANA_TRACKER_API_KEY = typeof process !== "undefined"
-  ? String(process.env?.SOLANA_TRACKER_API_KEY || "").trim()
-  : "";
-const BITQUERY_API_TOKEN = typeof process !== "undefined"
-  ? String(process.env?.BITQUERY_API_TOKEN || process.env?.BITQUERY_API_KEY || "").trim()
-  : "";
-const BITQUERY_API_URL = typeof process !== "undefined"
-  ? String(process.env?.BITQUERY_API_URL || "https://streaming.bitquery.io/graphql").trim()
-  : "https://streaming.bitquery.io/graphql";
 const HELIUS_API_KEY = typeof process !== "undefined"
   ? String(process.env?.HELIUS_API_KEY || "").trim()
   : "";
@@ -218,14 +207,6 @@ function historyCandidateEntries() {
     }));
 }
 
-function smartMoneyDirection(snapshot) {
-  const flow = snapshot?.security?.bitquery;
-  if (!flow?.verified || flow.netBuyVolume === null || flow.netBuyVolume === undefined) return "unknown";
-  if (flow.netBuyVolume > 0) return "inflow";
-  if (flow.netBuyVolume < 0) return "outflow";
-  return "balanced";
-}
-
 function updateForwardEvaluations(history, current) {
   const horizons = [1, 3, 6, 24];
   for (const previous of Array.isArray(history) ? history : []) {
@@ -264,7 +245,6 @@ function updateForwardEvaluations(history, current) {
       const priceCollapsed = maxDrawdownPct !== null && maxDrawdownPct <= -30;
       const priceExpanded = maxGainPct !== null && maxGainPct >= 30;
       const liquidityPulled = liquidityChangePct !== null && liquidityChangePct <= -35;
-      const smartMoneyExit = smartMoneyDirection(previous) === "inflow" && smartMoneyDirection(current) === "outflow";
       previous.forward = {
         ...(previous.forward || {}),
         [key]: {
@@ -275,7 +255,6 @@ function updateForwardEvaluations(history, current) {
           liquidityChangePct,
           volumeH1Ratio,
           top10ChangePct,
-          smartMoneyExit,
           decisionAtCapture: previous.decision,
           outcomeDecision: current.decision,
           falsePositive: Number(previous.score) >= GREEN_SCORE_MIN && (priceCollapsed || liquidityPulled),
@@ -310,8 +289,6 @@ function rememberSnapshots(tokens, capturedAt = new Date()) {
         riskScore: token.security?.riskScore,
         effectiveRiskScore: token.security?.effectiveRiskScore,
         effectiveTop10Pct: token.security?.effectiveTop10Pct,
-        tracker: token.security?.tracker,
-        bitquery: token.security?.bitquery,
         onchain: token.security?.onchain
       },
       marketValidation: token.marketValidation,
@@ -590,103 +567,6 @@ async function fetchBirdeye(address) {
   });
 }
 
-function emptySolanaTrackerSnapshot(requested = false) {
-  return {
-    requested,
-    verified: false,
-    riskScore: null,
-    rugged: false,
-    mint: "unknown",
-    freeze: "unknown",
-    lpLockedPct: null,
-    sniperPct: null,
-    insiderPct: null,
-    bundlerPct: null,
-    developerTokenPct: null,
-    developerSelling: "unknown",
-    notableRisk: requested ? "Solana Tracker verisi Doğrulanmadı" : "Solana Tracker etkin değil"
-  };
-}
-
-function trackerRiskPercentage(risk, pattern, fallbackValues = []) {
-  const item = (Array.isArray(risk?.risks) ? risk.risks : []).find((entry) => pattern.test(`${entry?.name || ""} ${entry?.description || ""}`.toLowerCase()));
-  const direct = [
-    ...(Array.isArray(fallbackValues) ? fallbackValues : []),
-    item?.percentage,
-    item?.percent,
-    item?.value,
-    item?.totalPercentage
-  ].map(optionalNumber).find((value) => value !== null && value >= 0 && value <= 100);
-  if (direct !== undefined) return direct;
-  const match = `${item?.description || ""} ${item?.name || ""}`.match(/(\d+(?:\.\d+)?)\s*%/);
-  return match ? optionalNumber(match[1]) : null;
-}
-
-function parseSolanaTracker(payload) {
-  const data = responseData(payload);
-  const risk = data?.risk || data?.security || {};
-  const risks = Array.isArray(risk?.risks) ? risk.risks : [];
-  const riskText = risks.map((entry) => `${entry?.name || ""} ${entry?.description || ""}`).join(" ").toLowerCase();
-  const authorityState = (pattern) => {
-    const matches = risks.map((entry) => String(entry?.name || "").toLowerCase()).filter((value) => pattern.test(value));
-    if (matches.some((value) => /disabled|revoked|closed|off|none/.test(value))) return "revoked";
-    return matches.some((value) => /enabled|active|open|on|mintable|freezable/.test(value)) ? "open" : "unknown";
-  };
-  const trackerRiskScore = optionalNumber(risk?.score);
-  const explicitLpLock = data?.lpLocked === true || data?.lpBurned === true
-    || risks.some((entry) => /lp lock|liquidity lock/.test(String(entry?.name || "").toLowerCase())
-      && !/not|unlocked|remov|withdraw/i.test(`${entry?.name || ""} ${entry?.description || ""}`));
-  const lpLockedPct = explicitLpLock ? 100 : null;
-  const sniperPct = trackerRiskPercentage(risk, /sniper/, [
-    data?.totalSniperPercentage,
-    data?.snipers?.percentage,
-    risk?.totalSniperPercentage
-  ]);
-  const insiderPct = trackerRiskPercentage(risk, /insider/, [
-    data?.totalInsiderPercentage,
-    data?.insiders?.percentage,
-    risk?.totalInsiderPercentage
-  ]);
-  const bundlerPct = trackerRiskPercentage(risk, /bundl/, [
-    data?.totalBundlerPercentage,
-    data?.bundlers?.percentage,
-    risk?.totalBundlerPercentage
-  ]);
-  const developerTokenPct = trackerRiskPercentage(risk, /developer|deployer|creator/, [
-    data?.developer?.percentage,
-    data?.developerTokenPercentage,
-    risk?.developerTokenPercentage
-  ]);
-  const developerSelling = /developer|deployer|creator/.test(riskText) && /sell|sold|dump|transfer out/.test(riskText) ? "flagged" : "unknown";
-  const notable = risks.slice().sort((a, b) => number(b?.score) - number(a?.score))[0];
-  return {
-    requested: true,
-    verified: Boolean(payload && (payload?.risk || payload?.security)),
-    riskScore: trackerRiskScore === null ? null : clamp(trackerRiskScore * 10, 0, 100),
-    rugged: risk?.rugged === true || data?.rugged === true,
-    mint: authorityState(/mint authority enabled|mintable|mint authority/),
-    freeze: authorityState(/freeze authority enabled|freezable|freeze authority/),
-    lpLockedPct,
-    sniperPct,
-    insiderPct,
-    bundlerPct,
-    developerTokenPct,
-    developerSelling,
-    notableRisk: notable?.name || "Solana Tracker belirgin risk üretmedi"
-  };
-}
-
-async function fetchSolanaTracker(address) {
-  if (!SOLANA_TRACKER_API_KEY) return { ok: false, fetchedAt: null, ...emptySolanaTrackerSnapshot(false) };
-  return cachedSource(`solana-tracker:${address}`, async () => {
-    const result = await settleJson(`https://data.solanatracker.io/tokens/${encodeURIComponent(address)}`, {
-      headers: { "x-api-key": SOLANA_TRACKER_API_KEY }
-    });
-    if (!result.ok) return { ok: false, fetchedAt: null, error: result.error || "request failed", ...emptySolanaTrackerSnapshot(true) };
-    return { ok: true, fetchedAt: new Date().toISOString(), ...parseSolanaTracker(result.data) };
-  });
-}
-
 function emptyGeckoSnapshot(requested = false) {
   return {
     requested,
@@ -741,100 +621,6 @@ async function fetchGecko(address) {
     });
     if (!result.ok) return { ok: false, fetchedAt: null, error: result.error || "request failed", ...emptyGeckoSnapshot(true) };
     return { ok: true, fetchedAt: new Date().toISOString(), ...parseGeckoSnapshot(result.data) };
-  });
-}
-
-const BITQUERY_FLOW_QUERY = `query TokenFlow($token: String!, $side_token: String!, $pair_address: String!, $time_1h_ago: DateTime!) {
-  Solana(dataset: realtime) {
-    DEXTradeByTokens(
-      where: {
-        Transaction: { Result: { Success: true } }
-        Trade: {
-          Currency: { MintAddress: { is: $token } }
-          Side: { Currency: { MintAddress: { is: $side_token }, Amount: { gt: "0" } } }
-          Market: { MarketAddress: { is: $pair_address } }
-        }
-        Block: { Time: { since: $time_1h_ago } }
-      }
-    ) {
-      buyVolume: sum(of: Trade_Side_AmountInUSD, if: { Trade: { Side: { Type: { is: buy } } } })
-      sellVolume: sum(of: Trade_Side_AmountInUSD, if: { Trade: { Side: { Type: { is: sell } } } })
-      totalVolume: sum(of: Trade_Side_AmountInUSD)
-      buys: count(if: { Trade: { Side: { Type: { is: buy } } } })
-      sells: count(if: { Trade: { Side: { Type: { is: sell } } } })
-      uniqueBuyers: uniq(of: Trade_Account_Owner, if: { Trade: { Side: { Type: { is: buy } } } })
-      uniqueSellers: uniq(of: Trade_Account_Owner, if: { Trade: { Side: { Type: { is: sell } } } })
-      makers: uniq(of: Trade_Account_Owner)
-    }
-  }
-}`;
-
-function emptyBitquerySnapshot(requested = false) {
-  return {
-    requested,
-    verified: false,
-    buyVolume: null,
-    sellVolume: null,
-    totalVolume: null,
-    buys: null,
-    sells: null,
-    uniqueBuyers: null,
-    uniqueSellers: null,
-    makers: null,
-    netBuyVolume: null,
-    buyPressure: null,
-    notableRisk: requested ? "Bitquery verisi Doğrulanmadı" : "Bitquery etkin değil"
-  };
-}
-
-function parseBitquerySnapshot(payload) {
-  const rows = payload?.data?.Solana?.DEXTradeByTokens;
-  const row = Array.isArray(rows) ? rows[0] : null;
-  if (!row || typeof row !== "object") return emptyBitquerySnapshot(true);
-  const buyVolume = optionalNumber(row.buyVolume);
-  const sellVolume = optionalNumber(row.sellVolume);
-  const totalVolume = optionalNumber(row.totalVolume);
-  return {
-    requested: true,
-    verified: buyVolume !== null || sellVolume !== null || totalVolume !== null,
-    buyVolume,
-    sellVolume,
-    totalVolume,
-    buys: optionalNumber(row.buys),
-    sells: optionalNumber(row.sells),
-    uniqueBuyers: optionalNumber(row.uniqueBuyers),
-    uniqueSellers: optionalNumber(row.uniqueSellers),
-    makers: optionalNumber(row.makers),
-    netBuyVolume: buyVolume !== null && sellVolume !== null ? buyVolume - sellVolume : null,
-    buyPressure: buyVolume !== null && sellVolume !== null && buyVolume + sellVolume > 0
-      ? buyVolume / (buyVolume + sellVolume)
-      : null,
-    notableRisk: "Bitquery işlem akışı mevcut"
-  };
-}
-
-async function fetchBitquery(address, pair) {
-  if (!BITQUERY_API_TOKEN || !pair?.pairAddress) return { ok: false, fetchedAt: null, ...emptyBitquerySnapshot(false) };
-  const quoteAddress = pair?.quoteToken?.address || "So11111111111111111111111111111111111111112";
-  return cachedSource(`bitquery:${address}:${pair.pairAddress}`, async () => {
-    const result = await settleJson(BITQUERY_API_URL, {
-      timeout: 9000,
-      headers: { Authorization: `Bearer ${BITQUERY_API_TOKEN}`, "Content-Type": "application/json" },
-      init: {
-        method: "POST",
-        body: JSON.stringify({
-          query: BITQUERY_FLOW_QUERY,
-          variables: {
-            token: address,
-            side_token: quoteAddress,
-            pair_address: pair.pairAddress,
-            time_1h_ago: new Date(Date.now() - 3600000).toISOString()
-          }
-        })
-      }
-    });
-    if (!result.ok || result.data?.errors?.length) return { ok: false, fetchedAt: null, error: result.error || "GraphQL error", ...emptyBitquerySnapshot(true) };
-    return { ok: true, fetchedAt: new Date().toISOString(), ...parseBitquerySnapshot(result.data) };
   });
 }
 
@@ -1189,12 +975,10 @@ function mergeSecuritySources(security, sources = {}) {
   };
   const goplus = sources?.goplus || { verified: false, mint: "unknown", freeze: "unknown", top1Pct: null, top10Pct: null, lpLockedPct: null, notableRisk: GOPLUS_API_TOKEN ? "GoPlus verisi Doğrulanmadı" : "GoPlus etkin değil" };
   const onchain = sources?.onchain || { verified: false, mint: "unknown", freeze: "unknown", top1Pct: null, top10Pct: null, notableRisk: ONCHAIN_RPC_URL ? "On-chain verisi Doğrulanmadı" : "On-chain doğrulama etkin değil" };
-  const tracker = sources?.tracker || emptySolanaTrackerSnapshot(Boolean(SOLANA_TRACKER_API_KEY));
-  const bitquery = sources?.bitquery || emptyBitquerySnapshot(Boolean(BITQUERY_API_TOKEN));
-  const authoritySources = [security.mint, security.freeze, birdeye.mint, birdeye.freeze, goplus.mint, goplus.freeze, onchain.mint, onchain.freeze, tracker.mint, tracker.freeze]
+  const authoritySources = [security.mint, security.freeze, birdeye.mint, birdeye.freeze, goplus.mint, goplus.freeze, onchain.mint, onchain.freeze]
     .filter((value) => value && value !== "unknown");
-  const mintValues = [security.mint, goplus.mint, onchain.mint, tracker.mint].filter((value) => value && value !== "unknown");
-  const freezeValues = [security.freeze, goplus.freeze, onchain.freeze, tracker.freeze].filter((value) => value && value !== "unknown");
+  const mintValues = [security.mint, goplus.mint, onchain.mint].filter((value) => value && value !== "unknown");
+  const freezeValues = [security.freeze, goplus.freeze, onchain.freeze].filter((value) => value && value !== "unknown");
   const authorityConflict = new Set(mintValues).size > 1 || new Set(freezeValues).size > 1;
   const resolvedMint = mintValues.includes("open") ? "open" : mintValues.includes("revoked") ? "revoked" : "unknown";
   const resolvedFreeze = freezeValues.includes("open") ? "open" : freezeValues.includes("revoked") ? "revoked" : "unknown";
@@ -1203,7 +987,7 @@ function mergeSecuritySources(security, sources = {}) {
   // Keep it out of the contradiction test to avoid false eliminations.
   const holderValues = [security.top10Pct, birdeye.top10Pct, goplus.top10Pct].filter((value) => value !== null && value !== undefined);
   const holderConflict = holderValues.length >= 2 && Math.max(...holderValues) - Math.min(...holderValues) > 25;
-  const externalVerifiedCount = [birdeye.verified, goplus.verified, onchain.verified, tracker.verified].filter(Boolean).length;
+  const externalVerifiedCount = [birdeye.verified, goplus.verified, onchain.verified].filter(Boolean).length;
   const compositeVerified = !authorityConflict && !holderConflict
     && (security.verified && externalVerifiedCount >= 1 || externalVerifiedCount >= 2);
   const maxKnown = (...values) => {
@@ -1218,52 +1002,49 @@ function mergeSecuritySources(security, sources = {}) {
     birdeye,
     goplus,
     onchain,
-    tracker,
-    bitquery,
     authoritySources,
     externalVerifiedCount,
     compositeVerified,
     crossSourceConflict: authorityConflict || holderConflict,
     effectiveTop1Pct: maxKnown(security.top1Pct, birdeye.top1Pct, goplus.top1Pct),
     effectiveTop10Pct: maxKnown(security.top10Pct, birdeye.top10Pct, goplus.top10Pct),
-    effectiveRiskScore: maxKnown(security.riskScore, tracker.riskScore),
-    notableRisk: security.verified ? security.notableRisk : tracker.verified ? tracker.notableRisk : birdeye.verified ? "Birdeye holder verisi mevcut" : goplus.verified ? goplus.notableRisk : onchain.notableRisk
+    effectiveRiskScore: maxKnown(security.riskScore),
+    notableRisk: security.verified ? security.notableRisk : birdeye.verified ? "Birdeye holder verisi mevcut" : goplus.verified ? goplus.notableRisk : onchain.notableRisk
   };
 }
 
-function marketDataAssessment(pair, gecko = null, bitquery = null) {
+function marketDataAssessment(pair, gecko = null) {
   const dexPrice = optionalNumber(pair?.priceUsd);
   const geckoPrice = optionalNumber(gecko?.priceUsd);
   const dexLiquidity = optionalNumber(pair?.primaryLiquidityUsd ?? pair?.liquidity?.usd);
   const geckoLiquidity = optionalNumber(gecko?.liquidityUsd);
-  const dexVolume = optionalNumber(pair?.primaryVolume?.h1 ?? pair?.volume?.h1);
-  const bitqueryVolume = optionalNumber(bitquery?.totalVolume);
+  const dexVolume = optionalNumber(pair?.primaryVolume?.h24 ?? pair?.volume?.h24);
+  const geckoVolume = optionalNumber(gecko?.volume24hUsd);
   const relativeDifference = (left, right) => left !== null && right !== null && Math.max(left, right) > 0
     ? Math.abs(left - right) / Math.max(left, right)
     : null;
   const priceDifference = relativeDifference(dexPrice, geckoPrice);
   const liquidityDifference = relativeDifference(dexLiquidity, geckoLiquidity);
-  const volumeDifference = relativeDifference(dexVolume, bitqueryVolume);
+  const volumeDifference = relativeDifference(dexVolume, geckoVolume);
   const priceConflict = priceDifference !== null && priceDifference > 0.08;
   const poolLiquidityConflict = liquidityDifference !== null && liquidityDifference > 0.45;
-  const bitqueryVolumeConflict = volumeDifference !== null && volumeDifference > 0.60;
-  const marketDataConflict = priceConflict || poolLiquidityConflict || bitqueryVolumeConflict;
+  const volumeConflict = volumeDifference !== null && volumeDifference > 0.60;
+  const marketDataConflict = priceConflict || poolLiquidityConflict || volumeConflict;
   const severe = (priceDifference !== null && priceDifference > 0.20)
     || (liquidityDifference !== null && liquidityDifference > 0.70)
     || (volumeDifference !== null && volumeDifference > 0.85);
-  const requested = Boolean(gecko?.requested || bitquery?.requested);
-  const verifiedSources = [gecko?.verified, bitquery?.verified].filter(Boolean).length;
+  const requested = Boolean(gecko?.requested);
+  const verifiedSources = [gecko?.verified].filter(Boolean).length;
   return {
     requested,
     verifiedSources,
     geckoVerified: Boolean(gecko?.verified),
-    bitqueryVerified: Boolean(bitquery?.verified),
     priceDifference,
     liquidityDifference,
     volumeDifference,
     priceConflict,
     poolLiquidityConflict,
-    bitqueryVolumeConflict,
+    volumeConflict,
     marketDataConflict,
     severe,
     unavailable: requested && verifiedSources === 0
@@ -1395,15 +1176,7 @@ function qualityScore({ marketCap, liquidity, lpRatio, ageHours, volume, txns, p
   let flowScore = logarithmicScore(txns.h1.total, 20, 2000, 4)
     + balanceScore + traderScore + traderDistribution + flowBalance;
   if (uniqueTraders !== null && txns.h1.total > 250 && tradesPerTrader > 35) flowScore -= 3;
-  const bitquery = security.bitquery || emptyBitquerySnapshot(false);
-  const healthyForSmartMoney = Boolean(security.compositeVerified)
-    && !marketValidation.severe
-    && liquidity >= 5000
-    && lpRatio >= 0.008;
-  if (healthyForSmartMoney && bitquery.verified) {
-    flowScore += healthyRatioScore(bitquery.buyPressure, 0.30, 0.48, 0.68, 0.90, 3);
-    flowScore += logarithmicScore(number(bitquery.uniqueBuyers), 3, 500, 2);
-  }
+  if (marketValidation.severe) flowScore -= 3;
   flowScore = clamp(flowScore, 0, 20);
 
   // 25 points: unknown or conflicting security data cannot earn these points.
@@ -1456,7 +1229,7 @@ function qualityScore({ marketCap, liquidity, lpRatio, ageHours, volume, txns, p
   const components = {
     volume: volumeScore,
     liquidity: liquidityScore,
-    smartMoney: flowScore,
+    traderFlow: flowScore,
     security: securityScore,
     onchain: onchainScore,
     earlyness: clamp(marketEarlynessScore(marketCap) * 0.5 + ageScore, 0, 5)
@@ -1481,7 +1254,7 @@ function classifyPair(pair, report, discovery, bubblemapsMetrics = null, bubblem
     h24: number(pair?.priceChange?.h24)
   };
   const security = mergeSecuritySources(securitySnapshot(report), externalSources);
-  const marketValidation = marketDataAssessment(pair, externalSources?.gecko, security.bitquery);
+  const marketValidation = marketDataAssessment(pair, externalSources?.gecko);
   const bubblemaps = bubblemapsSnapshot(bubblemapsMetrics, bubblemapsRequested);
   const bubbleAssessment = bubblemapsAssessment(bubblemaps, security);
   const history = Array.isArray(context.history) ? context.history : historyFor(pair?.baseToken?.address);
@@ -1491,7 +1264,7 @@ function classifyPair(pair, report, discovery, bubblemapsMetrics = null, bubblem
     ? security.lpLockedPct
     : security.goplus?.lpLockedPct !== null && security.goplus?.lpLockedPct !== undefined
       ? security.goplus.lpLockedPct
-      : security.tracker?.lpLockedPct;
+      : null;
   const criticalLpFloor = marketCap ? Math.max(5000, Math.min(30000, marketCap * 0.005)) : 6000;
   const greenLpFloor = marketCap ? Math.max(15000, Math.min(120000, marketCap * 0.015)) : 20000;
   const unsupportedSpike = (price.h6 > 100 && (volume.trend === "falling" || (marketCap && volume.h6 / marketCap < 0.12)))
@@ -1511,14 +1284,6 @@ function classifyPair(pair, report, discovery, bubblemapsMetrics = null, bubblem
   if (security.goplus?.freeze === "open") hardReasons.push("GoPlus freezable açık");
   if (security.goplus?.creatorMalicious) hardReasons.push("GoPlus kötü niyetli geliştirici işareti");
   if (security.goplus?.transferHookMalicious) hardReasons.push("GoPlus kötü niyetli transfer hook");
-  if (security.tracker?.rugged) hardReasons.push("Solana Tracker rugged işareti");
-  if (security.tracker?.mint === "open") hardReasons.push("Solana Tracker mint authority açık");
-  if (security.tracker?.freeze === "open") hardReasons.push("Solana Tracker freeze authority açık");
-  if (security.tracker?.riskScore !== null && security.tracker.riskScore >= HIGH_RUGCHECK_RISK) hardReasons.push("Solana Tracker yüksek risk skoru");
-  if (security.tracker?.bundlerPct !== null && security.tracker.bundlerPct >= 20) hardReasons.push("Bundled buy oranı yüksek");
-  if (security.tracker?.sniperPct !== null && security.tracker.sniperPct >= 20) hardReasons.push("Sniper yoğunluğu yüksek");
-  if (security.tracker?.insiderPct !== null && security.tracker.insiderPct >= 20) hardReasons.push("Insider yoğunluğu yüksek");
-  if (security.tracker?.developerSelling === "flagged") hardReasons.push("Solana Tracker geliştirici satışı işareti");
   if (security.onchain?.helius?.activity?.creatorSold) hardReasons.push("Helius geliştirici satış hareketi");
   if (security.onchain?.helius?.activity?.creatorFunding) hardReasons.push("Helius creator-early buyer fonlama işareti");
   if (liquidity < criticalLpFloor || lpRatio > 0 && lpRatio < 0.003) hardReasons.push("Likidite çok düşük");
@@ -1538,10 +1303,6 @@ function classifyPair(pair, report, discovery, bubblemapsMetrics = null, bubblem
   if (severeSelloff) hardReasons.push("Şiddetli fiyat çöküşü");
   if (security.effectiveRiskScore !== null && security.effectiveRiskScore >= HIGH_RUGCHECK_RISK) hardReasons.push("Yüksek birleşik risk skoru");
   if (marketValidation.severe) hardReasons.push("Piyasa verileri arasında ciddi çelişki");
-  if (security.bitquery?.verified && security.bitquery.uniqueBuyers !== null && security.bitquery.buys !== null
-      && security.bitquery.uniqueBuyers < 5 && security.bitquery.buys > 40) hardReasons.push("Az trader ile yoğun alış akışı");
-  if (security.bitquery?.verified && security.bitquery.buyPressure !== null && security.bitquery.buyPressure > 0.86
-      && security.bitquery.uniqueBuyers !== null && security.bitquery.uniqueBuyers < 10) hardReasons.push("Alış akışı yoğunlaşmış");
   hardReasons.push(...bubbleAssessment.hardReasons);
 
   const cautionReasons = [];
@@ -1576,11 +1337,6 @@ function classifyPair(pair, report, discovery, bubblemapsMetrics = null, bubblem
   if (security.graphInsiders > 10) cautionReasons.push("Cluster/insider sayısı yüksek");
   if (security.birdeye?.bundledRatio !== null && security.birdeye.bundledRatio >= 0.15 && security.birdeye.bundledRatio < 0.30) cautionReasons.push("Birdeye bundled buy oranı yüksek");
   if (security.birdeye?.devCount > 0 && security.birdeye.sellAllCount > 0) cautionReasons.push("Erken geliştirici/ilk alıcı çıkışı işareti");
-  if (security.tracker?.requested && !security.tracker?.verified) cautionReasons.push("Solana Tracker verisi Doğrulanmadı");
-  if (security.bitquery?.verified && security.bitquery.buyPressure !== null && security.bitquery.buyPressure < 0.32) cautionReasons.push("Bitquery satış baskısı yüksek");
-  if (security.bitquery?.verified && security.bitquery.netBuyVolume !== null && security.bitquery.netBuyVolume < 0 && price.h6 > 10) cautionReasons.push("Pozitif fiyat satış akışıyla desteklenmiyor");
-  if (security.tracker?.bundlerPct !== null && security.tracker.bundlerPct >= 10 && security.tracker.bundlerPct < 20) cautionReasons.push("Bundled buy oranı dikkat istiyor");
-  if (security.tracker?.sniperPct !== null && security.tracker.sniperPct >= 10 && security.tracker.sniperPct < 20) cautionReasons.push("Sniper yoğunluğu dikkat istiyor");
   if (security.onchain?.helius?.activity?.verified && security.onchain.helius.activity.creatorBought) cautionReasons.push("Geliştirici erken alım hareketi gözlendi");
   cautionReasons.push(...bubbleAssessment.cautionReasons);
 
@@ -1671,7 +1427,7 @@ function deriveReasonCodes(token) {
   const codes = [];
   const add = (condition, code) => { if (condition && !codes.includes(code)) codes.push(code); };
   add(token?.volume?.trend === "rising" || token?.history?.momentumConfirmed, "volume_acceleration");
-  add((token?.scoreBreakdown?.smartMoney ?? token?.scoreBreakdown?.traderFlow) >= 9 && !/trader sayısı|benzersiz trader|işlem\/trader|wash/i.test(text), "healthy_trader_flow");
+  add(token?.scoreBreakdown?.traderFlow >= 9 && !/trader sayısı|benzersiz trader|işlem\/trader|wash/i.test(text), "healthy_trader_flow");
   add(/likidite.*(düşük|ince)|lp kilidi/i.test(text), "thin_liquidity");
   add(/mint authority açık|mintable açık|freeze authority açık|freezable açık/i.test(text), "active_authority");
   add(/lp kilidi doğrulanmadı/i.test(text), "lp_unverified");
@@ -1683,12 +1439,8 @@ function deriveReasonCodes(token) {
   add(number(token?.history?.snapshots) < 2, "insufficient_history");
   add(/bundled/i.test(text), "bundled_buy_risk");
   add(/rug geçmişi|rugcheck risk|rugged/i.test(text), "rug_risk");
-  add(token?.security?.bitquery?.verified && token.security.bitquery.buyPressure >= 0.58
-    && !/satış baskısı|yoğunlaşmış|çeliş/i.test(text), "smart_money_inflow");
-  add(token?.security?.bitquery?.verified && (token.security.bitquery.buyPressure < 0.32 || token.security.bitquery.netBuyVolume < 0), "smart_money_distribution");
-  add(token?.security?.tracker?.sniperPct >= 10, "sniper_concentration");
-  add(token?.security?.tracker?.insiderPct >= 5 || token?.security?.graphInsiders > 10, "insider_cluster");
-  add(token?.security?.tracker?.bundlerPct >= 10 || token?.security?.birdeye?.bundledRatio >= 0.15, "bundler_activity");
+  add(token?.security?.graphInsiders > 10, "insider_cluster");
+  add(token?.security?.birdeye?.bundledRatio >= 0.15, "bundler_activity");
   add(token?.security?.onchain?.helius?.activity?.creatorFunding === true, "creator_funding");
   add(token?.marketValidation?.poolLiquidityConflict, "pool_liquidity_conflict");
   add(token?.marketValidation?.unavailable, "source_unavailable");
@@ -1802,21 +1554,19 @@ async function buildScan() {
 
   const externalTargets = preliminary
     .sort((a, b) => b.score - a.score)
-    .slice(0, Math.max(BIRDEYE_LIMIT, GOPLUS_LIMIT, ONCHAIN_LIMIT, SOLANA_TRACKER_LIMIT, BITQUERY_LIMIT, HELIUS_ACTIVITY_LIMIT));
-  if (BIRDEYE_API_KEY || GOPLUS_API_TOKEN || ONCHAIN_RPC_URL || SOLANA_TRACKER_API_KEY || BITQUERY_API_TOKEN) {
+    .slice(0, Math.max(BIRDEYE_LIMIT, GOPLUS_LIMIT, ONCHAIN_LIMIT, HELIUS_ACTIVITY_LIMIT));
+  if (BIRDEYE_API_KEY || GOPLUS_API_TOKEN || ONCHAIN_RPC_URL) {
     const externalResults = await mapLimit(externalTargets, 4, async (token, index) => {
-      const [birdeye, goplus, onchain, tracker, bitquery] = await Promise.all([
+      const [birdeye, goplus, onchain] = await Promise.all([
         index < BIRDEYE_LIMIT ? fetchBirdeye(token.address) : Promise.resolve({ ok: false, fetchedAt: null }),
         index < GOPLUS_LIMIT ? fetchGoplus(token.address) : Promise.resolve({ ok: false, fetchedAt: null }),
-        index < ONCHAIN_LIMIT ? fetchOnchain(token.address) : Promise.resolve({ ok: false, fetchedAt: null }),
-        index < SOLANA_TRACKER_LIMIT ? fetchSolanaTracker(token.address) : Promise.resolve({ ok: false, fetchedAt: null }),
-        index < BITQUERY_LIMIT ? fetchBitquery(token.address, pairMap.get(token.address)) : Promise.resolve({ ok: false, fetchedAt: null })
+        index < ONCHAIN_LIMIT ? fetchOnchain(token.address) : Promise.resolve({ ok: false, fetchedAt: null })
       ]);
       if (index < HELIUS_ACTIVITY_LIMIT && onchain?.helius?.creator) {
         const activity = await fetchHeliusActivity(token.address, onchain.helius.creator);
         onchain.helius.activity = activity;
       }
-      return { address: token.address, birdeye, goplus, onchain, tracker, bitquery };
+      return { address: token.address, birdeye, goplus, onchain };
     });
     for (const result of externalResults) externalByAddress.set(result.address, result);
     if (BIRDEYE_API_KEY && externalResults.some((result) => result.birdeye?.ok === false)) {
@@ -1824,8 +1574,6 @@ async function buildScan() {
     }
     if (GOPLUS_API_TOKEN && externalResults.some((result) => result.goplus?.ok === false)) warnings.push("Bazı GoPlus verileri alınamadı.");
     if (ONCHAIN_RPC_URL && externalResults.some((result) => result.onchain?.ok === false)) warnings.push("Bazı on-chain doğrulamaları alınamadı.");
-    if (SOLANA_TRACKER_API_KEY && externalResults.some((result) => result.tracker?.ok === false)) warnings.push("Bazı Solana Tracker verileri alınamadı.");
-    if (BITQUERY_API_TOKEN && externalResults.some((result) => result.bitquery?.ok === false)) warnings.push("Bazı Bitquery akış verileri alınamadı.");
   }
 
   const geckoTargets = preliminary
@@ -1869,8 +1617,6 @@ async function buildScan() {
       goPlus: { requested: Boolean(GOPLUS_API_TOKEN), verified: Boolean(external.goplus?.ok), fetchedAt: external.goplus?.fetchedAt || null },
       onchain: { requested: Boolean(ONCHAIN_RPC_URL), verified: Boolean(external.onchain?.ok), fetchedAt: external.onchain?.fetchedAt || null },
       helius: { requested: Boolean(HELIUS_API_KEY), verified: Boolean(external.onchain?.helius?.verified || external.onchain?.helius?.activity?.verified), fetchedAt: external.onchain?.helius?.activity?.fetchedAt || external.onchain?.fetchedAt || null },
-      solanaTracker: { requested: Boolean(SOLANA_TRACKER_API_KEY), verified: Boolean(external.tracker?.verified), fetchedAt: external.tracker?.fetchedAt || null },
-      bitquery: { requested: Boolean(BITQUERY_API_TOKEN), verified: Boolean(external.bitquery?.verified), fetchedAt: external.bitquery?.fetchedAt || null },
       geckoTerminal: { requested: true, verified: Boolean(external.gecko?.verified), fetchedAt: external.gecko?.fetchedAt || null },
       bubblemaps: { requested: Boolean(BUBBLEMAPS_API_KEY), verified: Boolean(bubbleMetrics), fetchedAt: bubbleMetrics ? scanFetchedAt : null }
     };
@@ -1915,8 +1661,6 @@ async function buildScan() {
       goPlus: Boolean(GOPLUS_API_TOKEN),
       onchainRpc: Boolean(ONCHAIN_RPC_URL),
       helius: Boolean(HELIUS_API_KEY),
-      solanaTracker: Boolean(SOLANA_TRACKER_API_KEY),
-      bitquery: Boolean(BITQUERY_API_TOKEN),
       geckoTerminal: true,
       gmgn: false
     },
@@ -1924,8 +1668,6 @@ async function buildScan() {
       dexScreener: { requested: true, status: "Aktif" },
       rugCheck: { requested: true, status: reports.some((item) => !item.report) ? "Doğrulanmadı" : "Aktif" },
       geckoTerminal: { requested: true, status: sourceHealth(true, geckoResults.map((item) => item.result), (value) => Boolean(value?.verified)) },
-      solanaTracker: { requested: Boolean(SOLANA_TRACKER_API_KEY), status: sourceHealth(Boolean(SOLANA_TRACKER_API_KEY), [...externalByAddress.values()].map((item) => item.tracker), (value) => Boolean(value?.verified)) },
-      bitquery: { requested: Boolean(BITQUERY_API_TOKEN), status: sourceHealth(Boolean(BITQUERY_API_TOKEN), [...externalByAddress.values()].map((item) => item.bitquery), (value) => Boolean(value?.verified)) },
       helius: { requested: Boolean(HELIUS_API_KEY), status: sourceHealth(Boolean(HELIUS_API_KEY), [...externalByAddress.values()].map((item) => item.onchain), (value) => Boolean(value?.helius?.verified || value?.helius?.activity?.verified)) },
       gmgn: { requested: false, status: "public API yok" }
     },
