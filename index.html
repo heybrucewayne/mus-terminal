@@ -531,6 +531,100 @@
   #panel-table .sym-cell { min-width:0; flex-wrap:nowrap; }
   #bubbleCanvas { position: relative; z-index: 1; }
 
+  /* Additional panel layouts. The original three-panel arrangement remains
+     the default; alternate layouts are used when panels are hidden or when
+     the TradingView panel is enabled. */
+  .grid.panel-layout-quad,
+  .grid.panel-layout-standard {
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    grid-template-rows:repeat(2,minmax(220px,1fr));
+  }
+  .grid.panel-layout-single {
+    grid-template-columns:minmax(0,1fr);
+    grid-template-rows:minmax(320px,1fr);
+  }
+  .grid.panel-layout-standard.panel-count-2 {
+    grid-template-rows:minmax(320px,1fr);
+  }
+  .grid.panel-layout-quad #panel-bubbles,
+  .grid.panel-layout-standard #panel-bubbles,
+  .grid.panel-layout-single #panel-bubbles { grid-row:auto; }
+  .grid.panel-layout-quad > .panel,
+  .grid.panel-layout-standard > .panel,
+  .grid.panel-layout-single > .panel { grid-column:auto; }
+
+  #panel-tradingview .panel-body {
+    display:flex;
+    flex-direction:column;
+    min-height:0;
+    background:linear-gradient(135deg,rgba(255,255,255,.018),rgba(4,10,14,.035));
+  }
+  .tradingview-panel-head {
+    display:flex;
+    align-items:center;
+    gap:8px;
+    min-height:42px;
+    padding:7px 9px;
+    border-bottom:1px solid rgba(255,255,255,.12);
+  }
+  .tradingview-panel-title {
+    flex:0 0 auto;
+    color:var(--text-bright);
+    font:700 9px 'Space Grotesk',sans-serif;
+    letter-spacing:.14em;
+    white-space:nowrap;
+  }
+  .tradingview-panel-form {
+    display:flex;
+    flex:1 1 auto;
+    min-width:0;
+    gap:6px;
+  }
+  .tradingview-panel-form input {
+    min-width:0;
+    flex:1 1 auto;
+    height:27px;
+    padding:0 8px;
+    border:1px solid rgba(255,255,255,.20);
+    border-radius:7px;
+    background:rgba(255,255,255,.075);
+    color:var(--text-bright);
+    font:500 10px 'JetBrains Mono',monospace;
+    outline:none;
+  }
+  .tradingview-panel-form input::placeholder { color:var(--muted2); }
+  .tradingview-panel-form input:focus { border-color:rgba(155,220,255,.70); box-shadow:0 0 0 2px rgba(155,220,255,.12); }
+  .tradingview-panel-form button {
+    flex:0 0 auto;
+    height:27px;
+    padding:0 9px;
+    border:1px solid rgba(0,255,136,.30);
+    border-radius:7px;
+    background:rgba(0,255,136,.09);
+    color:var(--green);
+    font:700 9px 'Space Grotesk',sans-serif;
+    cursor:pointer;
+  }
+  .tradingview-panel-form button:hover { background:rgba(0,255,136,.16); border-color:rgba(0,255,136,.58); }
+  .tradingview-panel-chart {
+    position:relative;
+    flex:1 1 auto;
+    min-height:0;
+    overflow:hidden;
+    background:rgba(4,9,14,.18);
+  }
+  .tradingview-panel-chart .tradingview-widget-container { width:100%; height:100%; }
+  .tradingview-panel-chart .tradingview-widget-container__widget { width:100%; height:calc(100% - 20px); }
+  .tradingview-panel-chart .tradingview-widget-copyright {
+    height:20px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:var(--muted);
+    font:500 8px 'JetBrains Mono',monospace;
+  }
+  .tradingview-panel-chart .tradingview-widget-copyright a { color:#6bdcff; text-decoration:none; }
+
   /* ===== SOL MEME TRENCHES ===== */
   #panel-trenches .panel-body {
     display:flex; flex-direction:column;
@@ -752,6 +846,38 @@
     outline:none;
     box-shadow:inset 0 1px 0 rgba(255,255,255,.18);
   }
+  .panel-manager {
+    display:grid;
+    gap:6px;
+    padding-top:8px;
+    border-top:1px solid rgba(255,255,255,.14);
+  }
+  .panel-manager[hidden] { display:none; }
+  .panel-manager-title {
+    color:var(--muted);
+    font:650 8px 'Space Grotesk',sans-serif;
+    letter-spacing:.12em;
+  }
+  .panel-manager-toggle {
+    display:flex;
+    align-items:center;
+    gap:8px;
+    width:100%;
+    min-height:31px;
+    padding:6px 8px;
+    border:1px solid rgba(255,255,255,.14);
+    border-radius:8px;
+    background:rgba(255,255,255,.055);
+    color:var(--text-bright);
+    font:600 9px 'Space Grotesk',sans-serif;
+    text-align:left;
+    cursor:pointer;
+  }
+  .panel-manager-toggle:hover { background:rgba(255,255,255,.11); border-color:rgba(255,255,255,.28); }
+  .panel-manager-toggle[aria-pressed="true"] { border-color:rgba(0,255,136,.34); background:rgba(0,255,136,.075); }
+  .panel-manager-toggle[aria-disabled="true"] { opacity:.48; cursor:not-allowed; }
+  .panel-manager-icon { width:15px; color:var(--green); text-align:center; }
+  .panel-manager-state { margin-left:auto; color:var(--muted2); font:600 8px 'JetBrains Mono',monospace; }
   .background-picker {
     display:grid;
     grid-template-columns:repeat(3,minmax(0,1fr));
@@ -966,6 +1092,14 @@
       align-content:start;
       gap:8px;
     }
+    .grid.panel-layout-quad,
+    .grid.panel-layout-standard,
+    .grid.panel-layout-single { grid-template-columns:minmax(0,1fr); }
+    .grid.panel-layout-quad { grid-template-rows:repeat(4,auto); }
+    .grid.panel-layout-standard { grid-template-rows:repeat(3,auto); }
+    .grid.panel-layout-standard.panel-count-2 { grid-template-rows:repeat(2,auto); }
+    .grid.panel-layout-standard.panel-count-3 { grid-template-rows:repeat(3,auto); }
+    .grid.panel-layout-single { grid-template-rows:auto; }
     .panel {
       min-height:0;
       border-radius:12px;
@@ -988,6 +1122,8 @@
       overscroll-behavior:contain;
     }
     #panel-trenches .trench-scroll { height:560px; }
+    #panel-tradingview { min-height:520px; height:520px; }
+    #panel-tradingview .tradingview-panel-chart { min-height:0; }
     .mobile-background-trigger { display:grid; }
     #panel-table table.ticker { width:100%; min-width:0; }
     #panel-table table.ticker thead th,
@@ -1041,6 +1177,7 @@
     #panel-bubbles { height:270px; }
     #panel-table .px-scroll { height:460px; }
     #panel-trenches .trench-scroll { height:480px; }
+    #panel-tradingview { min-height:460px; height:460px; }
     #panel-table .market-sort-label { display:none; }
     #panel-table .px-search input { font-size:8.5px; }
     #panel-trenches table.trenches th { font-size:8px; letter-spacing:0; }
@@ -1101,6 +1238,19 @@
       </div>
     </section>
 
+    <section class="panel" id="panel-tradingview" aria-label="TradingView chart" hidden>
+      <div class="panel-body">
+        <div class="tradingview-panel-head">
+          <div class="tradingview-panel-title">TRADINGVIEW</div>
+          <form id="tradingviewPanelForm" class="tradingview-panel-form">
+            <input id="tradingviewPanelSymbol" aria-label="TradingView symbol" placeholder="BINANCE:BTCUSDT" autocomplete="off" spellcheck="false" />
+            <button type="submit">LOAD</button>
+          </form>
+        </div>
+        <div id="tradingviewPanelChart" class="tradingview-panel-chart" aria-label="Live TradingView chart"></div>
+      </div>
+    </section>
+
     <div id="resize-columns" class="panel-resizer resizer-columns" role="separator" aria-label="Resize bubble and data panels" aria-orientation="vertical" aria-valuemin="30" aria-valuemax="70" tabindex="0"></div>
     <div id="resize-rows" class="panel-resizer resizer-rows" role="separator" aria-label="Resize prices and trenches panels" aria-orientation="horizontal" aria-valuemin="32" aria-valuemax="70" tabindex="0"></div>
 
@@ -1127,7 +1277,12 @@
     <span class="page-context-icon" aria-hidden="true">▧</span>
     DUVAR KAĞIDINI DEĞİŞTİR
   </button>
+  <button id="pagePanelManager" class="asset-menu-action" type="button" role="menuitem" aria-expanded="false">
+    <span class="page-context-icon" aria-hidden="true">▦</span>
+    PANELLERİ YÖNET
+  </button>
   <div id="backgroundPicker" class="background-picker" role="group" aria-label="Duvar kağıtları" hidden></div>
+  <div id="panelManager" class="panel-manager" role="group" aria-label="Paneller" hidden></div>
 </div>
 <button id="mobileBackgroundButton" class="mobile-background-trigger" type="button" aria-label="Duvar kağıdını değiştir" title="Duvar kağıdını değiştir">▧</button>
 
@@ -1304,6 +1459,80 @@ function setupPanelResizers(){
     state.resizeFrame=requestAnimationFrame(applyLayout);
   });
   requestAnimationFrame(applyLayout);
+}
+
+/* ============================================================
+   PANEL VISIBILITY + LAYOUT
+   ============================================================ */
+const PANEL_VISIBILITY_KEY = 'mus_panel_visibility_v1';
+const PANEL_DEFS = [
+  { id:'panel-bubbles', label:'BUBBLES', icon:'◉', defaultVisible:true },
+  { id:'panel-table', label:'MARKET', icon:'▤', defaultVisible:true },
+  { id:'panel-trenches', label:'SOL MEME TRENCHES', icon:'◌', defaultVisible:true },
+  { id:'panel-tradingview', label:'TRADINGVIEW', icon:'⌁', defaultVisible:false }
+];
+const storedPanelVisibility = cacheGet(PANEL_VISIBILITY_KEY);
+let panelVisibility = Object.fromEntries(PANEL_DEFS.map(panel => [
+  panel.id,
+  typeof storedPanelVisibility?.[panel.id] === 'boolean' ? storedPanelVisibility[panel.id] : panel.defaultVisible
+]));
+
+function visiblePanelDefs(){
+  return PANEL_DEFS.filter(panel => panelVisibility[panel.id]);
+}
+
+function savePanelVisibility(){
+  cacheSet(PANEL_VISIBILITY_KEY,panelVisibility);
+}
+
+function updatePanelLayout(){
+  const grid=$('.grid');
+  if (!grid) return;
+  let visible=visiblePanelDefs();
+  if (!visible.length){
+    panelVisibility['panel-bubbles']=true;
+    visible=visiblePanelDefs();
+    savePanelVisibility();
+  }
+  const ids=new Set(visible.map(panel => panel.id));
+  const defaultThree=visible.length===3 && ids.has('panel-bubbles') && ids.has('panel-table') && ids.has('panel-trenches');
+  grid.classList.remove('panel-layout-default','panel-layout-quad','panel-layout-standard','panel-layout-single');
+  grid.classList.add(defaultThree ? 'panel-layout-default' : visible.length===1 ? 'panel-layout-single' : visible.length===4 ? 'panel-layout-quad' : 'panel-layout-standard');
+  grid.classList.remove('panel-count-1','panel-count-2','panel-count-3','panel-count-4');
+  grid.classList.add(`panel-count-${visible.length}`);
+  PANEL_DEFS.forEach(panel => {
+    const element=$('#'+panel.id);
+    if (element) element.hidden=!panelVisibility[panel.id];
+  });
+  $('#resize-columns')?.toggleAttribute('hidden',!defaultThree);
+  $('#resize-rows')?.toggleAttribute('hidden',!defaultThree);
+  if (panelVisibility['panel-tradingview']) requestAnimationFrame(()=>renderTradingViewPanel());
+  else clearTradingViewPanel();
+}
+
+function renderPanelManager(){
+  const manager=$('#panelManager');
+  if (!manager) return;
+  const cannotHideLast=visiblePanelDefs().length<=1;
+  manager.innerHTML = `<div class="panel-manager-title">GÖRÜNEN PANELLER</div>` + PANEL_DEFS.map(panel => {
+    const visible=Boolean(panelVisibility[panel.id]);
+    const disabled=visible && cannotHideLast;
+    return `<button class="panel-manager-toggle" type="button" role="menuitemcheckbox" data-panel-toggle="${panel.id}" aria-pressed="${visible}" aria-disabled="${disabled}">
+      <span class="panel-manager-icon" aria-hidden="true">${panel.icon}</span>
+      <span>${panel.label}</span>
+      <span class="panel-manager-state">${visible?'AÇIK':'KAPALI'}</span>
+    </button>`;
+  }).join('');
+}
+
+function togglePanel(panelId){
+  if (!Object.prototype.hasOwnProperty.call(panelVisibility,panelId)) return;
+  const willShow=!panelVisibility[panelId];
+  if (!willShow && visiblePanelDefs().length<=1) return;
+  panelVisibility[panelId]=willShow;
+  savePanelVisibility();
+  updatePanelLayout();
+  renderPanelManager();
 }
 
 /* ============================================================
@@ -2188,6 +2417,8 @@ const saveHiddenAssets = () => cacheSet('cc_hidden_assets', hiddenAssets);
 const saveMarketOrder = () => cacheSet('cc_market_order_v1', marketOrder);
 let activeAssetMenu = null;
 let assetChartGeneration = 0;
+let tradingViewPanelGeneration = 0;
+const TRADINGVIEW_PANEL_SYMBOL_KEY = 'mus_tradingview_panel_symbol_v1';
 
 function customAssetSnapshot(c){
   const common = {
@@ -2297,6 +2528,128 @@ function assetChartState(message){
   state.className = 'asset-chart-state';
   state.textContent = message;
   return state;
+}
+
+function tradingViewUrlForSymbol(symbol){
+  const value=String(symbol||'');
+  const separator=value.indexOf(':');
+  if (separator<1) return `https://www.tradingview.com/search/?query=${encodeURIComponent(value)}`;
+  const exchange=value.slice(0,separator);
+  const ticker=value.slice(separator+1);
+  return `https://www.tradingview.com/symbols/${encodeURIComponent(ticker)}/?exchange=${encodeURIComponent(exchange)}`;
+}
+
+function normalizeTradingViewPanelSymbol(rawInput){
+  const raw=String(rawInput||'').trim().toUpperCase();
+  if (!raw) return null;
+  const compact=raw.replace(/\s+/g,'').replace(/\//g,'');
+  const aliases={
+    'SPX':'FOREXCOM:SPXUSD',
+    'SP500':'FOREXCOM:SPXUSD',
+    'S&P500':'FOREXCOM:SPXUSD',
+    'NASDAQ':'NASDAQ:IXIC',
+    'IXIC':'NASDAQ:IXIC',
+    'NDX':'NASDAQ:IXIC',
+    'GOLD':'OANDA:XAUUSD',
+    'XAUUSD':'OANDA:XAUUSD',
+    'SILVER':'OANDA:XAGUSD',
+    'XAGUSD':'OANDA:XAGUSD',
+    'OIL':'TVC:USOIL',
+    'WTI':'TVC:USOIL',
+    'USDTRY':'FX_IDC:USDTRY',
+    'EURUSD':'FX_IDC:EURUSD',
+    'GBPUSD':'FX_IDC:GBPUSD',
+    'XAUTRYG':'FX_IDC:XAUTRYG',
+    'USDTTRY':'BINANCE:USDTTRY'
+  };
+  if (aliases[compact]) return aliases[compact];
+  if (compact.includes(':')){
+    const parts=compact.split(':');
+    if (parts.length!==2 || !/^[A-Z0-9._-]{1,24}$/.test(parts[0]) || !/^[A-Z0-9._-]{1,32}$/.test(parts[1])) return null;
+    return `${parts[0]}:${parts[1]}`;
+  }
+  if (!/^[A-Z0-9._-]{1,32}$/.test(compact)) return null;
+  const cryptoBases=new Set(['BTC','ETH','SOL','BNB','XRP','DOGE','TRX','ZEC','LINK','NEAR','TAO','SUI','HYPE','BP']);
+  if (cryptoBases.has(compact)) return `BINANCE:${compact}USDT`;
+  if (/(USDT|USDC|BUSD)$/.test(compact)) return `BINANCE:${compact}`;
+  if (/TRY$/.test(compact)) return `FX_IDC:${compact}`;
+  return `NASDAQ:${compact}`;
+}
+
+function clearTradingViewPanel(){
+  tradingViewPanelGeneration++;
+  const host=$('#tradingviewPanelChart');
+  if (host){
+    host.removeAttribute('aria-busy');
+    host.replaceChildren();
+  }
+}
+
+function renderTradingViewPanel(){
+  const panel=$('#panel-tradingview');
+  const host=$('#tradingviewPanelChart');
+  if (!panel || panel.hidden || !host) return;
+  clearTradingViewPanel();
+  const generation=tradingViewPanelGeneration;
+  const input=$('#tradingviewPanelSymbol');
+  const saved=cacheGet(TRADINGVIEW_PANEL_SYMBOL_KEY);
+  const symbol=normalizeTradingViewPanelSymbol(input?.value || saved || 'BINANCE:BTCUSDT');
+  if (!symbol){
+    host.append(assetChartState('USE EXCHANGE:SYMBOL'));
+    return;
+  }
+  if (input) input.value=symbol;
+  host.setAttribute('aria-busy','true');
+  const loading=assetChartState('LOADING CHART…');
+  const container=document.createElement('div');
+  container.className='tradingview-widget-container';
+  const widget=document.createElement('div');
+  widget.className='tradingview-widget-container__widget';
+  const attribution=document.createElement('div');
+  attribution.className='tradingview-widget-copyright';
+  const attributionLink=document.createElement('a');
+  attributionLink.href=tradingViewUrlForSymbol(symbol);
+  attributionLink.target='_blank';
+  attributionLink.rel='noopener nofollow';
+  attributionLink.textContent=`${symbol} chart by TradingView`;
+  attribution.append(attributionLink);
+  const script=document.createElement('script');
+  script.type='text/javascript';
+  script.src='https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
+  script.async=true;
+  script.textContent=JSON.stringify({
+    autosize:true,
+    symbol,
+    interval:'D',
+    timezone:'Etc/UTC',
+    theme:'dark',
+    style:'1',
+    locale:'en',
+    backgroundColor:'rgba(7, 18, 20, 1)',
+    gridColor:'rgba(255, 255, 255, 0.06)',
+    hide_side_toolbar:true,
+    hide_top_toolbar:false,
+    hide_legend:false,
+    hide_volume:false,
+    allow_symbol_change:false,
+    save_image:false,
+    calendar:false,
+    withdateranges:true,
+    support_host:'https://www.tradingview.com'
+  });
+  script.addEventListener('load',()=>{
+    if (generation===tradingViewPanelGeneration){
+      host.removeAttribute('aria-busy');
+      loading.remove();
+    }
+  },{once:true});
+  script.addEventListener('error',()=>{
+    if (generation!==tradingViewPanelGeneration) return;
+    host.removeAttribute('aria-busy');
+    host.replaceChildren(assetChartState('TRADINGVIEW CHART COULD NOT LOAD'));
+  },{once:true});
+  container.append(widget,attribution,script);
+  host.append(loading,container);
 }
 
 function renderAssetChart(asset){
@@ -2422,6 +2775,8 @@ document.addEventListener('keydown', e => {
 
 const pageContextMenu = $('#pageContextMenu');
 const backgroundPicker = $('#backgroundPicker');
+const pagePanelManager = $('#pagePanelManager');
+const panelManager = $('#panelManager');
 const mobileBackgroundButton = $('#mobileBackgroundButton');
 let contextPoint = { x:10, y:10 };
 
@@ -2467,6 +2822,8 @@ backgroundPicker?.addEventListener('click', async event => {
 function closePageContextMenu(){
   pageContextMenu.hidden = true;
   if (backgroundPicker) backgroundPicker.hidden = true;
+  if (panelManager) panelManager.hidden = true;
+  pagePanelManager?.setAttribute('aria-expanded','false');
 }
 
 function positionPageContextMenu(){
@@ -2525,11 +2882,29 @@ document.addEventListener('scroll', event => {
 }, true);
 $('#pageBackgroundChange').addEventListener('click', () => {
   if (!backgroundPicker) return;
+  if (panelManager) panelManager.hidden = true;
+  pagePanelManager?.setAttribute('aria-expanded','false');
   backgroundPicker.hidden = !backgroundPicker.hidden;
   if (!backgroundPicker.hidden){
     syncBackgroundPicker();
     requestAnimationFrame(positionPageContextMenu);
   }
+});
+pagePanelManager?.addEventListener('click', () => {
+  if (!panelManager) return;
+  if (backgroundPicker) backgroundPicker.hidden = true;
+  panelManager.hidden = !panelManager.hidden;
+  pagePanelManager.setAttribute('aria-expanded',String(!panelManager.hidden));
+  if (!panelManager.hidden){
+    renderPanelManager();
+    requestAnimationFrame(positionPageContextMenu);
+  }
+});
+panelManager?.addEventListener('click', event => {
+  const toggle=event.target.closest?.('[data-panel-toggle]');
+  if (!toggle || toggle.getAttribute('aria-disabled') === 'true') return;
+  togglePanel(toggle.dataset.panelToggle);
+  requestAnimationFrame(positionPageContextMenu);
 });
 $('#pageReload').addEventListener('click', () => window.location.reload());
 
@@ -3340,6 +3715,24 @@ $('#ticker-body').innerHTML = Array.from({length:8}).map(()=>
 $('#px-add').onclick = addCustom;
 $('#px-q').addEventListener('keydown', e => { if (e.key === 'Enter') addCustom(); });
 $('#trench-refresh').onclick = () => focusTrenches(true);
+const tradingViewPanelForm=$('#tradingviewPanelForm');
+const tradingViewPanelInput=$('#tradingviewPanelSymbol');
+const initialTradingViewSymbol=normalizeTradingViewPanelSymbol(cacheGet(TRADINGVIEW_PANEL_SYMBOL_KEY) || 'BINANCE:BTCUSDT');
+if (tradingViewPanelInput && initialTradingViewSymbol) tradingViewPanelInput.value=initialTradingViewSymbol;
+tradingViewPanelForm?.addEventListener('submit', event => {
+  event.preventDefault();
+  const symbol=normalizeTradingViewPanelSymbol(tradingViewPanelInput?.value);
+  if (!symbol){
+    clearTradingViewPanel();
+    $('#tradingviewPanelChart')?.append(assetChartState('USE EXCHANGE:SYMBOL'));
+    return;
+  }
+  cacheSet(TRADINGVIEW_PANEL_SYMBOL_KEY,symbol);
+  if (tradingViewPanelInput) tradingViewPanelInput.value=symbol;
+  renderTradingViewPanel();
+});
+renderPanelManager();
+updatePanelLayout();
 setupPanelResizers();
 
 // click a column header to sort by it (toggles asc/desc)
