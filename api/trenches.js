@@ -417,7 +417,7 @@ function emptyBirdeyeSnapshot(requested = false) {
     sellPartialCount: 0,
     sellAllCount: 0,
     bundledRatio: null,
-    notableRisk: requested ? "Birdeye verisi Doğrulanmadı" : "Birdeye etkin değil"
+    notableRisk: requested ? "Birdeye data unverified" : "Birdeye inactive"
   };
 }
 
@@ -431,7 +431,7 @@ function emptyBirdeyeOverview(requested = false) {
     sellVolume1h: null,
     buyVolume24h: null,
     sellVolume24h: null,
-    notableRisk: requested ? "Birdeye işlem verisi Doğrulanmadı" : "Birdeye etkin değil"
+    notableRisk: requested ? "Birdeye transaction data unverified" : "Birdeye inactive"
   };
 }
 
@@ -530,7 +530,7 @@ function parseBirdeyeOverview(payload) {
     sellVolume1h,
     buyVolume24h,
     sellVolume24h,
-    notableRisk: uniqueTraders === null ? "Birdeye benzersiz trader verisi Doğrulanmadı" : "Birdeye trader verisi mevcut"
+    notableRisk: uniqueTraders === null ? "Birdeye unique trader data unverified" : "Birdeye trader data available"
   };
 }
 
@@ -579,7 +579,7 @@ function emptyGeckoSnapshot(requested = false) {
     volume24hUsd: null,
     txns24h: null,
     poolCreatedAt: null,
-    notableRisk: requested ? "GeckoTerminal verisi Doğrulanmadı" : "GeckoTerminal etkin değil"
+    notableRisk: requested ? "GeckoTerminal data unverified" : "GeckoTerminal inactive"
   };
 }
 
@@ -610,7 +610,7 @@ function parseGeckoSnapshot(payload) {
     ...primary,
     poolCount: normalized.length,
     poolCandidates: normalized.slice(0, 5).map(({ poolAddress, liquidityUsd, volume24hUsd }) => ({ poolAddress, liquidityUsd, volume24hUsd })),
-    notableRisk: normalized.length > 1 ? "GeckoTerminal alternatif pool verisi mevcut" : "GeckoTerminal pool verisi mevcut"
+    notableRisk: normalized.length > 1 ? "GeckoTerminal alternative pool data available" : "GeckoTerminal pool data available"
   };
 }
 
@@ -628,7 +628,7 @@ async function fetchGecko(address) {
 function parseGoplus(payload, address) {
   const data = responseData(payload);
   const token = data?.[address] || data?.[address.toLowerCase()] || (data?.token_security && (data.token_security[address] || data.token_security[address.toLowerCase()])) || (Array.isArray(data) ? data[0] : data);
-  if (!token || typeof token !== "object") return { verified: false, mint: "unknown", freeze: "unknown", top1Pct: null, top10Pct: null, lpLockedPct: null, creatorMalicious: false, transferHookMalicious: false, notableRisk: "GoPlus verisi Doğrulanmadı" };
+  if (!token || typeof token !== "object") return { verified: false, mint: "unknown", freeze: "unknown", top1Pct: null, top10Pct: null, lpLockedPct: null, creatorMalicious: false, transferHookMalicious: false, notableRisk: "GoPlus data unverified" };
   const holders = firstArray(token?.holders, token?.top_holders).map((holder) => providerPercent(holder?.percent, true)).filter((value) => value !== null);
   const lpHolders = firstArray(token?.lp_holders, token?.lpHolders);
   const lpLockedPct = lpHolders.length
@@ -653,12 +653,12 @@ function parseGoplus(payload, address) {
     transferHookMalicious: String(token?.transfer_hook?.malicious_address || "") === "1",
     metadataMutable: providerStatus(token?.metadata_mutable?.status ?? token?.metadata_mutable),
     transferFeeRate: optionalNumber(token?.transfer_fee?.current_fee_rate),
-    notableRisk: risks || "Belirgin GoPlus uyarısı yok"
+    notableRisk: risks || "No notable GoPlus warning"
   };
 }
 
 async function fetchGoplus(address) {
-  if (!GOPLUS_API_TOKEN) return { ok: false, fetchedAt: null, verified: false, mint: "unknown", freeze: "unknown", top1Pct: null, top10Pct: null, lpLockedPct: null, notableRisk: "GoPlus etkin değil" };
+  if (!GOPLUS_API_TOKEN) return { ok: false, fetchedAt: null, verified: false, mint: "unknown", freeze: "unknown", top1Pct: null, top10Pct: null, lpLockedPct: null, notableRisk: "GoPlus inactive" };
   return cachedSource(`goplus:${address}`, async () => {
     const authorization = GOPLUS_API_TOKEN.toLowerCase().startsWith("bearer ")
       ? GOPLUS_API_TOKEN
@@ -669,7 +669,7 @@ async function fetchGoplus(address) {
     );
     return result.ok
       ? { ok: true, fetchedAt: new Date().toISOString(), ...parseGoplus(result.data, address) }
-      : { ok: false, fetchedAt: null, verified: false, mint: "unknown", freeze: "unknown", top1Pct: null, top10Pct: null, lpLockedPct: null, notableRisk: "GoPlus verisi Doğrulanmadı" };
+      : { ok: false, fetchedAt: null, verified: false, mint: "unknown", freeze: "unknown", top1Pct: null, top10Pct: null, lpLockedPct: null, notableRisk: "GoPlus data unverified" };
   });
 }
 
@@ -683,7 +683,7 @@ function parseMintAuthorities(accountInfo) {
 }
 
 async function fetchOnchain(address) {
-  if (!ONCHAIN_RPC_URL) return { ok: false, fetchedAt: null, verified: false, mint: "unknown", freeze: "unknown", top1Pct: null, top10Pct: null, notableRisk: "On-chain doğrulama etkin değil" };
+  if (!ONCHAIN_RPC_URL) return { ok: false, fetchedAt: null, verified: false, mint: "unknown", freeze: "unknown", top1Pct: null, top10Pct: null, notableRisk: "On-chain verification inactive" };
   return cachedSource(`onchain:${address}`, async () => {
     const batch = [
       { jsonrpc: "2.0", id: 1, method: "getTokenLargestAccounts", params: [address] },
@@ -696,7 +696,7 @@ async function fetchOnchain(address) {
       headers: { "Content-Type": "application/json" },
       init: { method: "POST", body: JSON.stringify(batch) }
     });
-    if (!result.ok || !Array.isArray(result.data)) return { ok: false, fetchedAt: null, verified: false, mint: "unknown", freeze: "unknown", top1Pct: null, top10Pct: null, notableRisk: "On-chain verisi Doğrulanmadı" };
+    if (!result.ok || !Array.isArray(result.data)) return { ok: false, fetchedAt: null, verified: false, mint: "unknown", freeze: "unknown", top1Pct: null, top10Pct: null, notableRisk: "On-chain data unverified" };
     const byId = new Map(result.data.map((item) => [item.id, item.result]));
     const supply = byId.get(2)?.value;
     const decimals = Number(supply?.decimals);
@@ -721,7 +721,7 @@ async function fetchOnchain(address) {
       metadataVerified: creators.some((item) => item?.verified === true),
       activity: null
     };
-    return { ok: true, fetchedAt: new Date().toISOString(), verified: top10Pct !== null || authorities.mint !== "unknown" || authorities.freeze !== "unknown", ...authorities, top1Pct, top10Pct, helius, notableRisk: "On-chain doğrulama mevcut" };
+    return { ok: true, fetchedAt: new Date().toISOString(), verified: top10Pct !== null || authorities.mint !== "unknown" || authorities.freeze !== "unknown", ...authorities, top1Pct, top10Pct, helius, notableRisk: "On-chain verification available" };
   });
 }
 
@@ -767,15 +767,15 @@ function parseHeliusActivity(payload, address, creator) {
     creatorFunding,
     swapCount,
     transferCount,
-    notableRisk: creatorSold ? "Helius geliştirici token satışı işareti" : creatorFunding ? "Helius creator-early buyer fonlama işareti" : "Helius geliştirici hareketlerinde satış işareti yok"
+    notableRisk: creatorSold ? "Helius developer token sale signal" : creatorFunding ? "Helius creator/early-buyer funding signal" : "No developer sale signal in Helius activity"
   };
 }
 
 async function fetchHeliusActivity(address, creator) {
-  if (!HELIUS_API_KEY || !creator) return { ok: false, fetchedAt: null, requested: Boolean(HELIUS_API_KEY), verified: false, creatorSold: null, creatorBought: null, creatorFunding: null, swapCount: null, transferCount: null, notableRisk: "Helius geliştirici aktivitesi Doğrulanmadı" };
+  if (!HELIUS_API_KEY || !creator) return { ok: false, fetchedAt: null, requested: Boolean(HELIUS_API_KEY), verified: false, creatorSold: null, creatorBought: null, creatorFunding: null, swapCount: null, transferCount: null, notableRisk: "Helius developer activity unverified" };
   return cachedSource(`helius-activity:${address}:${creator}`, async () => {
     const result = await settleJson(`https://api-mainnet.helius-rpc.com/v0/addresses/${encodeURIComponent(creator)}/transactions?api-key=${encodeURIComponent(HELIUS_API_KEY)}&limit=50`, { timeout: 8000 });
-    if (!result.ok) return { ok: false, fetchedAt: null, error: result.error || "request failed", requested: true, verified: false, creatorSold: null, creatorBought: null, creatorFunding: null, swapCount: null, transferCount: null, notableRisk: "Helius geliştirici aktivitesi Doğrulanmadı" };
+    if (!result.ok) return { ok: false, fetchedAt: null, error: result.error || "request failed", requested: true, verified: false, creatorSold: null, creatorBought: null, creatorFunding: null, swapCount: null, transferCount: null, notableRisk: "Helius developer activity unverified" };
     return { ok: true, fetchedAt: new Date().toISOString(), ...parseHeliusActivity(result.data, address, creator) };
   });
 }
@@ -798,16 +798,16 @@ function bubblemapsSnapshot(metrics, requested = false) {
     hhi: rawHhi,
     nakamotoCoefficient: rawNakamoto,
     notableRisk: !requested
-      ? "Bubblemaps etkin değil"
+      ? "Bubblemaps inactive"
       : score === null
-        ? "Bubblemaps verisi Doğrulanmadı"
+        ? "Bubblemaps data unverified"
         : score < 25
-          ? "Holder dağılım skoru çok düşük"
+          ? "Holder distribution score is very low"
           : score < 45
-            ? "Holder dağılım skoru zayıf"
+          ? "Holder distribution score is weak"
             : rawNakamoto !== null && rawNakamoto <= 3
-              ? "Nakamoto katsayısı düşük"
-              : "Belirgin Bubblemaps dağılım uyarısı yok"
+              ? "Nakamoto coefficient is low"
+              : "No notable Bubblemaps distribution warning"
   };
 }
 
@@ -818,26 +818,26 @@ function bubblemapsAssessment(snapshot, security) {
 
   if (!snapshot.requested) return { adjustment, hardReasons, cautionReasons };
   if (!snapshot.verified) {
-    cautionReasons.push("Bubblemaps verisi Doğrulanmadı");
+    cautionReasons.push("Bubblemaps data unverified");
     return { adjustment, hardReasons, cautionReasons };
   }
 
   if (snapshot.score < 25) {
     adjustment -= 8;
-    cautionReasons.push("Bubblemaps holder dağılımı çok zayıf");
+    cautionReasons.push("Bubblemaps holder distribution is very weak");
   } else if (snapshot.score < 45) {
     adjustment -= 4;
-    cautionReasons.push("Bubblemaps holder dağılımı zayıf");
+    cautionReasons.push("Bubblemaps holder distribution is weak");
   } else if (snapshot.score >= 75) {
     adjustment += 4;
   }
 
   if (snapshot.nakamotoCoefficient !== null && snapshot.nakamotoCoefficient <= 2) {
     adjustment -= 6;
-    cautionReasons.push("Bubblemaps Nakamoto katsayısı çok düşük");
+    cautionReasons.push("Bubblemaps Nakamoto coefficient is very low");
   } else if (snapshot.nakamotoCoefficient !== null && snapshot.nakamotoCoefficient <= 5) {
     adjustment -= 2;
-    cautionReasons.push("Bubblemaps Nakamoto katsayısı düşük");
+    cautionReasons.push("Bubblemaps Nakamoto coefficient is low");
   }
 
   const corroboratedConcentration = (security.top10Pct !== null && security.top10Pct > 45)
@@ -845,7 +845,7 @@ function bubblemapsAssessment(snapshot, security) {
     || security.graphInsiders > 10;
   if (snapshot.score < 20 && snapshot.nakamotoCoefficient !== null
       && snapshot.nakamotoCoefficient <= 2 && corroboratedConcentration) {
-    hardReasons.push("Bubblemaps ve RugCheck holder yoğunluğu aşırı");
+    hardReasons.push("Bubblemaps and RugCheck holder concentration is extreme");
   }
 
   return { adjustment: clamp(adjustment, -14, 4), hardReasons, cautionReasons };
@@ -904,7 +904,7 @@ function securitySnapshot(report) {
       rugged: false,
       graphInsiders: 0,
       uniqueTraders: null,
-      notableRisk: "Güvenlik verisi Doğrulanmadı"
+      notableRisk: "Security data unverified"
     };
   }
 
@@ -962,7 +962,7 @@ function securitySnapshot(report) {
     rugged: report?.rugged === true,
     graphInsiders: number(report?.graphInsidersDetected),
     uniqueTraders: null,
-    notableRisk: notable?.name || (lpLockedPct === null ? "LP kilidi Doğrulanmadı" : "Belirgin RugCheck uyarısı yok")
+    notableRisk: notable?.name || (lpLockedPct === null ? "LP lock unverified" : "No notable RugCheck warning")
   };
 }
 
@@ -980,8 +980,8 @@ function mergeSecuritySources(security, sources = {}) {
     overviewVerified: Boolean(overview.verified),
     verified: Boolean(holder.verified || firstBuyers.verified || overview.verified)
   };
-  const goplus = sources?.goplus || { verified: false, mint: "unknown", freeze: "unknown", top1Pct: null, top10Pct: null, lpLockedPct: null, notableRisk: GOPLUS_API_TOKEN ? "GoPlus verisi Doğrulanmadı" : "GoPlus etkin değil" };
-  const onchain = sources?.onchain || { verified: false, mint: "unknown", freeze: "unknown", top1Pct: null, top10Pct: null, notableRisk: ONCHAIN_RPC_URL ? "On-chain verisi Doğrulanmadı" : "On-chain doğrulama etkin değil" };
+  const goplus = sources?.goplus || { verified: false, mint: "unknown", freeze: "unknown", top1Pct: null, top10Pct: null, lpLockedPct: null, notableRisk: GOPLUS_API_TOKEN ? "GoPlus data unverified" : "GoPlus inactive" };
+  const onchain = sources?.onchain || { verified: false, mint: "unknown", freeze: "unknown", top1Pct: null, top10Pct: null, notableRisk: ONCHAIN_RPC_URL ? "On-chain data unverified" : "On-chain verification inactive" };
   const authoritySources = [security.mint, security.freeze, birdeye.mint, birdeye.freeze, goplus.mint, goplus.freeze, onchain.mint, onchain.freeze]
     .filter((value) => value && value !== "unknown");
   const mintValues = [security.mint, goplus.mint, onchain.mint].filter((value) => value && value !== "unknown");
@@ -1016,7 +1016,7 @@ function mergeSecuritySources(security, sources = {}) {
     effectiveTop1Pct: maxKnown(security.top1Pct, birdeye.top1Pct, goplus.top1Pct),
     effectiveTop10Pct: maxKnown(security.top10Pct, birdeye.top10Pct, goplus.top10Pct),
     effectiveRiskScore: maxKnown(security.riskScore),
-    notableRisk: security.verified ? security.notableRisk : birdeye.verified ? "Birdeye holder verisi mevcut" : goplus.verified ? goplus.notableRisk : onchain.notableRisk
+    notableRisk: security.verified ? security.notableRisk : birdeye.verified ? "Birdeye holder data available" : goplus.verified ? goplus.notableRisk : onchain.notableRisk
   };
 }
 
@@ -1282,69 +1282,69 @@ function classifyPair(pair, report, discovery, bubblemapsMetrics = null, bubblem
   const severeSelloff = price.h6 <= -65 || price.h24 <= -80;
   const hardReasons = [];
 
-  if (security.rugged) hardReasons.push("RugCheck rugged işareti");
-  if (security.contradictory || security.crossSourceConflict) hardReasons.push("Çelişkili güvenlik verisi");
-  if (security.mint === "open") hardReasons.push("Mint authority açık");
-  if (security.freeze === "open") hardReasons.push("Freeze authority açık");
-  if (security.goplus?.mint === "open") hardReasons.push("GoPlus mintable açık");
-  if (security.goplus?.freeze === "open") hardReasons.push("GoPlus freezable açık");
-  if (security.goplus?.creatorMalicious) hardReasons.push("GoPlus kötü niyetli geliştirici işareti");
-  if (security.goplus?.transferHookMalicious) hardReasons.push("GoPlus kötü niyetli transfer hook");
-  if (security.onchain?.helius?.activity?.creatorSold) hardReasons.push("Helius geliştirici satış hareketi");
-  if (security.onchain?.helius?.activity?.creatorFunding) hardReasons.push("Helius creator-early buyer fonlama işareti");
-  if (liquidity < criticalLpFloor || lpRatio > 0 && lpRatio < 0.003) hardReasons.push("Likidite çok düşük");
-  if (volume.h1 > 10000 && liquidity > 0 && liquidity / volume.h1 < 0.08) hardReasons.push("Likidite hacme göre çok ince");
-  if (security.effectiveTop1Pct > 22) hardReasons.push("Tek holder yoğunluğu aşırı");
-  if (security.effectiveTop10Pct > 65) hardReasons.push("Top holder yoğunluğu aşırı");
-  if (security.insiderPct !== null && security.insiderPct > 15) hardReasons.push("Insider yoğunluğu yüksek");
-  if (security.bundled === "flagged") hardReasons.push("Bundled buy işareti");
-  if (security.birdeye?.bundledRatio !== null && security.birdeye.bundledRatio >= 0.30) hardReasons.push("Birdeye bundled buy yoğunluğu yüksek");
-  if (security.wash === "flagged") hardReasons.push("Wash trading işareti");
-  if (security.devSale === "flagged") hardReasons.push("Geliştirici satışı işareti");
-  if (security.creatorRugHistory) hardReasons.push("Geliştiricinin rug geçmişi");
-  if (security.graphInsiders >= 100) hardReasons.push("Cluster/insider yoğunluğu aşırı");
-  if (security.birdeye?.uniqueTraders !== null && security.birdeye.uniqueTraders < 5 && txns.h1.total > 120) hardReasons.push("Benzersiz trader sayısı çok düşük");
-  if (security.birdeye?.uniqueTraders !== null && txns.h1.total > 250 && txns.h1.total / Math.max(security.birdeye.uniqueTraders, 1) > 45) hardReasons.push("İşlem/trader oranı yapay görünüyor");
-  if (unsupportedSpike) hardReasons.push("Hacimsiz dik fiyat hareketi");
-  if (severeSelloff) hardReasons.push("Şiddetli fiyat çöküşü");
-  if (security.effectiveRiskScore !== null && security.effectiveRiskScore >= HIGH_RUGCHECK_RISK) hardReasons.push("Yüksek birleşik risk skoru");
-  if (marketValidation.severe) hardReasons.push("Piyasa verileri arasında ciddi çelişki");
+  if (security.rugged) hardReasons.push("RugCheck rugged signal");
+  if (security.contradictory || security.crossSourceConflict) hardReasons.push("Contradictory security data");
+  if (security.mint === "open") hardReasons.push("Mint authority open");
+  if (security.freeze === "open") hardReasons.push("Freeze authority open");
+  if (security.goplus?.mint === "open") hardReasons.push("GoPlus mintable open");
+  if (security.goplus?.freeze === "open") hardReasons.push("GoPlus freezable open");
+  if (security.goplus?.creatorMalicious) hardReasons.push("GoPlus malicious developer signal");
+  if (security.goplus?.transferHookMalicious) hardReasons.push("GoPlus malicious transfer hook");
+  if (security.onchain?.helius?.activity?.creatorSold) hardReasons.push("Helius developer sale activity");
+  if (security.onchain?.helius?.activity?.creatorFunding) hardReasons.push("Helius creator/early-buyer funding signal");
+  if (liquidity < criticalLpFloor || lpRatio > 0 && lpRatio < 0.003) hardReasons.push("Liquidity is very low");
+  if (volume.h1 > 10000 && liquidity > 0 && liquidity / volume.h1 < 0.08) hardReasons.push("Liquidity is too thin for volume");
+  if (security.effectiveTop1Pct > 22) hardReasons.push("Single-holder concentration is extreme");
+  if (security.effectiveTop10Pct > 65) hardReasons.push("Top-holder concentration is extreme");
+  if (security.insiderPct !== null && security.insiderPct > 15) hardReasons.push("Insider concentration is high");
+  if (security.bundled === "flagged") hardReasons.push("Bundled-buy signal");
+  if (security.birdeye?.bundledRatio !== null && security.birdeye.bundledRatio >= 0.30) hardReasons.push("Birdeye bundled-buy concentration is high");
+  if (security.wash === "flagged") hardReasons.push("Wash-trading signal");
+  if (security.devSale === "flagged") hardReasons.push("Developer-sale signal");
+  if (security.creatorRugHistory) hardReasons.push("Developer rug history");
+  if (security.graphInsiders >= 100) hardReasons.push("Cluster/insider concentration is extreme");
+  if (security.birdeye?.uniqueTraders !== null && security.birdeye.uniqueTraders < 5 && txns.h1.total > 120) hardReasons.push("Unique trader count is very low");
+  if (security.birdeye?.uniqueTraders !== null && txns.h1.total > 250 && txns.h1.total / Math.max(security.birdeye.uniqueTraders, 1) > 45) hardReasons.push("Transaction/trader ratio looks artificial");
+  if (unsupportedSpike) hardReasons.push("Sharp price move without volume support");
+  if (severeSelloff) hardReasons.push("Severe price collapse");
+  if (security.effectiveRiskScore !== null && security.effectiveRiskScore >= HIGH_RUGCHECK_RISK) hardReasons.push("High composite risk score");
+  if (marketValidation.severe) hardReasons.push("Severe conflict between market data sources");
   hardReasons.push(...bubbleAssessment.hardReasons);
 
   const cautionReasons = [];
-  if (!security.compositeVerified && !bubblemaps.verified) cautionReasons.push("Bağımsız güvenlik doğrulaması Doğrulanmadı");
-  if (marketValidation.unavailable) cautionReasons.push("GeckoTerminal piyasa doğrulaması Doğrulanmadı");
-  if (security.crossSourceConflict) cautionReasons.push("Güvenlik kaynakları çelişiyor");
-  if (marketValidation.marketDataConflict) cautionReasons.push("Piyasa kaynakları çelişiyor");
-  if (marketValidation.poolLiquidityConflict) cautionReasons.push("Pool likiditesi kaynaklar arasında farklı");
-  if (effectiveLpLockedPct === null) cautionReasons.push("LP kilidi Doğrulanmadı");
-  else if (effectiveLpLockedPct < 80) cautionReasons.push("LP kilidi yetersiz");
-  if (ageHours === null) cautionReasons.push("Token yaşı Doğrulanmadı");
-  else if (ageHours < MIN_GREEN_AGE_HOURS) cautionReasons.push("Token çok yeni");
-  if (liquidity < greenLpFloor || lpRatio > 0 && lpRatio < 0.01) cautionReasons.push("Yeşil için likidite yetersiz");
-  if (volume.h1 > 10000 && liquidity > 0 && liquidity / volume.h1 < 0.16) cautionReasons.push("Likidite hacme göre ince");
-  if (volume.trend === "falling") cautionReasons.push("Kısa vadeli hacim zayıflıyor");
-  if (volume.trend === "unconfirmed") cautionReasons.push("Hacim geçmişi yetersiz");
-  if (historyState.snapshots < 2) cautionReasons.push("İvme için ikinci snapshot bekleniyor");
-  else if (!historyState.momentumConfirmed && volume.trend === "rising") cautionReasons.push("Hacim ivmesi henüz tekrarlanmadı");
-  if (historyState.hasPrevious && !historyState.liquidityStable) cautionReasons.push("Likidite önceki snapshota göre zayıfladı");
-  if (historyState.hasPrevious && !historyState.priceSupported) cautionReasons.push("Fiyat hareketi hacimle desteklenmiyor");
-  if (txns.h1.total < 30) cautionReasons.push("İşlem sayısı yetersiz");
-  if (security.birdeye?.uniqueTraders === null) cautionReasons.push("Benzersiz trader verisi Doğrulanmadı");
-  if (txns.h1.total && (txns.h1.buyRatio < 0.42 || txns.h1.buyRatio > 0.70)) cautionReasons.push("Alış/satış dengesi zayıf");
-  if (priceVolumeDivergence) cautionReasons.push("Fiyat/hacim uyumsuzluğu");
-  if (price.h6 <= -25 || price.h24 <= -40) cautionReasons.push("Sert fiyat kaybı");
-  if (price.h6 >= 100 || price.h24 >= 200) cautionReasons.push("Aşırı fiyat oynaklığı");
-  if (security.effectiveRiskScore === null) cautionReasons.push("Birleşik risk puanı Doğrulanmadı");
-  else if (security.effectiveRiskScore > 30) cautionReasons.push("Birleşik risk skoru düşük değil");
+  if (!security.compositeVerified && !bubblemaps.verified) cautionReasons.push("Independent security verification is unverified");
+  if (marketValidation.unavailable) cautionReasons.push("GeckoTerminal market verification is unverified");
+  if (security.crossSourceConflict) cautionReasons.push("Security sources conflict");
+  if (marketValidation.marketDataConflict) cautionReasons.push("Market sources conflict");
+  if (marketValidation.poolLiquidityConflict) cautionReasons.push("Pool liquidity differs between sources");
+  if (effectiveLpLockedPct === null) cautionReasons.push("LP lock is unverified");
+  else if (effectiveLpLockedPct < 80) cautionReasons.push("LP lock is insufficient");
+  if (ageHours === null) cautionReasons.push("Token age is unverified");
+  else if (ageHours < MIN_GREEN_AGE_HOURS) cautionReasons.push("Token is very new");
+  if (liquidity < greenLpFloor || lpRatio > 0 && lpRatio < 0.01) cautionReasons.push("Liquidity is insufficient for green");
+  if (volume.h1 > 10000 && liquidity > 0 && liquidity / volume.h1 < 0.16) cautionReasons.push("Liquidity is thin for volume");
+  if (volume.trend === "falling") cautionReasons.push("Short-term volume is weakening");
+  if (volume.trend === "unconfirmed") cautionReasons.push("Volume history is insufficient");
+  if (historyState.snapshots < 2) cautionReasons.push("Waiting for a second snapshot to confirm momentum");
+  else if (!historyState.momentumConfirmed && volume.trend === "rising") cautionReasons.push("Volume momentum has not repeated yet");
+  if (historyState.hasPrevious && !historyState.liquidityStable) cautionReasons.push("Liquidity weakened versus the previous snapshot");
+  if (historyState.hasPrevious && !historyState.priceSupported) cautionReasons.push("Price movement is not supported by volume");
+  if (txns.h1.total < 30) cautionReasons.push("Transaction count is insufficient");
+  if (security.birdeye?.uniqueTraders === null) cautionReasons.push("Unique trader data is unverified");
+  if (txns.h1.total && (txns.h1.buyRatio < 0.42 || txns.h1.buyRatio > 0.70)) cautionReasons.push("Buy/sell balance is weak");
+  if (priceVolumeDivergence) cautionReasons.push("Price/volume divergence");
+  if (price.h6 <= -25 || price.h24 <= -40) cautionReasons.push("Sharp price loss");
+  if (price.h6 >= 100 || price.h24 >= 200) cautionReasons.push("Excessive price volatility");
+  if (security.effectiveRiskScore === null) cautionReasons.push("Composite risk score is unverified");
+  else if (security.effectiveRiskScore > 30) cautionReasons.push("Composite risk score is not low");
   if (security.riskWarningCount > 0) cautionReasons.push(`RugCheck: ${security.notableRisk}`);
-  if (security.effectiveTop1Pct > 12) cautionReasons.push("Tek holder yoğunluğu yüksek");
-  if (security.effectiveTop10Pct > 45) cautionReasons.push("Top holder yoğunluğu yüksek");
-  if (security.insiderPct !== null && security.insiderPct > 5) cautionReasons.push("Insider yoğunluğu dikkat istiyor");
-  if (security.graphInsiders > 10) cautionReasons.push("Cluster/insider sayısı yüksek");
-  if (security.birdeye?.bundledRatio !== null && security.birdeye.bundledRatio >= 0.15 && security.birdeye.bundledRatio < 0.30) cautionReasons.push("Birdeye bundled buy oranı yüksek");
-  if (security.birdeye?.devCount > 0 && security.birdeye.sellAllCount > 0) cautionReasons.push("Erken geliştirici/ilk alıcı çıkışı işareti");
-  if (security.onchain?.helius?.activity?.verified && security.onchain.helius.activity.creatorBought) cautionReasons.push("Geliştirici erken alım hareketi gözlendi");
+  if (security.effectiveTop1Pct > 12) cautionReasons.push("Single-holder concentration is high");
+  if (security.effectiveTop10Pct > 45) cautionReasons.push("Top-holder concentration is high");
+  if (security.insiderPct !== null && security.insiderPct > 5) cautionReasons.push("Insider concentration needs attention");
+  if (security.graphInsiders > 10) cautionReasons.push("Cluster/insider count is high");
+  if (security.birdeye?.bundledRatio !== null && security.birdeye.bundledRatio >= 0.15 && security.birdeye.bundledRatio < 0.30) cautionReasons.push("Birdeye bundled-buy ratio is high");
+  if (security.birdeye?.devCount > 0 && security.birdeye.sellAllCount > 0) cautionReasons.push("Early developer/first-buyer exit signal");
+  if (security.onchain?.helius?.activity?.verified && security.onchain.helius.activity.creatorBought) cautionReasons.push("Early developer buying activity observed");
   cautionReasons.push(...bubbleAssessment.cautionReasons);
 
   const quality = qualityScore({
@@ -1377,21 +1377,21 @@ function classifyPair(pair, report, discovery, bubblemapsMetrics = null, bubblem
       && historyState.momentumConfirmed) decision = "green";
 
   const volumeComment = volume.trend === "rising"
-    ? "hacim kademeli ivmeleniyor"
+    ? "volume is gradually accelerating"
     : volume.trend === "falling"
-      ? "kısa vadeli hacim zayıflıyor"
+      ? "short-term volume is weakening"
       : volume.trend === "unconfirmed"
-        ? "hacim geçmişi henüz yetersiz"
-        : "hacim dengeli seyrediyor";
+        ? "volume history is still insufficient"
+        : "volume is balanced";
   const importantRisk = !security.compositeVerified
-    ? "bağımsız güvenlik verisi Doğrulanmadı"
+    ? "independent security data is unverified"
     : bubblemaps.requested && !bubblemaps.verified
-      ? "Bubblemaps verisi Doğrulanmadı"
-      : bubblemaps.verified && bubblemaps.notableRisk !== "Belirgin Bubblemaps dağılım uyarısı yok"
+      ? "Bubblemaps data is unverified"
+      : bubblemaps.verified && bubblemaps.notableRisk !== "No notable Bubblemaps distribution warning"
         ? bubblemaps.notableRisk
         : cautionReasons[0]
-          || (security.notableRisk === "Belirgin RugCheck uyarısı yok"
-            ? "benzersiz trader sayısı Doğrulanmadı"
+          || (security.notableRisk === "No notable RugCheck warning"
+            ? "unique trader count is unverified"
             : security.notableRisk);
 
   const result = {
@@ -1410,7 +1410,7 @@ function classifyPair(pair, report, discovery, bubblemapsMetrics = null, bubblem
     score,
     scoreBreakdown: { ...quality.components, bubblemaps: bubbleAssessment.adjustment, cautionPenalty: -cautionPenalty, hardPenalty: -hardPenalty },
     decision,
-    decisionLabel: decision === "green" ? "🟢 İzlemeye değer" : decision === "yellow" ? "🟡 Şartlı izleme" : "🔴 Elendi",
+    decisionLabel: decision === "green" ? "🟢 Worth watching" : decision === "yellow" ? "🟡 Conditional watch" : "🔴 Eliminated",
     reason: `${volumeComment}; Mint ${security.mint === "revoked" ? "✅" : "⚠️"} Freeze ${security.freeze === "revoked" ? "✅" : "⚠️"} LP ${effectiveLpLockedPct !== null && effectiveLpLockedPct >= 80 && liquidity >= greenLpFloor ? "✅" : "⚠️"}; ${importantRisk}`,
     hardReasons,
     cautionReasons,
@@ -1434,26 +1434,26 @@ function deriveReasonCodes(token) {
   const codes = [];
   const add = (condition, code) => { if (condition && !codes.includes(code)) codes.push(code); };
   add(token?.volume?.trend === "rising" || token?.history?.momentumConfirmed, "volume_acceleration");
-  add(token?.scoreBreakdown?.traderFlow >= 9 && !/trader sayısı|benzersiz trader|işlem\/trader|wash/i.test(text), "healthy_trader_flow");
-  add(/likidite.*(düşük|ince)|lp kilidi/i.test(text), "thin_liquidity");
-  add(/mint authority açık|mintable açık|freeze authority açık|freezable açık/i.test(text), "active_authority");
-  add(/lp kilidi doğrulanmadı/i.test(text), "lp_unverified");
-  add(/cluster|holder yoğunluğu|insider/i.test(text), "cluster_concentration");
-  add(/geliştirici|creator|dev/i.test(text), "dev_selling");
-  add(/wash|işlem\/trader oranı yapay/i.test(text), "wash_trading");
-  add(/fiyat\/hacim|hacimsiz dik|momentum|hacim.*zayıflıyor/i.test(text), "momentum_reversal");
-  add(/çelişkili|kaynak.*çeliş/i.test(text), "source_conflict");
+  add(token?.scoreBreakdown?.traderFlow >= 9 && !/trader count|unique trader|transaction\/trader|wash/i.test(text), "healthy_trader_flow");
+  add(/liquidity.*(low|thin)|lp lock/i.test(text), "thin_liquidity");
+  add(/mint authority open|mintable open|freeze authority open|freezable open/i.test(text), "active_authority");
+  add(/lp lock.*unverified/i.test(text), "lp_unverified");
+  add(/cluster|holder concentration|insider/i.test(text), "cluster_concentration");
+  add(/developer|creator|dev/i.test(text), "dev_selling");
+  add(/wash|transaction\/trader ratio looks artificial/i.test(text), "wash_trading");
+  add(/price\/volume|without volume|momentum|volume.*weakening/i.test(text), "momentum_reversal");
+  add(/contradictory|source.*conflict/i.test(text), "source_conflict");
   add(number(token?.history?.snapshots) < 2, "insufficient_history");
   add(/bundled/i.test(text), "bundled_buy_risk");
-  add(/rug geçmişi|rugcheck risk|rugged/i.test(text), "rug_risk");
+  add(/rug history|rugcheck risk|rugged/i.test(text), "rug_risk");
   add(token?.security?.graphInsiders > 10, "insider_cluster");
   add(token?.security?.birdeye?.bundledRatio >= 0.15, "bundler_activity");
   add(token?.security?.onchain?.helius?.activity?.creatorFunding === true, "creator_funding");
   add(token?.marketValidation?.poolLiquidityConflict, "pool_liquidity_conflict");
   add(token?.marketValidation?.unavailable, "source_unavailable");
   add(token?.security?.externalVerifiedCount >= 2 && !token?.security?.crossSourceConflict, "source_confirmation");
-  add(/piyasa kaynakları|piyasa verileri|pool likiditesi/i.test(text), "market_data_conflict");
-  add(/doğrulanmadı/i.test(text), "source_unverified");
+  add(/market sources|market data|pool liquidity/i.test(text), "market_data_conflict");
+  add(/unverified/i.test(text), "source_unverified");
   return codes;
 }
 
@@ -1512,26 +1512,26 @@ async function discover() {
 }
 
 function sourceHealth(requested, values, verifiedSelector) {
-  if (!requested) return "API anahtarı yok";
+  if (!requested) return "API key missing";
   const list = Array.isArray(values) ? values : [];
-  if (list.some((value) => verifiedSelector(value))) return "Aktif";
+  if (list.some((value) => verifiedSelector(value))) return "Active";
   if (list.some((value) => /429|rate.?limit|too many requests/i.test(String(value?.error || "")))) return "Rate limit";
-  if (list.some((value) => value?.ok === true)) return "Veri yok";
-  return "Doğrulanmadı";
+  if (list.some((value) => value?.ok === true)) return "No data";
+  return "Unverified";
 }
 
 async function buildScan() {
   const scanFetchedAt = new Date().toISOString();
   const { candidates, warnings } = await discover();
-  if (!candidates.length) throw new Error("Token keşif kaynakları şu anda yanıt vermiyor.");
+  if (!candidates.length) throw new Error("Token discovery sources are currently unavailable.");
 
   const addresses = candidates.map((item) => item.address);
   const dexResults = await mapLimit(chunk(addresses, DEX_BATCH_LIMIT), 2, (batch) => (
     settleJson(`https://api.dexscreener.com/tokens/v1/solana/${batch.join(",")}`)
   ));
   const successfulDexResults = dexResults.filter((result) => result.ok);
-  if (!successfulDexResults.length) throw new Error("DexScreener piyasa verisi alınamadı.");
-  if (successfulDexResults.length !== dexResults.length) warnings.push("DexScreener toplu sorgularından biri başarısız oldu.");
+  if (!successfulDexResults.length) throw new Error("DexScreener market data could not be loaded.");
+  if (successfulDexResults.length !== dexResults.length) warnings.push("One DexScreener batch request failed.");
 
   const pairMap = selectPairs(successfulDexResults.flatMap((result) => Array.isArray(result.data) ? result.data : []));
   const ranked = candidates
@@ -1540,7 +1540,7 @@ async function buildScan() {
     .sort((a, b) => preScore(b.pair) - preScore(a.pair))
     .slice(0, REPORT_LIMIT);
 
-  if (!ranked.length) throw new Error("Taranan tokenlerde aktif Solana çifti bulunamadı.");
+  if (!ranked.length) throw new Error("No active Solana pair was found among the scanned tokens.");
 
   const reports = await mapLimit(ranked, 6, async ({ discovery }) => {
     const result = await settleJson(`https://api.rugcheck.xyz/v1/tokens/${discovery.address}/report`);
@@ -1577,10 +1577,10 @@ async function buildScan() {
     });
     for (const result of externalResults) externalByAddress.set(result.address, result);
     if (BIRDEYE_API_KEY && externalResults.some((result) => result.birdeye?.ok === false)) {
-      warnings.push("Bazı Birdeye verileri alınamadı.");
+      warnings.push("Some Birdeye data could not be loaded.");
     }
-    if (GOPLUS_API_TOKEN && externalResults.some((result) => result.goplus?.ok === false)) warnings.push("Bazı GoPlus verileri alınamadı.");
-    if (ONCHAIN_RPC_URL && externalResults.some((result) => result.onchain?.ok === false)) warnings.push("Bazı on-chain doğrulamaları alınamadı.");
+    if (GOPLUS_API_TOKEN && externalResults.some((result) => result.goplus?.ok === false)) warnings.push("Some GoPlus data could not be loaded.");
+    if (ONCHAIN_RPC_URL && externalResults.some((result) => result.onchain?.ok === false)) warnings.push("Some on-chain verifications could not be completed.");
   }
 
   const geckoTargets = preliminary
@@ -1593,7 +1593,7 @@ async function buildScan() {
   for (const item of geckoResults) {
     if (item.result?.ok) geckoByAddress.set(item.address, item.result);
   }
-  if (geckoResults.some((item) => item.result?.ok === false)) warnings.push("Bazı GeckoTerminal pool verileri alınamadı.");
+  if (geckoResults.some((item) => item.result?.ok === false)) warnings.push("Some GeckoTerminal pool data could not be loaded.");
 
   if (BUBBLEMAPS_API_KEY) {
     const bubbleTargets = preliminary
@@ -1610,7 +1610,7 @@ async function buildScan() {
     for (const result of bubbleResults) {
       if (result.ok) bubblemapsByAddress.set(result.address, result.data);
     }
-    if (bubbleResults.some((result) => !result.ok)) warnings.push("Bazı Bubblemaps güvenlik verileri alınamadı.");
+    if (bubbleResults.some((result) => !result.ok)) warnings.push("Some Bubblemaps security data could not be loaded.");
   }
 
   const classified = ranked.map((item, index) => {
@@ -1671,12 +1671,12 @@ async function buildScan() {
       geckoTerminal: true
     },
     sourceStatus: {
-      dexScreener: { requested: true, status: "Aktif" },
-      rugCheck: { requested: true, status: reports.some((item) => !item.report) ? "Doğrulanmadı" : "Aktif" },
+      dexScreener: { requested: true, status: "Active" },
+      rugCheck: { requested: true, status: reports.some((item) => !item.report) ? "Unverified" : "Active" },
       geckoTerminal: { requested: true, status: sourceHealth(true, geckoResults.map((item) => item.result), (value) => Boolean(value?.verified)) },
       helius: { requested: Boolean(HELIUS_API_KEY), status: sourceHealth(Boolean(HELIUS_API_KEY), [...externalByAddress.values()].map((item) => item.onchain), (value) => Boolean(value?.helius?.verified || value?.helius?.activity?.verified)) }
     },
-    warning: warnings.length ? "Bazı veri kaynakları yanıt vermedi; mevcut verilerle tarandı." : ""
+    warning: warnings.length ? "Some data sources did not respond; the scan used the available data." : ""
   };
 }
 
@@ -1684,7 +1684,7 @@ export default async function handler(request, response) {
   response.setHeader("Access-Control-Allow-Origin", "*");
   if (request.method !== "GET") {
     response.setHeader("Allow", "GET");
-    return response.status(405).json({ error: "Yalnızca GET desteklenir." });
+    return response.status(405).json({ error: "Only GET is supported." });
   }
 
   const force = request.query?.refresh === "1";
@@ -1702,9 +1702,9 @@ export default async function handler(request, response) {
   } catch (error) {
     if (runtimeCache.payload) {
       response.setHeader("Cache-Control", "no-store");
-      return response.status(200).json({ ...runtimeCache.payload, cached: true, warning: "Canlı tarama başarısız; son önbellek gösteriliyor." });
+      return response.status(200).json({ ...runtimeCache.payload, cached: true, warning: "Live scan failed; showing the last cached results." });
     }
-    return response.status(503).json({ error: error?.message || "SOL Meme Trenches taraması şu anda kullanılamıyor." });
+    return response.status(503).json({ error: error?.message || "SOL Meme Trenches scan is currently unavailable." });
   }
 }
 

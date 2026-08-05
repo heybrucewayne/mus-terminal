@@ -1398,7 +1398,7 @@
           <button id="trench-refresh" class="trench-refresh" type="button" title="Refresh scan" aria-label="Refresh SOL Meme Trenches">↻</button>
         </div>
         <div id="trench-scroll" class="trench-scroll scroll">
-          <div id="trench-content" class="trench-state">Tarama hazırlanıyor…</div>
+          <div id="trench-content" class="trench-state">Preparing scan…</div>
         </div>
       </div>
     </section>
@@ -1456,20 +1456,20 @@
 <div id="pageContextMenu" class="asset-menu page-context-menu" hidden role="menu" aria-label="Page actions">
   <button id="pageReload" class="asset-menu-action" type="button" role="menuitem">
     <span class="page-context-icon" aria-hidden="true">↻</span>
-    SAYFAYI YENİLE
+    REFRESH PAGE
   </button>
   <button id="pageBackgroundChange" class="asset-menu-action" type="button" role="menuitem">
     <span class="page-context-icon" aria-hidden="true">▧</span>
-    DUVAR KAĞIDINI DEĞİŞTİR
+    CHANGE WALLPAPER
   </button>
   <button id="pagePanelManager" class="asset-menu-action" type="button" role="menuitem" aria-expanded="false">
     <span class="page-context-icon" aria-hidden="true">▦</span>
-    PANELLERİ YÖNET
+    MANAGE PANELS
   </button>
-  <div id="backgroundPicker" class="background-picker" role="group" aria-label="Duvar kağıtları" hidden></div>
-  <div id="panelManager" class="panel-manager" role="group" aria-label="Paneller" hidden></div>
+  <div id="backgroundPicker" class="background-picker" role="group" aria-label="Wallpapers" hidden></div>
+  <div id="panelManager" class="panel-manager" role="group" aria-label="Panels" hidden></div>
 </div>
-<button id="mobileBackgroundButton" class="mobile-background-trigger" type="button" aria-label="Duvar kağıdını değiştir" title="Duvar kağıdını değiştir">▧</button>
+<button id="mobileBackgroundButton" class="mobile-background-trigger" type="button" aria-label="Change wallpaper" title="Change wallpaper">▧</button>
 
 <div id="performanceModal" class="perf-overlay" hidden>
   <section class="perf-modal" role="dialog" aria-modal="true" aria-labelledby="performanceTitle">
@@ -1590,9 +1590,10 @@ function setupPanelResizers(){
     if (axis==='columns-top' && isDefaultThreePanelLayout()){
       const first=activePanelFrames['panel-bubbles'];
       const second=activePanelFrames['panel-table'];
-      const secondFrames=['panel-table','panel-trenches'].map(id=>activePanelFrames[id]).filter(Boolean);
+      const lowerPanel=visiblePanelDefs().find(panel=>panel.id!=='panel-bubbles' && panel.id!=='panel-table');
+      const secondFrames=['panel-table',lowerPanel?.id].map(id=>activePanelFrames[id]).filter(Boolean);
       if (first && second && secondFrames.length===2){
-        return {mode:'right-column',firstId:'panel-bubbles',secondId:'panel-table',first,second,secondIds:['panel-table','panel-trenches'],secondFrames};
+        return {mode:'right-column',firstId:'panel-bubbles',secondId:'panel-table',first,second,secondIds:['panel-table',lowerPanel.id],secondFrames};
       }
     }
     const pairs={
@@ -1600,7 +1601,7 @@ function setupPanelResizers(){
       'columns-bottom':panelVisibility['panel-tradingview'] ? ['panel-trenches','panel-tradingview'] : ['panel-trenches','panel-dexscreener'],
       'rows-left':['panel-bubbles','panel-trenches'],
       'rows-right':isDefaultThreePanelLayout()
-        ? ['panel-table','panel-trenches']
+        ? ['panel-table',defaultThreeLowerPanelId()]
         : panelVisibility['panel-tradingview'] ? ['panel-table','panel-tradingview'] : ['panel-table','panel-dexscreener']
     };
     const ids=pairs[axis];
@@ -1619,6 +1620,7 @@ function setupPanelResizers(){
   function resizePairAt(axis,point,rect){
     const pair=panelPair(axis);
     if (!pair || !rect?.width || !rect?.height) return false;
+    const previousFrames=Object.fromEntries(Object.entries(activePanelFrames).map(([id,frame])=>[id,{...frame}]));
     const horizontal=axis.startsWith('columns');
     const scale=horizontal?rect.width:rect.height;
     const minSize=horizontal?280:190;
@@ -1637,6 +1639,10 @@ function setupPanelResizers(){
         const nextStart=ratio+gap/2;
         activePanelFrames[id]={...frame,x:nextStart,w:Math.max(.1,(frame.x+frame.w)-nextStart)};
       });
+      if (panelFramesOverlap(visiblePanelDefs())){
+        activePanelFrames=previousFrames;
+        return false;
+      }
       applyPanelFrames();
       return true;
     }
@@ -1663,6 +1669,10 @@ function setupPanelResizers(){
     }
     activePanelFrames[pair.firstId]=firstNext;
     activePanelFrames[pair.secondId]=secondNext;
+    if (panelFramesOverlap(visiblePanelDefs())){
+      activePanelFrames=previousFrames;
+      return false;
+    }
     applyPanelFrames();
     return true;
   }
@@ -1794,12 +1804,13 @@ function defaultPanelFrames(visible){
   const ids=new Set(visible.map(panel => panel.id));
   const set=(id,frame)=>{ if (ids.has(id)) frames[id]=clampPanelFrame(frame); };
 
-  if (ids.has('panel-bubbles') && ids.has('panel-table') && ids.has('panel-trenches') && !ids.has('panel-tradingview')){
+  const lowerPanel=visible.find(panel=>panel.id!=='panel-bubbles' && panel.id!=='panel-table');
+  if (visible.length===3 && ids.has('panel-bubbles') && ids.has('panel-table') && lowerPanel){
     const rightX=Math.min(.74,columns+gapX);
     const rightY=Math.min(.74,rows+gapY);
     set('panel-bubbles',{x:0,y:0,w:columns,h:1});
     set('panel-table',{x:rightX,y:0,w:1-rightX,h:rows});
-    set('panel-trenches',{x:rightX,y:rightY,w:1-rightX,h:1-rightY});
+    set(lowerPanel.id,{x:rightX,y:rightY,w:1-rightX,h:1-rightY});
     return frames;
   }
 
@@ -1838,6 +1849,10 @@ function defaultPanelFrames(visible){
     visible.slice(0,5).forEach((panel,index)=>set(panel.id,fiveSlots[index]));
     return frames;
   }
+  if (visible.length===3){
+    visible.forEach((panel,index)=>set(panel.id,quadSlots[index]));
+    return frames;
+  }
   if (visible.length>=3){
     visible.forEach(panel=>set(panel.id,quad[panel.id] || {x:0,y:0,w:halfW,h:halfH}));
     return frames;
@@ -1860,18 +1875,68 @@ function normalizeAnchoredPanelFrames(visible){
   };
   if (isDefaultThreePanelLayout()){
     const bubbles=activePanelFrames['panel-bubbles'];
+    const lowerPanel=visible.find(panel=>panel.id!=='panel-bubbles' && panel.id!=='panel-table');
     if (bubbles && (Math.abs(bubbles.y)>.001 || Math.abs(bubbles.h-1)>.001)){
       bubbles.y=0;
       bubbles.h=1;
       changed=true;
     }
-    if (ids.has('panel-trenches')) anchorBottom('panel-trenches');
+    if (lowerPanel) anchorBottom(lowerPanel.id);
   }
   if (ids.has('panel-trenches') && ids.has('panel-tradingview')){
     anchorBottom('panel-trenches');
     anchorBottom('panel-tradingview');
   }
   return changed;
+}
+
+function panelFramesOverlap(visible){
+  for (let i=0;i<visible.length;i++){
+    const a=activePanelFrames[visible[i].id];
+    if (!a) continue;
+    for (let j=i+1;j<visible.length;j++){
+      const b=activePanelFrames[visible[j].id];
+      if (!b) continue;
+      const overlapX=Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x);
+      const overlapY=Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y);
+      if (overlapX>.001 && overlapY>.001) return true;
+    }
+  }
+  return false;
+}
+
+function panelFrameCoverage(visible){
+  const frames=visible.map(panel=>activePanelFrames[panel.id]).filter(Boolean);
+  if (frames.length!==visible.length) return 0;
+  const xs=[0,1],ys=[0,1];
+  frames.forEach(frame=>{
+    xs.push(frame.x,frame.x+frame.w);
+    ys.push(frame.y,frame.y+frame.h);
+  });
+  xs.sort((a,b)=>a-b); ys.sort((a,b)=>a-b);
+  let covered=0;
+  for (let x=0;x<xs.length-1;x++){
+    for (let y=0;y<ys.length-1;y++){
+      const midX=(xs[x]+xs[x+1])/2;
+      const midY=(ys[y]+ys[y+1])/2;
+      if (frames.some(frame=>midX>=frame.x && midX<=frame.x+frame.w && midY>=frame.y && midY<=frame.y+frame.h)){
+        covered+=(xs[x+1]-xs[x])*(ys[y+1]-ys[y]);
+      }
+    }
+  }
+  return covered;
+}
+
+function panelFramesNeedRepair(visible){
+  return panelFramesOverlap(visible) || panelFrameCoverage(visible)<.92;
+}
+
+function restoreDefaultPanelFrames(visible){
+  const defaults=defaultPanelFrames(visible);
+  visible.forEach(panel=>{
+    if (defaults[panel.id]) activePanelFrames[panel.id]=defaults[panel.id];
+  });
+  normalizeAnchoredPanelFrames(visible);
 }
 
 function savePanelFrames(){
@@ -1892,9 +1957,11 @@ function isDefaultThreePanelLayout(){
   const visible=new Set(visiblePanelDefs().map(panel=>panel.id));
   return visible.size===3
     && visible.has('panel-bubbles')
-    && visible.has('panel-table')
-    && visible.has('panel-trenches')
-    && !visible.has('panel-tradingview');
+    && visible.has('panel-table');
+}
+
+function defaultThreeLowerPanelId(){
+  return visiblePanelDefs().find(panel=>panel.id!=='panel-bubbles' && panel.id!=='panel-table')?.id || null;
 }
 
 function panelFramePairForResize(axis){
@@ -1903,13 +1970,14 @@ function panelFramePairForResize(axis){
     'columns-bottom':panelVisibility['panel-tradingview'] ? ['panel-trenches','panel-tradingview'] : ['panel-trenches','panel-dexscreener'],
     'rows-left':['panel-bubbles','panel-trenches'],
     'rows-right':isDefaultThreePanelLayout()
-      ? ['panel-table','panel-trenches']
+      ? ['panel-table',defaultThreeLowerPanelId()]
       : panelVisibility['panel-tradingview'] ? ['panel-table','panel-tradingview'] : ['panel-table','panel-dexscreener']
   };
   if (axis==='columns-top' && isDefaultThreePanelLayout()){
     const first=activePanelFrames['panel-bubbles'];
     const second=activePanelFrames['panel-table'];
-    const secondFrames=['panel-table','panel-trenches'].map(id=>activePanelFrames[id]).filter(Boolean);
+    const lowerPanel=visiblePanelDefs().find(panel=>panel.id!=='panel-bubbles' && panel.id!=='panel-table');
+    const secondFrames=['panel-table',lowerPanel?.id].map(id=>activePanelFrames[id]).filter(Boolean);
     if (first && second && secondFrames.length===2){
       return {mode:'right-column',first,second,group:secondFrames};
     }
@@ -1942,6 +2010,7 @@ function positionPanelResizers(){
     if (!handle || !rect?.width || !rect?.height || !matchMedia('(min-width:901px)').matches || !pair){
       if (handle){
         handle.hidden=true;
+        handle.style.display='none';
         ['left','right','top','bottom','width','height'].forEach(property=>handle.style.removeProperty(property));
       }
       return;
@@ -1977,6 +2046,7 @@ function positionPanelResizers(){
       handle.setAttribute('aria-valuenow',String(Math.round(boundary*100)));
     }
     handle.hidden=false;
+    handle.style.display='block';
   });
 }
 
@@ -2031,6 +2101,7 @@ function syncPanelFramesForLayout(visible){
       activePanelFrames[panel.id]=clampPanelFrame(saved[panel.id],defaults[panel.id] || {x:0,y:0,w:1,h:1});
     });
     normalizeAnchoredPanelFrames(visible);
+    if (panelFramesNeedRepair(visible)) restoreDefaultPanelFrames(visible);
     savePanelFrames();
   }
   applyPanelFrames();
@@ -2041,7 +2112,7 @@ function setupIndependentPanelFrames(){
   if (!grid) return;
   if (typeof ResizeObserver==='function'){
     panelFrameObserver=new ResizeObserver(entries=>{
-      if (panelFrameApplying || !activePanelFrameSignature || !matchMedia('(min-width:901px)').matches) return;
+      if (panelFrameApplying || !activePanelFrameSignature || !matchMedia('(min-width:901px)').matches || !grid.classList.contains('panel-freeform')) return;
       const gridRect=grid.getBoundingClientRect();
       if (!gridRect.width || !gridRect.height) return;
       let changed=false;
@@ -2061,7 +2132,12 @@ function setupIndependentPanelFrames(){
           changed=true;
         }
       });
-      if (changed) savePanelFrames();
+      if (changed){
+        const visible=visiblePanelDefs();
+        if (visible.length>1 && panelFramesNeedRepair(visible)) restoreDefaultPanelFrames(visible);
+        savePanelFrames();
+        applyPanelFrames();
+      }
     });
     PANEL_DEFS.forEach(panel=>{
       const element=$('#'+panel.id);
@@ -2102,10 +2178,11 @@ function applyBalancedPanelFrames(columnsRatio,rowsRatio){
   const lowerY=rows+gapY;
   const lowerH=1-lowerY;
 
-  if (ids.has('panel-bubbles') && ids.has('panel-table') && ids.has('panel-trenches') && !ids.has('panel-tradingview')){
+  const lowerPanel=visible.find(panel=>panel.id!=='panel-bubbles' && panel.id!=='panel-table');
+  if (visible.length===3 && ids.has('panel-bubbles') && ids.has('panel-table') && lowerPanel){
     assign('panel-bubbles',{x:0,y:0,w:columns,h:1});
     assign('panel-table',{x:rightX,y:0,w:rightW,h:rows});
-    assign('panel-trenches',{x:rightX,y:lowerY,w:rightW,h:lowerH});
+    assign(lowerPanel.id,{x:rightX,y:lowerY,w:rightW,h:lowerH});
   } else if (visible.length===2){
     assign(visible[0].id,{x:0,y:0,w:columns,h:1});
     assign(visible[1].id,{x:rightX,y:0,w:rightW,h:1});
@@ -2130,6 +2207,15 @@ function applyBalancedPanelFrames(columnsRatio,rowsRatio){
       {x:0,y:(rowH+gapY)*2,w:1,h:rowH}
     ];
     visible.slice(0,5).forEach((panel,index)=>assign(panel.id,slots[index]));
+  } else if (visible.length===3){
+    const halfW=(1-gapX)/2;
+    const halfH=(1-gapY)/2;
+    const slots=[
+      {x:0,y:0,w:halfW,h:halfH},
+      {x:halfW+gapX,y:0,w:halfW,h:halfH},
+      {x:0,y:halfH+gapY,w:halfW,h:halfH}
+    ];
+    visible.forEach((panel,index)=>assign(panel.id,slots[index]));
   } else if (visible.length>=3){
     assign('panel-bubbles',{x:0,y:0,w:columns,h:rows});
     assign('panel-table',{x:rightX,y:0,w:rightW,h:rows});
@@ -2160,7 +2246,7 @@ function updatePanelLayout(){
     savePanelVisibility();
   }
   const ids=new Set(visible.map(panel => panel.id));
-  const defaultThree=visible.length===3 && ids.has('panel-bubbles') && ids.has('panel-table') && ids.has('panel-trenches');
+  const defaultThree=isDefaultThreePanelLayout();
   grid.classList.remove('panel-layout-default','panel-layout-quad','panel-layout-standard','panel-layout-single');
   grid.classList.add(defaultThree ? 'panel-layout-default' : visible.length===1 ? 'panel-layout-single' : visible.length===4 ? 'panel-layout-quad' : 'panel-layout-standard');
   grid.classList.remove('panel-count-1','panel-count-2','panel-count-3','panel-count-4','panel-count-5');
@@ -2197,13 +2283,13 @@ function renderPanelManager(){
   const manager=$('#panelManager');
   if (!manager) return;
   const cannotHideLast=visiblePanelDefs().length<=1;
-  manager.innerHTML = `<div class="panel-manager-title">GÖRÜNEN PANELLER</div>` + PANEL_DEFS.map(panel => {
+  manager.innerHTML = `<div class="panel-manager-title">VISIBLE PANELS</div>` + PANEL_DEFS.map(panel => {
     const visible=Boolean(panelVisibility[panel.id]);
     const disabled=visible && cannotHideLast;
     return `<button class="panel-manager-toggle" type="button" role="menuitemcheckbox" data-panel-toggle="${panel.id}" aria-pressed="${visible}" aria-disabled="${disabled}">
       <span class="panel-manager-icon" aria-hidden="true">${panel.icon}</span>
       <span>${panel.label}</span>
-      <span class="panel-manager-state">${visible?'AÇIK':'KAPALI'}</span>
+      <span class="panel-manager-state">${visible?'ON':'OFF'}</span>
     </button>`;
   }).join('');
 }
@@ -2229,6 +2315,29 @@ let trenchesLoading = false;
 
 function trenchEscape(value){
   return String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+}
+function trenchEnglish(value){
+  const replacements=[
+    ['İzlemeye değer','Worth watching'],['Şartlı izleme','Conditional watch'],['Elendi','Eliminated'],
+    ['Doğrulanmadı','Unverified'],['Doğrulanmadi','Unverified'],['YENİ','NEW'],['HACİM+','VOLUME+'],
+    ['İVME','MOMENTUM'],['GÜVENLİK Δ','SECURITY Δ'],['KARAR Δ','DECISION Δ'],
+    ['hacim kademeli ivmeleniyor','volume is gradually accelerating'],
+    ['kısa vadeli hacim zayıflıyor','short-term volume is weakening'],
+    ['hacim geçmişi henüz yetersiz','volume history is still insufficient'],
+    ['hacim dengeli seyrediyor','volume is balanced'],
+    ['Fiyat hareketi hacimle desteklenmiyor','Price movement is not supported by volume'],
+    ['LP kilidi yetersiz','LP lock is insufficient'],
+    ['bağımsız güvenlik verisi Unverified','independent security data Unverified'],
+    ['bağımsız güvenlik verisi Doğrulanmadı','independent security data Unverified'],
+    ['Uygun 🟢 veya 🟡 sonuç bulunamadı.','No qualifying 🟢 or 🟡 results found.'],
+    ['Solana tokenleri taranıyor…','Scanning Solana tokens…'],
+    ['Tarama yanıtı geçersiz','Invalid scan response'],
+    ['Canlı tarama başarısız; son sonuç gösteriliyor.','Live scan failed; showing the last results.'],
+    ['Tarama şu anda kullanılamıyor.','Scan is currently unavailable.'],
+    ['Karar','Decision'],['Hacim','Volume'],['Fiyat','Price'],['elendi','eliminated'],
+    ['Tarama','Scan'],['başarısız','failed'],['şu anda kullanılamıyor','is currently unavailable']
+  ];
+  return replacements.reduce((text,[from,to])=>text.split(from).join(to),String(value ?? ''));
 }
 function trenchMoney(value){
   const n=Number(value);
@@ -2276,20 +2385,20 @@ function trenchSymbolLink(token,className='trench-symbol'){
   return `<a class="${className}" href="${trenchEscape(dexUrl)}" target="_blank" rel="noopener noreferrer" aria-label="Open ${symbol} on DexScreener">${symbol}</a>`;
 }
 function trenchChanges(token, previous){
-  if (!previous) return ['YENİ'];
+  if (!previous) return ['NEW'];
   const changes=[];
   const currentH1=Number(token?.volume?.h1)||0;
   const previousH1=Number(previous?.volume?.h1)||0;
-  if (currentH1>Math.max(1000,previousH1*1.4)) changes.push('HACİM+');
-  if (token?.volume?.trend==='rising' && previous?.volume?.trend!=='rising') changes.push('İVME');
+  if (currentH1>Math.max(1000,previousH1*1.4)) changes.push('VOLUME+');
+  if (token?.volume?.trend==='rising' && previous?.volume?.trend!=='rising') changes.push('MOMENTUM');
   if (token?.priceVolumeDivergence && !previous?.priceVolumeDivergence) changes.push('F/H!');
   if (Number(previous?.liquidity)>0 && Number(token?.liquidity)<Number(previous.liquidity)*.8) changes.push('LP↓');
   const securityFields=['mint','freeze','lpLockedPct','riskScore'];
   const rugcheckChanged=securityFields.some(key => String(token?.security?.[key])!==String(previous?.security?.[key]));
   const bubblemapsChanged=String(token?.bubblemaps?.score)!==String(previous?.bubblemaps?.score)
     || String(token?.bubblemaps?.nakamotoCoefficient)!==String(previous?.bubblemaps?.nakamotoCoefficient);
-  if (rugcheckChanged || bubblemapsChanged) changes.push('GÜVENLİK Δ');
-  if (token.decision!==previous.decision) changes.push('KARAR Δ');
+  if (rugcheckChanged || bubblemapsChanged) changes.push('SECURITY Δ');
+  if (token.decision!==previous.decision) changes.push('DECISION Δ');
   return changes;
 }
 function isTrenchesPayload(payload){
@@ -2315,13 +2424,13 @@ function renderTrenches(payload,{persist=true}={}){
     const changes=trenchChanges(token,previousMap.get(tokenKey));
     changesByAddress.set(tokenKey,changes);
     const decisionIcon=token.decision==='green'?'🟢':'🟡';
-    return `<tr title="${trenchEscape(token.decisionLabel)}">
+    return `<tr title="${trenchEscape(trenchEnglish(token.decisionLabel))}">
       <td>${trenchSymbolLink(token)}<span class="trench-score">${Number(token.score)||0}/100</span></td>
       <td>${trenchMoney(token.marketCap)}</td>
       <td>${trenchMoney(token.liquidity)}</td>
       <td>${trenchMoney(token.volume?.h1)} / ${trenchMoney(token.volume?.h6)} / ${trenchMoney(token.volume?.h24)}</td>
       <td><span class="${Number(token.price?.h6)>=0?'pos':'neg'}">${trenchPercent(token.price?.h6)}</span> / <span class="${Number(token.price?.h24)>=0?'pos':'neg'}">${trenchPercent(token.price?.h24)}</span></td>
-      <td class="trench-decision"><button class="trench-decision-toggle" type="button" data-trench-info="${trenchEscape(tokenKey)}" aria-expanded="false" title="Detayları göster" aria-label="${trenchEscape(token.symbol||'Token')} detaylarını göster">${decisionIcon}</button></td>
+      <td class="trench-decision"><button class="trench-decision-toggle" type="button" data-trench-info="${trenchEscape(tokenKey)}" aria-expanded="false" title="Show details" aria-label="${trenchEscape(token.symbol||'Token')} show details">${decisionIcon}</button></td>
     </tr>`;
   }).join('');
   const details=tokens.map(token=>{
@@ -2331,28 +2440,28 @@ function renderTrenches(payload,{persist=true}={}){
     const badges=changes.length?`<span class="trench-change">${changes.map(trenchEscape).join(' · ')}</span>`:'';
     const bubbleStatus=token?.bubblemaps?.verified
       ? ` · Bubblemaps ${trenchEscape(Math.round(Number(token.bubblemaps.score)))} / 100`
-      : token?.bubblemaps?.requested ? ' · Bubblemaps Doğrulanmadı' : '';
+      : token?.bubblemaps?.requested ? ' · Bubblemaps Unverified' : '';
     const externalLinks=trenchExternalLinks(token);
     return `<tr class="trench-detail-row" id="${trenchEscape(detailId)}" data-trench-detail="${trenchEscape(tokenKey)}" hidden>
       <td colspan="6"><div class="trench-popover">
-        <div class="trench-popover-head"><strong>${trenchSymbolLink(token,'trench-symbol')}</strong><span class="trench-popover-score">${trenchEscape(token.decisionLabel||'Karar')} · ${Number(token.score)||0}/100</span></div>
-        <div class="trench-popover-reason">${trenchEscape(token.reason)}${bubbleStatus}${badges}</div>
+        <div class="trench-popover-head"><strong>${trenchSymbolLink(token,'trench-symbol')}</strong><span class="trench-popover-score">${trenchEscape(trenchEnglish(token.decisionLabel||'Decision'))} · ${Number(token.score)||0}/100</span></div>
+        <div class="trench-popover-reason">${trenchEscape(trenchEnglish(token.reason))}${bubbleStatus}${badges}</div>
         <div class="trench-popover-links">${externalLinks}</div>
       </div></td>
     </tr>`;
   }).join('');
   const reasons=(Array.isArray(payload.eliminationReasons)?payload.eliminationReasons:[])
-    .map(item=>`${trenchEscape(item?.reason)} ${Number(item?.count)||0}`).join(' · ');
+    .map(item=>`${trenchEscape(trenchEnglish(item?.reason))} ${Number(item?.count)||0}`).join(' · ');
   const eliminated=payload.eliminatedCount
-    ? `<div class="trench-eliminated">🔴 ${Number(payload.eliminatedCount)} elendi${reasons?` — ${reasons}`:''}</div>`:'';
-  const warning=payload.warning?`<div class="trench-state">${trenchEscape(payload.warning)}</div>`:'';
-  const empty=!tokens.length?'<div class="trench-state">Uygun 🟢 veya 🟡 sonuç bulunamadı.</div>':'';
+    ? `<div class="trench-eliminated">🔴 ${Number(payload.eliminatedCount)} eliminated${reasons?` — ${reasons}`:''}</div>`:'';
+  const warning=payload.warning?`<div class="trench-state">${trenchEscape(trenchEnglish(payload.warning))}</div>`:'';
+  const empty=!tokens.length?'<div class="trench-state">No qualifying 🟢 or 🟡 results found.</div>':'';
   content.outerHTML=`<div id="trench-content">
-    <table class="trenches" aria-label="SOL Meme Trenches results"><thead><tr><th>Token</th><th>MC</th><th>LP</th><th>Hacim 1s / 6s / 24s</th><th>Fiyat 6s / 24s</th><th>Karar</th></tr></thead><tbody>${rows}${details}</tbody></table>
+    <table class="trenches" aria-label="SOL Meme Trenches results"><thead><tr><th>Token</th><th>MC</th><th>LP</th><th>Volume 1h / 6h / 24h</th><th>Price 6h / 24h</th><th>Decision</th></tr></thead><tbody>${rows}${details}</tbody></table>
     ${empty}${eliminated}${warning}
   </div>`;
   const date=new Date(payload.generatedAt);
-  time.textContent=isNaN(date)?'—':date.toLocaleString('tr-TR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+  time.textContent=isNaN(date)?'—':date.toLocaleString('en-GB',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
   if (persist){
     cacheSet(TRENCH_CACHE_KEY,payload);
     if (previousPayload?.generatedAt!==payload.generatedAt) cacheSet(TRENCH_PREVIOUS_KEY,payload);
@@ -2398,19 +2507,19 @@ async function loadTrenches(force=false){
   if (button) button.disabled=true;
   const cached=cacheGet(TRENCH_CACHE_KEY);
   if (isTrenchesPayload(cached)) renderTrenches(cached);
-  else trenchState('Solana tokenleri taranıyor…');
+  else trenchState('Scanning Solana tokens…');
   try {
     const response=await fetchWithTimeout(`${TRENCH_API_BASE}${force?'?refresh=1':''}`,{cache:force?'no-store':'default'},25000);
     const payload=await response.json().catch(()=>({}));
     if (!response.ok) throw new Error(payload?.error||`HTTP ${response.status}`);
-    if (!isTrenchesPayload(payload)) throw new Error('Tarama yanıtı geçersiz');
+    if (!isTrenchesPayload(payload)) throw new Error('Invalid scan response');
     renderTrenches(payload);
   } catch(error){
     console.warn('trenches scan failed',error);
     if (isTrenchesPayload(cached)){
-      renderTrenches({...cached,warning:'Canlı tarama başarısız; son sonuç gösteriliyor.'},{persist:false});
+      renderTrenches({...cached,warning:'Live scan failed; showing the last results.'},{persist:false});
     } else {
-      trenchState('Tarama şu anda kullanılamıyor.',true);
+      trenchState('Scan is currently unavailable.',true);
     }
   } finally {
     trenchesLoading=false;
@@ -4175,7 +4284,7 @@ async function xautrygQuote(){
     high:isFinite(+gold.high) ? +gold.high * +fx.price / GRAMS_PER_TROY_OUNCE : null,
     low:isFinite(+gold.low) ? +gold.low * +fx.price / GRAMS_PER_TROY_OUNCE : null,
     vol:null,
-    name:'Gram Altın / TL'
+    name:'GRAM GOLD / TRY'
   };
 }
 
