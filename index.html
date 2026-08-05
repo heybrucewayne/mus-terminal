@@ -1466,11 +1466,19 @@ function setupPanelResizers(){
   }
 
   function panelPair(axis){
+    if (axis==='columns-top' && isDefaultThreePanelLayout()){
+      const first=activePanelFrames['panel-bubbles'];
+      const second=activePanelFrames['panel-table'];
+      const secondFrames=['panel-table','panel-trenches'].map(id=>activePanelFrames[id]).filter(Boolean);
+      if (first && second && secondFrames.length===2){
+        return {mode:'right-column',firstId:'panel-bubbles',secondId:'panel-table',first,second,secondIds:['panel-table','panel-trenches'],secondFrames};
+      }
+    }
     const pairs={
       'columns-top':['panel-bubbles','panel-table'],
       'columns-bottom':['panel-trenches','panel-tradingview'],
       'rows-left':['panel-bubbles','panel-trenches'],
-      'rows-right':['panel-table','panel-tradingview']
+      'rows-right':isDefaultThreePanelLayout() ? ['panel-table','panel-trenches'] : ['panel-table','panel-tradingview']
     };
     const ids=pairs[axis];
     if (!ids || !panelVisibility[ids[0]] || !panelVisibility[ids[1]]) return null;
@@ -1492,6 +1500,23 @@ function setupPanelResizers(){
     const scale=horizontal?rect.width:rect.height;
     const minSize=horizontal?280:190;
     const gap=12/scale;
+    if (pair.mode==='right-column'){
+      const firstStart=pair.first.x*rect.width;
+      const rightEdge=Math.min(...pair.secondFrames.map(frame=>frame.x+frame.w))*rect.width;
+      const low=firstStart+minSize+6;
+      const high=rightEdge-minSize-6;
+      const boundary=clamp(point,Math.min(low,high),Math.max(low,high));
+      const ratio=boundary/rect.width;
+      const firstNext={...pair.first,w:Math.max(.1,ratio-gap/2-pair.first.x)};
+      activePanelFrames[pair.firstId]=firstNext;
+      pair.secondIds.forEach(id=>{
+        const frame=activePanelFrames[id];
+        const nextStart=ratio+gap/2;
+        activePanelFrames[id]={...frame,x:nextStart,w:Math.max(.1,(frame.x+frame.w)-nextStart)};
+      });
+      applyPanelFrames();
+      return true;
+    }
     const firstStart=(horizontal?pair.first.x:pair.first.y)*scale;
     const secondEnd=(horizontal
       ? pair.second.x+pair.second.w
@@ -1687,13 +1712,30 @@ function clearPanelFrameStyles(){
   });
 }
 
+function isDefaultThreePanelLayout(){
+  const visible=new Set(visiblePanelDefs().map(panel=>panel.id));
+  return visible.size===3
+    && visible.has('panel-bubbles')
+    && visible.has('panel-table')
+    && visible.has('panel-trenches')
+    && !visible.has('panel-tradingview');
+}
+
 function panelFramePairForResize(axis){
   const pairs={
     'columns-top':['panel-bubbles','panel-table'],
     'columns-bottom':['panel-trenches','panel-tradingview'],
     'rows-left':['panel-bubbles','panel-trenches'],
-    'rows-right':['panel-table','panel-tradingview']
+    'rows-right':isDefaultThreePanelLayout() ? ['panel-table','panel-trenches'] : ['panel-table','panel-tradingview']
   };
+  if (axis==='columns-top' && isDefaultThreePanelLayout()){
+    const first=activePanelFrames['panel-bubbles'];
+    const second=activePanelFrames['panel-table'];
+    const secondFrames=['panel-table','panel-trenches'].map(id=>activePanelFrames[id]).filter(Boolean);
+    if (first && second && secondFrames.length===2){
+      return {mode:'right-column',first,second,group:secondFrames};
+    }
+  }
   const ids=pairs[axis];
   if (!ids || !panelVisibility[ids[0]] || !panelVisibility[ids[1]]) return null;
   const first=activePanelFrames[ids[0]];
@@ -1728,9 +1770,15 @@ function positionPanelResizers(){
     }
     const horizontal=axis.startsWith('columns');
     if (horizontal){
-      const boundary=(pair.first.x+pair.first.w+pair.second.x)/2;
-      const top=Math.max(pair.first.y,pair.second.y);
-      const bottom=Math.min(pair.first.y+pair.first.h,pair.second.y+pair.second.h);
+      const group=pair.group || [pair.second];
+      const groupStart=Math.min(...group.map(frame=>frame.x));
+      const boundary=(pair.first.x+pair.first.w+groupStart)/2;
+      const top=pair.mode==='right-column'
+        ? Math.min(pair.first.y,...group.map(frame=>frame.y))
+        : Math.max(pair.first.y,pair.second.y);
+      const bottom=pair.mode==='right-column'
+        ? Math.max(pair.first.y+pair.first.h,...group.map(frame=>frame.y+frame.h))
+        : Math.min(pair.first.y+pair.first.h,pair.second.y+pair.second.h);
       handle.style.left=`${boundary*100}%`;
       handle.style.right='auto';
       handle.style.top=`${top*100}%`;
