@@ -672,6 +672,106 @@
   }
   .tradingview-panel-chart .tradingview-widget-copyright a { color:rgba(132,211,235,.58); text-decoration:none; }
 
+  /* ===== DEX CHART PANEL ===== */
+  #panel-dexscreener .panel-body {
+    display:flex;
+    flex-direction:column;
+    min-height:0;
+    background:linear-gradient(135deg,rgba(255,255,255,.018),rgba(4,10,14,.035));
+  }
+  .dex-panel-head {
+    display:flex;
+    align-items:center;
+    gap:8px;
+    min-height:42px;
+    padding:7px 9px;
+    border-bottom:1px solid rgba(255,255,255,.12);
+  }
+  .dex-panel-title {
+    flex:0 0 auto;
+    color:var(--text-bright);
+    font:700 9px 'Space Grotesk',sans-serif;
+    letter-spacing:.14em;
+    white-space:nowrap;
+  }
+  .dex-panel-form {
+    display:flex;
+    flex:1 1 auto;
+    min-width:0;
+    gap:6px;
+  }
+  .dex-panel-form input {
+    min-width:0;
+    flex:1 1 auto;
+    height:27px;
+    padding:0 8px;
+    border:1px solid rgba(255,255,255,.20);
+    border-radius:7px;
+    background:rgba(255,255,255,.075);
+    color:var(--text-bright);
+    font:500 10px 'JetBrains Mono',monospace;
+    outline:none;
+  }
+  .dex-panel-form input::placeholder { color:var(--muted2); }
+  .dex-panel-form input:focus { border-color:rgba(155,220,255,.70); box-shadow:0 0 0 2px rgba(155,220,255,.12); }
+  .dex-panel-form button,
+  .dex-panel-provider {
+    flex:0 0 auto;
+    height:27px;
+    padding:0 9px;
+    border:1px solid rgba(0,255,136,.30);
+    border-radius:7px;
+    background:rgba(0,255,136,.09);
+    color:var(--green);
+    font:700 9px 'Space Grotesk',sans-serif;
+    cursor:pointer;
+  }
+  .dex-panel-form button:hover,
+  .dex-panel-provider:hover { background:rgba(0,255,136,.16); border-color:rgba(0,255,136,.58); }
+  .dex-panel-tools {
+    display:flex;
+    align-items:center;
+    gap:5px;
+    min-height:32px;
+    padding:4px 9px;
+    border-bottom:1px solid rgba(255,255,255,.08);
+  }
+  .dex-panel-provider {
+    height:22px;
+    padding:0 7px;
+    border-color:rgba(255,255,255,.18);
+    background:rgba(255,255,255,.055);
+    color:var(--muted);
+    font-size:8px;
+  }
+  .dex-panel-provider.active { border-color:rgba(0,255,136,.55); background:rgba(0,255,136,.14); color:var(--green); }
+  .dex-panel-external {
+    margin-left:auto;
+    color:#76dcff;
+    font:600 8px 'JetBrains Mono',monospace;
+    text-decoration:none;
+    white-space:nowrap;
+  }
+  .dex-panel-external:hover { color:#fff; text-decoration:underline; }
+  .dex-panel-chart {
+    position:relative;
+    flex:1 1 auto;
+    min-height:0;
+    overflow:hidden;
+    background:rgba(4,9,14,.18);
+  }
+  .dex-panel-chart iframe { display:block; width:100%; height:100%; border:0; }
+  .dex-panel-state {
+    display:grid;
+    place-items:center;
+    height:100%;
+    padding:20px;
+    box-sizing:border-box;
+    color:var(--muted);
+    font:500 10px/1.5 'JetBrains Mono',monospace;
+    text-align:center;
+  }
+
   /* ===== SOL MEME TRENCHES ===== */
   #panel-trenches .panel-body {
     display:flex; flex-direction:column;
@@ -1184,8 +1284,10 @@
       overscroll-behavior:contain;
     }
     #panel-trenches .trench-scroll { height:560px; }
-    #panel-tradingview { min-height:520px; height:520px; }
-    #panel-tradingview .tradingview-panel-chart { min-height:0; }
+    #panel-tradingview,
+    #panel-dexscreener { min-height:520px; height:520px; }
+    #panel-tradingview .tradingview-panel-chart,
+    #panel-dexscreener .dex-panel-chart { min-height:0; }
     .mobile-background-trigger { display:grid; }
     #panel-table table.ticker { width:100%; min-width:0; }
     #panel-table table.ticker thead th,
@@ -1239,7 +1341,8 @@
     #panel-bubbles { height:270px; }
     #panel-table .px-scroll { height:460px; }
     #panel-trenches .trench-scroll { height:480px; }
-    #panel-tradingview { min-height:460px; height:460px; }
+    #panel-tradingview,
+    #panel-dexscreener { min-height:460px; height:460px; }
     #panel-table .market-sort-label { display:none; }
     #panel-table .px-search input { font-size:8.5px; }
     #panel-trenches table.trenches th { font-size:8px; letter-spacing:0; }
@@ -1310,6 +1413,24 @@
           </form>
         </div>
         <div id="tradingviewPanelChart" class="tradingview-panel-chart" aria-label="Live TradingView chart"></div>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-dexscreener" aria-label="DEX Screener chart" hidden>
+      <div class="panel-body">
+        <div class="dex-panel-head">
+          <div class="dex-panel-title">DEX CHART</div>
+          <form id="dexPanelForm" class="dex-panel-form">
+            <input id="dexPanelAddress" aria-label="Solana token or pair address" placeholder="Solana token / pair address" autocomplete="off" spellcheck="false" />
+            <button type="submit">LOAD</button>
+          </form>
+        </div>
+        <div class="dex-panel-tools" role="tablist" aria-label="DEX chart provider">
+          <button class="dex-panel-provider active" type="button" data-dex-provider="dex" role="tab" aria-selected="true">DEXSCREENER</button>
+          <button class="dex-panel-provider" type="button" data-dex-provider="gecko" role="tab" aria-selected="false">GECKOTERMINAL</button>
+          <a id="dexPanelExternal" class="dex-panel-external" target="_blank" rel="noopener noreferrer" hidden>OPEN ↗</a>
+        </div>
+        <div id="dexPanelChart" class="dex-panel-chart" aria-label="Live DEX chart"></div>
       </div>
     </section>
 
@@ -1476,9 +1597,11 @@ function setupPanelResizers(){
     }
     const pairs={
       'columns-top':['panel-bubbles','panel-table'],
-      'columns-bottom':['panel-trenches','panel-tradingview'],
+      'columns-bottom':panelVisibility['panel-tradingview'] ? ['panel-trenches','panel-tradingview'] : ['panel-trenches','panel-dexscreener'],
       'rows-left':['panel-bubbles','panel-trenches'],
-      'rows-right':isDefaultThreePanelLayout() ? ['panel-table','panel-trenches'] : ['panel-table','panel-tradingview']
+      'rows-right':isDefaultThreePanelLayout()
+        ? ['panel-table','panel-trenches']
+        : panelVisibility['panel-tradingview'] ? ['panel-table','panel-tradingview'] : ['panel-table','panel-dexscreener']
     };
     const ids=pairs[axis];
     if (!ids || !panelVisibility[ids[0]] || !panelVisibility[ids[1]]) return null;
@@ -1621,7 +1744,8 @@ const PANEL_DEFS = [
   { id:'panel-bubbles', label:'BUBBLES', icon:'◉', defaultVisible:true },
   { id:'panel-table', label:'MARKET', icon:'▤', defaultVisible:true },
   { id:'panel-trenches', label:'SOL MEME TRENCHES', icon:'◌', defaultVisible:true },
-  { id:'panel-tradingview', label:'TRADINGVIEW', icon:'⌁', defaultVisible:false }
+  { id:'panel-tradingview', label:'TRADINGVIEW', icon:'⌁', defaultVisible:false },
+  { id:'panel-dexscreener', label:'DEX CHART', icon:'◈', defaultVisible:false }
 ];
 const storedPanelVisibility = cacheGet(PANEL_VISIBILITY_KEY);
 let panelVisibility = Object.fromEntries(PANEL_DEFS.map(panel => [
@@ -1687,9 +1811,31 @@ function defaultPanelFrames(visible){
     'panel-trenches':{x:0,y:halfH+gapY,w:halfW,h:halfH},
     'panel-tradingview':{x:halfW+gapX,y:halfH+gapY,w:halfW,h:halfH}
   };
+  const quadSlots=[
+    {x:0,y:0,w:halfW,h:halfH},
+    {x:halfW+gapX,y:0,w:halfW,h:halfH},
+    {x:0,y:halfH+gapY,w:halfW,h:halfH},
+    {x:halfW+gapX,y:halfH+gapY,w:halfW,h:halfH}
+  ];
+  const fiveHeight=(1-gapY*2)/3;
+  const fiveSlots=[
+    {x:0,y:0,w:halfW,h:fiveHeight},
+    {x:halfW+gapX,y:0,w:halfW,h:fiveHeight},
+    {x:0,y:fiveHeight+gapY,w:halfW,h:fiveHeight},
+    {x:halfW+gapX,y:fiveHeight+gapY,w:halfW,h:fiveHeight},
+    {x:0,y:(fiveHeight+gapY)*2,w:1,h:fiveHeight}
+  ];
 
   if (visible.length===2){
     visible.forEach((panel,index)=>set(panel.id,{x:index ? halfW+gapX : 0,y:0,w:halfW,h:1}));
+    return frames;
+  }
+  if (visible.length===4){
+    visible.forEach((panel,index)=>set(panel.id,quadSlots[index]));
+    return frames;
+  }
+  if (visible.length>=5){
+    visible.slice(0,5).forEach((panel,index)=>set(panel.id,fiveSlots[index]));
     return frames;
   }
   if (visible.length>=3){
@@ -1754,9 +1900,11 @@ function isDefaultThreePanelLayout(){
 function panelFramePairForResize(axis){
   const pairs={
     'columns-top':['panel-bubbles','panel-table'],
-    'columns-bottom':['panel-trenches','panel-tradingview'],
+    'columns-bottom':panelVisibility['panel-tradingview'] ? ['panel-trenches','panel-tradingview'] : ['panel-trenches','panel-dexscreener'],
     'rows-left':['panel-bubbles','panel-trenches'],
-    'rows-right':isDefaultThreePanelLayout() ? ['panel-table','panel-trenches'] : ['panel-table','panel-tradingview']
+    'rows-right':isDefaultThreePanelLayout()
+      ? ['panel-table','panel-trenches']
+      : panelVisibility['panel-tradingview'] ? ['panel-table','panel-tradingview'] : ['panel-table','panel-dexscreener']
   };
   if (axis==='columns-top' && isDefaultThreePanelLayout()){
     const first=activePanelFrames['panel-bubbles'];
@@ -1961,6 +2109,27 @@ function applyBalancedPanelFrames(columnsRatio,rowsRatio){
   } else if (visible.length===2){
     assign(visible[0].id,{x:0,y:0,w:columns,h:1});
     assign(visible[1].id,{x:rightX,y:0,w:rightW,h:1});
+  } else if (visible.length===4){
+    const halfW=(1-gapX)/2;
+    const halfH=(1-gapY)/2;
+    const slots=[
+      {x:0,y:0,w:halfW,h:halfH},
+      {x:halfW+gapX,y:0,w:halfW,h:halfH},
+      {x:0,y:halfH+gapY,w:halfW,h:halfH},
+      {x:halfW+gapX,y:halfH+gapY,w:halfW,h:halfH}
+    ];
+    visible.forEach((panel,index)=>assign(panel.id,slots[index]));
+  } else if (visible.length>=5){
+    const halfW=(1-gapX)/2;
+    const rowH=(1-gapY*2)/3;
+    const slots=[
+      {x:0,y:0,w:halfW,h:rowH},
+      {x:halfW+gapX,y:0,w:halfW,h:rowH},
+      {x:0,y:rowH+gapY,w:halfW,h:rowH},
+      {x:halfW+gapX,y:rowH+gapY,w:halfW,h:rowH},
+      {x:0,y:(rowH+gapY)*2,w:1,h:rowH}
+    ];
+    visible.slice(0,5).forEach((panel,index)=>assign(panel.id,slots[index]));
   } else if (visible.length>=3){
     assign('panel-bubbles',{x:0,y:0,w:columns,h:rows});
     assign('panel-table',{x:rightX,y:0,w:rightW,h:rows});
@@ -1994,7 +2163,7 @@ function updatePanelLayout(){
   const defaultThree=visible.length===3 && ids.has('panel-bubbles') && ids.has('panel-table') && ids.has('panel-trenches');
   grid.classList.remove('panel-layout-default','panel-layout-quad','panel-layout-standard','panel-layout-single');
   grid.classList.add(defaultThree ? 'panel-layout-default' : visible.length===1 ? 'panel-layout-single' : visible.length===4 ? 'panel-layout-quad' : 'panel-layout-standard');
-  grid.classList.remove('panel-count-1','panel-count-2','panel-count-3','panel-count-4');
+  grid.classList.remove('panel-count-1','panel-count-2','panel-count-3','panel-count-4','panel-count-5');
   grid.classList.add(`panel-count-${visible.length}`);
   PANEL_DEFS.forEach(panel => {
     grid.classList.toggle(`has-${panel.id.replace(/^panel-/,'')}`,ids.has(panel.id));
@@ -2019,6 +2188,9 @@ function updatePanelLayout(){
       renderTradingViewPanel();
     });
   } else clearTradingViewPanel();
+  if (panelVisibility['panel-dexscreener']===true){
+    requestAnimationFrame(()=>renderDexPanel());
+  } else clearDexPanel();
 }
 
 function renderPanelManager(){
@@ -2931,6 +3103,10 @@ let assetChartGeneration = 0;
 let tradingViewPanelGeneration = 0;
 let tradingViewPanelFrame = 0;
 const TRADINGVIEW_PANEL_SYMBOL_KEY = 'mus_tradingview_panel_symbol_v1';
+const DEX_PANEL_ADDRESS_KEY = 'mus_dex_panel_address_v1';
+const DEX_PANEL_PROVIDER_KEY = 'mus_dex_panel_provider_v1';
+let dexPanelGeneration = 0;
+let dexPanelProvider = cacheGet(DEX_PANEL_PROVIDER_KEY) === 'gecko' ? 'gecko' : 'dex';
 
 function customAssetSnapshot(c){
   const common = {
@@ -3162,6 +3338,144 @@ function renderTradingViewPanel(){
   },{once:true});
   container.append(widget,attribution,script);
   host.append(loading,container);
+}
+
+function dexPanelState(message){
+  const state=document.createElement('div');
+  state.className='dex-panel-state';
+  state.textContent=message;
+  return state;
+}
+
+function normalizeSolanaChartAddress(rawInput){
+  let value=String(rawInput||'').trim();
+  if (!value) return null;
+  try {
+    if (/^https?:\/\//i.test(value)){
+      const url=new URL(value);
+      if (!/(^|\.)dexscreener\.com$|(^|\.)geckoterminal\.com$/i.test(url.hostname)) return null;
+      const parts=url.pathname.split('/').filter(Boolean);
+      const chainIndex=parts.findIndex(part=>part.toLowerCase()==='solana');
+      const next=chainIndex>=0 ? parts[chainIndex+1]?.toLowerCase() : '';
+      value=chainIndex>=0
+        ? (next==='tokens' || next==='pools' ? parts[chainIndex+2] : parts[chainIndex+1])
+        : parts[parts.length-1];
+    }
+  } catch(e){ return null; }
+  value=value.split(/\s+/)[0].replace(/[?#].*$/,'');
+  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(value) ? value : null;
+}
+
+function dexScreenerChartUrl(address){
+  return `https://dexscreener.com/solana/${encodeURIComponent(address)}?embed=1&theme=dark&info=0&trades=0`;
+}
+
+function dexScreenerOpenUrl(address){
+  return `https://dexscreener.com/solana/${encodeURIComponent(address)}`;
+}
+
+function geckoTerminalChartUrl(pairAddress){
+  return `https://www.geckoterminal.com/solana/pools/${encodeURIComponent(pairAddress)}?embed=1&info=0&swaps=0&light_chart=0&chart_type=price&resolution=1d&bg_color=071214`;
+}
+
+function geckoTerminalOpenUrl(address,pairAddress){
+  return pairAddress
+    ? `https://www.geckoterminal.com/solana/pools/${encodeURIComponent(pairAddress)}`
+    : `https://www.geckoterminal.com/solana/tokens/${encodeURIComponent(address)}`;
+}
+
+async function resolveDexSolanaPair(address){
+  const response=await fetchWithTimeout(`https://api.dexscreener.com/token-pairs/v1/solana/${encodeURIComponent(address)}`,{cache:'no-store'},12000);
+  if (!response.ok) throw new Error(`DEX API ${response.status}`);
+  const data=await response.json();
+  const pairs=(Array.isArray(data)?data:[])
+    .filter(pair=>String(pair?.chainId||'').toLowerCase()==='solana' && pair?.pairAddress)
+    .sort((a,b)=>(Number(b?.liquidity?.usd)||0)-(Number(a?.liquidity?.usd)||0)
+      || (Number(b?.volume?.h24)||0)-(Number(a?.volume?.h24)||0));
+  return pairs[0] || null;
+}
+
+function updateDexPanelProviderButtons(){
+  document.querySelectorAll('[data-dex-provider]').forEach(button=>{
+    const active=button.dataset.dexProvider===dexPanelProvider;
+    button.classList.toggle('active',active);
+    button.setAttribute('aria-selected',String(active));
+  });
+}
+
+function clearDexPanel(){
+  dexPanelGeneration++;
+  const host=$('#dexPanelChart');
+  if (host){
+    host.removeAttribute('aria-busy');
+    host.replaceChildren();
+  }
+  const external=$('#dexPanelExternal');
+  if (external){
+    external.hidden=true;
+    external.removeAttribute('href');
+  }
+}
+
+async function renderDexPanel(){
+  const panel=$('#panel-dexscreener');
+  const host=$('#dexPanelChart');
+  if (!panel || panel.hidden || panelVisibility['panel-dexscreener']!==true || !host) return;
+  clearDexPanel();
+  updateDexPanelProviderButtons();
+  const generation=dexPanelGeneration;
+  const input=$('#dexPanelAddress');
+  const saved=cacheGet(DEX_PANEL_ADDRESS_KEY);
+  const address=normalizeSolanaChartAddress(input?.value || saved || '');
+  if (!address){
+    host.append(dexPanelState('SOLANA TOKEN OR PAIR ADDRESS'));
+    return;
+  }
+  if (input) input.value=address;
+  cacheSet(DEX_PANEL_ADDRESS_KEY,address);
+  host.setAttribute('aria-busy','true');
+  host.append(dexPanelState('RESOLVING SOLANA POOL…'));
+  let pair=null;
+  try { pair=await resolveDexSolanaPair(address); } catch(e){ console.warn('DEX pair lookup failed',e); }
+  if (generation!==dexPanelGeneration) return;
+  const pairAddress=pair?.pairAddress || null;
+  const dexAddress=pairAddress || address;
+  const dexUrl=dexScreenerChartUrl(dexAddress);
+  const geckoUrl=pairAddress ? geckoTerminalChartUrl(pairAddress) : '';
+  const external=$('#dexPanelExternal');
+  const externalUrl=dexPanelProvider==='gecko' ? geckoTerminalOpenUrl(address,pairAddress) : dexScreenerOpenUrl(dexAddress);
+  if (external){
+    external.href=externalUrl;
+    external.textContent=`OPEN ${dexPanelProvider==='gecko'?'GECKO':'DEX'} ↗`;
+    external.hidden=false;
+  }
+  if (dexPanelProvider==='gecko' && !geckoUrl){
+    host.removeAttribute('aria-busy');
+    host.replaceChildren(dexPanelState('GECKOTERMINAL POOL NOT FOUND · TRY DEXSCREENER'));
+    return;
+  }
+  const frame=document.createElement('iframe');
+  frame.title=`${dexPanelProvider==='gecko'?'GeckoTerminal':'DEX Screener'} chart`;
+  frame.loading='eager';
+  frame.allow='clipboard-write';
+  frame.allowFullscreen=true;
+  frame.referrerPolicy='no-referrer-when-downgrade';
+  frame.src=dexPanelProvider==='gecko' ? geckoUrl : dexUrl;
+  frame.addEventListener('load',()=>{
+    if (generation===dexPanelGeneration) host.removeAttribute('aria-busy');
+  },{once:true});
+  frame.addEventListener('error',()=>{
+    if (generation!==dexPanelGeneration) return;
+    if (dexPanelProvider==='dex' && geckoUrl){
+      dexPanelProvider='gecko';
+      cacheSet(DEX_PANEL_PROVIDER_KEY,dexPanelProvider);
+      renderDexPanel();
+      return;
+    }
+    host.removeAttribute('aria-busy');
+    host.replaceChildren(dexPanelState('CHART COULD NOT LOAD · USE OPEN LINK'));
+  },{once:true});
+  host.replaceChildren(frame);
 }
 
 function renderAssetChart(asset){
@@ -4242,6 +4556,25 @@ tradingViewPanelForm?.addEventListener('submit', event => {
   cacheSet(TRADINGVIEW_PANEL_SYMBOL_KEY,symbol);
   if (tradingViewPanelInput) tradingViewPanelInput.value=symbol;
   renderTradingViewPanel();
+});
+const dexPanelForm=$('#dexPanelForm');
+const dexPanelInput=$('#dexPanelAddress');
+const initialDexAddress=normalizeSolanaChartAddress(cacheGet(DEX_PANEL_ADDRESS_KEY) || '');
+if (dexPanelInput && initialDexAddress) dexPanelInput.value=initialDexAddress;
+updateDexPanelProviderButtons();
+dexPanelForm?.addEventListener('submit', event => {
+  event.preventDefault();
+  renderDexPanel();
+});
+document.querySelectorAll('[data-dex-provider]').forEach(button=>{
+  button.addEventListener('click',()=>{
+    const provider=button.dataset.dexProvider;
+    if (provider!=='dex' && provider!=='gecko') return;
+    dexPanelProvider=provider;
+    cacheSet(DEX_PANEL_PROVIDER_KEY,dexPanelProvider);
+    updateDexPanelProviderButtons();
+    renderDexPanel();
+  });
 });
 setupIndependentPanelFrames();
 renderPanelManager();
