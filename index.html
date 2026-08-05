@@ -2262,11 +2262,12 @@ function tradingViewSymbol(asset){
     return `${exchange}:${symbol}`;
   }
   const map = {
-    // TVC:SPX is the TradingView CFD/index feed that renders reliably in the
-    // embedded Advanced Chart widget; SP:SPX can resolve to a component index
-    // page but may return an empty embedded chart for some sessions.
-    SPX:  'TVC:SPX',
-    NDX:  'NASDAQ:NDX',
+    // TradingView's own widget examples use the FOREX.com S&P 500 feed,
+    // which is available in embedded Advanced Charts.
+    SPX:  'FOREXCOM:SPXUSD',
+    // The table is sourced from CNBC's IXIC (Nasdaq Composite) quote, so
+    // keep the embedded chart on the same TradingView instrument.
+    NDX:  'NASDAQ:IXIC',
     GOLD: 'OANDA:XAUUSD',
     OIL:  'TVC:USOIL'
   };
@@ -2330,7 +2331,7 @@ function renderAssetChart(asset){
   script.textContent = JSON.stringify({
     autosize: true,
     symbol,
-    interval: '15',
+    interval: 'D',
     timezone: 'Etc/UTC',
     theme: 'dark',
     style: '1',
