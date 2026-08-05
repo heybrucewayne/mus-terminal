@@ -1570,6 +1570,7 @@ function setupPanelResizers(){
     state.pointerId=null;
     state.activeHandle=null;
     document.body.classList.remove('panel-resizing');
+    savePanelFrames();
     saveLayout();
   }
   function keyboardResize(axis,event){
@@ -1592,6 +1593,7 @@ function setupPanelResizers(){
       ? ((pair.first.x+pair.first.w+pair.second.x)/2)*rect.width
       : ((pair.first.y+pair.first.h+pair.second.y)/2)*rect.height) + (positive?step:-step);
     resizePairAt(axis,boundary,rect);
+    savePanelFrames();
     saveLayout();
   }
 
@@ -1696,6 +1698,34 @@ function defaultPanelFrames(visible){
   }
   if (visible.length===1) set(visible[0].id,{x:0,y:0,w:1,h:1});
   return frames;
+}
+
+function normalizeAnchoredPanelFrames(visible){
+  const ids=new Set(visible.map(panel=>panel.id));
+  let changed=false;
+  const anchorBottom=id=>{
+    const frame=activePanelFrames[id];
+    if (!frame) return;
+    const nextHeight=Math.max(.1,1-frame.y);
+    if (Math.abs(frame.h-nextHeight)>.001){
+      frame.h=nextHeight;
+      changed=true;
+    }
+  };
+  if (isDefaultThreePanelLayout()){
+    const bubbles=activePanelFrames['panel-bubbles'];
+    if (bubbles && (Math.abs(bubbles.y)>.001 || Math.abs(bubbles.h-1)>.001)){
+      bubbles.y=0;
+      bubbles.h=1;
+      changed=true;
+    }
+    if (ids.has('panel-trenches')) anchorBottom('panel-trenches');
+  }
+  if (ids.has('panel-trenches') && ids.has('panel-tradingview')){
+    anchorBottom('panel-trenches');
+    anchorBottom('panel-tradingview');
+  }
+  return changed;
 }
 
 function savePanelFrames(){
@@ -1852,6 +1882,7 @@ function syncPanelFramesForLayout(visible){
     visible.forEach(panel=>{
       activePanelFrames[panel.id]=clampPanelFrame(saved[panel.id],defaults[panel.id] || {x:0,y:0,w:1,h:1});
     });
+    normalizeAnchoredPanelFrames(visible);
     savePanelFrames();
   }
   applyPanelFrames();
