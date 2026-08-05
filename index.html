@@ -672,7 +672,7 @@
   }
   .tradingview-panel-chart .tradingview-widget-copyright a { color:rgba(132,211,235,.58); text-decoration:none; }
 
-  /* ===== DEXSCREENER PANEL ===== */
+  /* ===== TOKEN INSPECTOR BASE ===== */
   #panel-dexscreener .panel-body {
     display:flex;
     flex-direction:column;
@@ -866,6 +866,97 @@
     .dex-pair-metrics { display:none; }
     .dex-panel-list { min-height:190px; }
     .dex-panel-detail { min-height:220px; }
+  }
+
+  /* ===== TOKEN INSPECTOR ===== */
+  .token-inspect-head {
+    display:flex;
+    align-items:center;
+    gap:8px;
+    min-height:42px;
+    padding:7px 9px;
+    border-bottom:1px solid rgba(255,255,255,.12);
+  }
+  .token-inspect-title {
+    flex:0 0 auto;
+    color:var(--text-bright);
+    font:700 9px 'Space Grotesk',sans-serif;
+    letter-spacing:.14em;
+    white-space:nowrap;
+  }
+  .token-inspect-form { display:flex; flex:1 1 auto; min-width:0; gap:6px; }
+  .token-inspect-form input {
+    min-width:0;
+    flex:1 1 auto;
+    height:27px;
+    padding:0 8px;
+    border:1px solid rgba(255,255,255,.20);
+    border-radius:7px;
+    background:rgba(255,255,255,.075);
+    color:var(--text-bright);
+    font:500 10px 'JetBrains Mono',monospace;
+    outline:none;
+  }
+  .token-inspect-form input::placeholder { color:var(--muted2); }
+  .token-inspect-form input:focus { border-color:rgba(155,220,255,.70); box-shadow:0 0 0 2px rgba(155,220,255,.12); }
+  .token-inspect-form button {
+    flex:0 0 auto;
+    height:27px;
+    padding:0 9px;
+    border:1px solid rgba(0,255,136,.30);
+    border-radius:7px;
+    background:rgba(0,255,136,.09);
+    color:var(--green);
+    font:700 9px 'Space Grotesk',sans-serif;
+    cursor:pointer;
+  }
+  .token-inspect-form button:hover { background:rgba(0,255,136,.16); border-color:rgba(0,255,136,.58); }
+  .token-inspect-state {
+    flex:1 1 auto;
+    display:grid;
+    place-items:center;
+    min-height:150px;
+    padding:22px;
+    color:var(--muted);
+    font:500 10px/1.5 'JetBrains Mono',monospace;
+    text-align:center;
+  }
+  .token-inspect-state.err { color:#ff8fa8; }
+  .token-inspect-result { display:flex; flex:1 1 auto; flex-direction:column; min-height:0; padding:10px; overflow:auto; }
+  .token-inspect-result[hidden] { display:none; }
+  .token-inspect-identity { display:flex; align-items:center; gap:10px; min-width:0; }
+  .token-inspect-copy { flex:1 1 auto; min-width:0; }
+  .token-inspect-name { color:var(--text-bright); font:700 15px 'Space Grotesk',sans-serif; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .token-inspect-address { margin-top:4px; color:rgba(213,227,232,.58); font:500 8px 'JetBrains Mono',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .token-inspect-score { display:grid; place-items:center; flex:0 0 58px; width:58px; height:58px; border:1px solid rgba(255,214,107,.48); border-radius:50%; background:rgba(255,214,107,.10); color:#ffe18a; font:700 16px 'JetBrains Mono',monospace; }
+  .token-inspect-score.green { border-color:rgba(0,255,136,.55); background:rgba(0,255,136,.12); color:var(--green); }
+  .token-inspect-score.red { border-color:rgba(255,85,119,.55); background:rgba(255,85,119,.12); color:#ff7390; }
+  .token-inspect-decision { margin-top:9px; color:#ffe18a; font:700 11px 'Space Grotesk',sans-serif; }
+  .token-inspect-decision.green { color:var(--green); }
+  .token-inspect-decision.red { color:#ff7390; }
+  .token-inspect-metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; margin-top:10px; }
+  .token-inspect-metrics div { min-width:0; padding:7px; border:1px solid rgba(255,255,255,.10); border-radius:8px; background:rgba(255,255,255,.045); }
+  .token-inspect-metrics span { display:block; color:rgba(213,227,232,.56); font:600 7px 'Space Grotesk',sans-serif; letter-spacing:.08em; }
+  .token-inspect-metrics strong { display:block; margin-top:4px; color:var(--text-bright); font:700 10px 'JetBrains Mono',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .token-inspect-security { margin-top:8px; padding:7px 8px; border:1px solid rgba(255,255,255,.10); border-radius:8px; color:rgba(229,240,243,.78); font:500 8px/1.55 'JetBrains Mono',monospace; }
+  .token-inspect-security strong { color:var(--text-bright); font-weight:700; }
+  .token-inspect-summary { display:flex; justify-content:space-between; gap:8px; margin-top:10px; color:rgba(213,227,232,.60); font:500 8px 'JetBrains Mono',monospace; }
+  .token-inspect-summary span:last-child { white-space:nowrap; }
+  .token-inspect-reasons { margin-top:9px; padding:8px; border:1px solid rgba(255,255,255,.10); border-radius:8px; color:rgba(244,249,250,.88); font:500 9px/1.5 'JetBrains Mono',monospace; }
+  .token-inspect-reasons strong { color:#ffe18a; }
+  .token-inspect-sources { display:flex; flex-wrap:wrap; gap:5px 8px; margin-top:9px; color:rgba(213,227,232,.62); font:500 8px 'JetBrains Mono',monospace; }
+  .token-inspect-sources a { color:#76dcff; text-decoration:none; }
+  .token-inspect-sources a:hover { color:#fff; text-decoration:underline; }
+  .token-inspect-source { white-space:nowrap; }
+  .token-inspect-source.active { color:var(--green); }
+  .token-inspect-source.unverified { color:#ffe18a; }
+  .token-inspect-source.inactive { color:rgba(213,227,232,.48); }
+  @media (max-width:700px) {
+    .token-inspect-head { align-items:stretch; flex-direction:column; gap:6px; }
+    .token-inspect-title { font-size:8px; }
+    .token-inspect-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .token-inspect-summary { flex-direction:column; gap:3px; }
+    .token-inspect-summary span:last-child { white-space:normal; }
   }
 
   /* ===== SOL MEME TRENCHES ===== */
@@ -1511,34 +1602,38 @@
       </div>
     </section>
 
-    <section class="panel" id="panel-dexscreener" aria-label="DEX Screener pairs" hidden>
+    <section class="panel" id="panel-dexscreener" aria-label="Token inspector" hidden>
       <div class="panel-body">
-        <div class="dex-panel-head">
-          <div class="dex-panel-title">DEXSCREENER</div>
-          <form id="dexPanelForm" class="dex-panel-form">
-            <input id="dexPanelAddress" aria-label="Search token, pair or address" placeholder="Search token, pair or address" autocomplete="off" spellcheck="false" />
-            <button type="submit">SEARCH</button>
+        <div class="token-inspect-head">
+          <div class="token-inspect-title">TOKEN INSPECTOR</div>
+          <form id="tokenInspectForm" class="token-inspect-form">
+            <input id="tokenInspectAddress" aria-label="Paste Solana contract address" placeholder="Paste Solana contract address (CA)" autocomplete="off" spellcheck="false" />
+            <button type="submit">INSPECT</button>
           </form>
         </div>
-        <div id="dexPanelSummary" class="dex-panel-summary">
-          <span id="dexPanelSummaryLabel">TOP SOLANA PAIRS</span><span id="dexPanelSummaryCount" class="dex-panel-summary-count">—</span>
-        </div>
-        <div id="dexPanelList" class="dex-panel-list scroll" aria-label="Solana DEX pairs" aria-live="polite">
-          <div class="dex-panel-state">LOADING PAIRS…</div>
-        </div>
-        <div id="dexPanelDetail" class="dex-panel-detail">
-          <div class="dex-panel-selected">
-            <div class="dex-panel-selected-copy">
-              <div id="dexPanelSelectedTitle" class="dex-panel-selected-title">SELECT A PAIR</div>
-              <div id="dexPanelSelectedMeta" class="dex-panel-selected-meta">Click a Solana pair to open its chart</div>
+        <div id="tokenInspectState" class="token-inspect-state" aria-live="polite">PASTE A SOLANA CA TO START</div>
+        <div id="tokenInspectResult" class="token-inspect-result" hidden>
+          <div class="token-inspect-identity">
+            <div class="token-inspect-copy">
+              <div id="tokenInspectName" class="token-inspect-name">—</div>
+              <div id="tokenInspectAddressValue" class="token-inspect-address">—</div>
             </div>
+            <div id="tokenInspectScore" class="token-inspect-score">—</div>
           </div>
-          <div class="dex-panel-tools" role="tablist" aria-label="Chart provider">
-            <button class="dex-panel-provider active" type="button" data-dex-provider="dex" role="tab" aria-selected="true">DEXSCREENER</button>
-            <button class="dex-panel-provider" type="button" data-dex-provider="gecko" role="tab" aria-selected="false">GECKOTERMINAL</button>
-            <a id="dexPanelExternal" class="dex-panel-external" target="_blank" rel="noopener noreferrer" hidden>OPEN ↗</a>
+          <div id="tokenInspectDecision" class="token-inspect-decision">—</div>
+          <div class="token-inspect-metrics">
+            <div><span>PRICE</span><strong id="tokenInspectPrice">—</strong></div>
+            <div><span>MC</span><strong id="tokenInspectMarketCap">—</strong></div>
+            <div><span>LIQUIDITY</span><strong id="tokenInspectLiquidity">—</strong></div>
+            <div><span>VOLUME 24H</span><strong id="tokenInspectVolume">—</strong></div>
           </div>
-          <div id="dexPanelChart" class="dex-panel-chart" aria-label="Selected pair chart"></div>
+          <div id="tokenInspectSecurity" class="token-inspect-security"></div>
+          <div class="token-inspect-summary">
+            <span>Score is based on available market and security data.</span>
+            <span id="tokenInspectUpdated">—</span>
+          </div>
+          <div id="tokenInspectReasons" class="token-inspect-reasons"></div>
+          <div id="tokenInspectSources" class="token-inspect-sources"></div>
         </div>
       </div>
     </section>
@@ -1864,7 +1959,7 @@ const PANEL_DEFS = [
   { id:'panel-table', label:'MARKET', defaultVisible:true },
   { id:'panel-trenches', label:'SOL MEME TRENCHES', defaultVisible:true },
   { id:'panel-tradingview', label:'TRADINGVIEW', defaultVisible:false },
-  { id:'panel-dexscreener', label:'DEXSCREENER', defaultVisible:false }
+  { id:'panel-dexscreener', label:'TOKEN INSPECTOR', defaultVisible:false }
 ];
 const storedPanelVisibility = cacheGet(PANEL_VISIBILITY_KEY);
 let panelVisibility = Object.fromEntries(PANEL_DEFS.map(panel => [
@@ -2384,8 +2479,8 @@ function updatePanelLayout(){
     });
   } else clearTradingViewPanel();
   if (panelVisibility['panel-dexscreener']===true){
-    requestAnimationFrame(()=>renderDexPanel());
-  } else clearDexPanel();
+    requestAnimationFrame(()=>renderTokenInspector());
+  } else clearTokenInspector();
 }
 
 function renderPanelManager(){
@@ -2910,9 +3005,9 @@ const bubbles = (function(){
     if (pct >= 0){
       const mid = 48 + mag*7;
       return {
-        core:`hsla(145,100%,${78+mag*5}%,1)`,
-        body:`hsla(150,96%,${mid}%,1)`,
-        edge:`hsla(154,96%,${39+mag*5}%,1)`,
+        core:`hsla(145,100%,${78+mag*5}%,.82)`,
+        body:`hsla(150,96%,${mid}%,.68)`,
+        edge:`hsla(154,96%,${39+mag*5}%,.58)`,
         glow:'rgba(0,255,140,.48)',
         text:'#02160c'
       };
@@ -2942,8 +3037,7 @@ const bubbles = (function(){
     const hover = mouse.over ? bubbleAt(mouse.x, mouse.y) : null;
     for (const n of nodes){
       const c = colorFor(n.pct);
-      // One compact gradient and two clipped highlights keep the Crypto
-      // Bubbles look while avoiding per-frame shadows and extra gradients.
+      // Keep the bubble surface simple and translucent so the background remains visible.
       const grad = ctx.createRadialGradient(
         n.x-n.r*0.34, n.y-n.r*0.38, n.r*0.04,
         n.x+n.r*0.10, n.y+n.r*0.12, n.r*1.06
@@ -2956,22 +3050,8 @@ const bubbles = (function(){
       ctx.fillStyle=grad;
       ctx.fill();
 
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(n.x,n.y,n.r-0.7,0,Math.PI*2);
-      ctx.clip();
-      ctx.beginPath();
-      ctx.ellipse(n.x-n.r*0.32,n.y-n.r*0.38,n.r*0.25,n.r*0.11,-0.42,0,Math.PI*2);
-      ctx.fillStyle='rgba(255,255,255,.32)';
-      ctx.fill();
-      ctx.beginPath();
-      ctx.ellipse(n.x+n.r*0.16,n.y+n.r*0.66,n.r*0.72,n.r*0.28,0,0,Math.PI*2);
-      ctx.fillStyle='rgba(0,0,0,.10)';
-      ctx.fill();
-      ctx.restore();
-
       ctx.lineWidth=0.8;
-      ctx.strokeStyle='rgba(255,255,255,.28)';
+      ctx.strokeStyle='rgba(255,255,255,.18)';
       ctx.beginPath();
       ctx.arc(n.x,n.y,n.r-0.65,0,Math.PI*2);
       ctx.stroke();
@@ -3320,16 +3400,7 @@ let assetChartGeneration = 0;
 let tradingViewPanelGeneration = 0;
 let tradingViewPanelFrame = 0;
 const TRADINGVIEW_PANEL_SYMBOL_KEY = 'mus_tradingview_panel_symbol_v1';
-const DEX_PANEL_ADDRESS_KEY = 'mus_dex_panel_address_v1';
-const DEX_PANEL_QUERY_KEY = 'mus_dex_panel_query_v2';
-const DEX_PANEL_CACHE_KEY = 'mus_dex_panel_pairs_v2';
-const DEX_PANEL_PROVIDER_KEY = 'mus_dex_panel_provider_v1';
-const DEX_PANEL_CACHE_MS = 90 * 1000;
-let dexPanelGeneration = 0;
-let dexPanelChartGeneration = 0;
-let dexPanelProvider = cacheGet(DEX_PANEL_PROVIDER_KEY) === 'gecko' ? 'gecko' : 'dex';
-let dexPanelPairs = [];
-let dexPanelSelectedPair = null;
+const TOKEN_INSPECT_ADDRESS_KEY = 'mus_token_inspect_address_v1';
 
 function customAssetSnapshot(c){
   const common = {
@@ -3563,14 +3634,7 @@ function renderTradingViewPanel(){
   host.append(loading,container);
 }
 
-function dexPanelState(message){
-  const state=document.createElement('div');
-  state.className='dex-panel-state';
-  state.textContent=message;
-  return state;
-}
-
-function dexPanelMoney(value){
+function tokenInspectMoney(value){
   const number=Number(value);
   if (!Number.isFinite(number) || number<=0) return '—';
   if (number>=1e9) return '$'+(number/1e9).toFixed(1)+'B';
@@ -3579,7 +3643,7 @@ function dexPanelMoney(value){
   return '$'+number.toFixed(number>=100?0:2);
 }
 
-function dexPanelPrice(value){
+function tokenInspectPrice(value){
   const number=Number(value);
   if (!Number.isFinite(number)) return '—';
   if (number>=1000) return '$'+number.toLocaleString('en-US',{maximumFractionDigits:2});
@@ -3588,270 +3652,144 @@ function dexPanelPrice(value){
   return '$'+number.toLocaleString('en-US',{maximumFractionDigits:10});
 }
 
-function dexPanelPercent(value){
-  const number=Number(value);
-  if (!Number.isFinite(number)) return '—';
-  return `${number>=0?'+':''}${number.toFixed(Math.abs(number)>=100?0:2)}%`;
-}
-
-function dexPanelPairKey(pair){
-  return String(pair?.pairAddress||`${pair?.baseToken?.address||''}:${pair?.quoteToken?.address||''}`).trim();
-}
-
-function dexPanelPairLabel(pair){
-  const base=String(pair?.baseToken?.symbol||'?').toUpperCase();
-  const quote=String(pair?.quoteToken?.symbol||'?').toUpperCase();
-  return `${base} / ${quote}`;
-}
-
-function dexPanelNormalizePairs(data){
-  const values=Array.isArray(data) ? data : Array.isArray(data?.pairs) ? data.pairs : [];
-  const seen=new Set();
-  return values
-    .filter(pair=>String(pair?.chainId||'').toLowerCase()==='solana' && pair?.pairAddress)
-    .filter(pair=>{
-      const key=dexPanelPairKey(pair);
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .sort((a,b)=>(Number(b?.volume?.h24)||0)-(Number(a?.volume?.h24)||0)
-      || (Number(b?.liquidity?.usd)||0)-(Number(a?.liquidity?.usd)||0))
-    .slice(0,24);
-}
-
-async function dexPanelFetchJson(url){
-  const response=await fetchWithTimeout(url,{cache:'no-store'},12000);
-  if (!response.ok) throw new Error(`DEX API ${response.status}`);
-  return response.json();
-}
-
-async function dexPanelFetchPairs(query,force=false){
-  const normalized=String(query||'').trim();
-  const cached=cacheGet(DEX_PANEL_CACHE_KEY);
-  if (!force && cached?.query===normalized && Date.now()-Number(cached.updatedAt||0)<DEX_PANEL_CACHE_MS && Array.isArray(cached.pairs)){
-    return cached.pairs;
-  }
-
-  let pairs=[];
-  if (normalized){
-    const address=normalizeSolanaChartAddress(normalized);
-    if (address){
-      pairs=dexPanelNormalizePairs(await dexPanelFetchJson(`https://api.dexscreener.com/token-pairs/v1/solana/${encodeURIComponent(address)}`));
-      if (!pairs.length){
-        pairs=dexPanelNormalizePairs(await dexPanelFetchJson(`https://api.dexscreener.com/latest/dex/pairs/solana/${encodeURIComponent(address)}`));
-      }
-    } else {
-      pairs=dexPanelNormalizePairs(await dexPanelFetchJson(`https://api.dexscreener.com/latest/dex/search?q=${encodeURIComponent(normalized)}`));
-    }
-  } else {
-    const boosts=await dexPanelFetchJson('https://api.dexscreener.com/token-boosts/top/v1');
-    const addresses=[...new Set((Array.isArray(boosts)?boosts:[])
-      .filter(item=>String(item?.chainId||'').toLowerCase()==='solana' && item?.tokenAddress)
-      .map(item=>item.tokenAddress))].slice(0,30);
-    if (addresses.length){
-      pairs=dexPanelNormalizePairs(await dexPanelFetchJson(`https://api.dexscreener.com/tokens/v1/solana/${addresses.join(',')}`));
-    }
-  }
-  cacheSet(DEX_PANEL_CACHE_KEY,{query:normalized,updatedAt:Date.now(),pairs});
-  return pairs;
-}
-
-function renderDexPanelList(pairs,stateMessage=''){
-  const list=$('#dexPanelList');
-  const count=$('#dexPanelSummaryCount');
-  if (!list) return;
-  if (count) count.textContent=stateMessage ? '—' : `${pairs.length} PAIRS`;
-  if (stateMessage){
-    list.replaceChildren(dexPanelState(stateMessage));
-    return;
-  }
-  if (!pairs.length){
-    list.replaceChildren(dexPanelState('NO SOLANA PAIRS FOUND'));
-    return;
-  }
-  list.innerHTML=pairs.map(pair=>{
-    const key=escapeHtml(dexPanelPairKey(pair));
-    const selected=dexPanelSelectedPair && dexPanelPairKey(dexPanelSelectedPair)===dexPanelPairKey(pair);
-    const logo=String(pair?.info?.imageUrl||'').trim();
-    const change=Number(pair?.priceChange?.h24);
-    return `<button class="dex-pair-row" type="button" data-dex-pair="${key}" aria-selected="${selected?'true':'false'}">
-      <span class="dex-pair-main">
-        ${logo?`<img class="dex-pair-logo" src="${escapeHtml(logo)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:'<span class="dex-pair-logo" aria-hidden="true">◈</span>'}
-        <span><strong class="dex-pair-symbol">${escapeHtml(dexPanelPairLabel(pair))}</strong><span class="dex-pair-sub">${escapeHtml(String(pair?.dexId||'DEX').toUpperCase())} · ${escapeHtml(String(pair?.baseToken?.name||pair?.baseToken?.symbol||'Solana token'))}</span></span>
-      </span>
-      <span class="dex-pair-price"><strong class="dex-pair-price-value">${escapeHtml(dexPanelPrice(pair?.priceUsd))}</strong><span class="dex-pair-change ${change>=0?'pos':'neg'}">${escapeHtml(dexPanelPercent(change))} 24H</span></span>
-      <span class="dex-pair-metrics"><span class="dex-pair-metric">VOL ${escapeHtml(dexPanelMoney(pair?.volume?.h24))}</span><span class="dex-pair-metric">LP ${escapeHtml(dexPanelMoney(pair?.liquidity?.usd))}</span></span>
-    </button>`;
-  }).join('');
-}
-
-function renderDexPanelSelection(pair){
-  dexPanelSelectedPair=pair||null;
-  const title=$('#dexPanelSelectedTitle');
-  const meta=$('#dexPanelSelectedMeta');
-  if (!pair){
-    if (title) title.textContent='SELECT A PAIR';
-    if (meta) meta.textContent='Click a Solana pair to open its chart';
-    renderDexPanelChart(null);
-  } else {
-    const label=dexPanelPairLabel(pair);
-    if (title) title.textContent=label;
-    if (meta) meta.textContent=`${String(pair?.dexId||'DEX').toUpperCase()} · ${dexPanelPrice(pair?.priceUsd)} · ${dexPanelPercent(pair?.priceChange?.h24)} 24H`;
-    cacheSet(DEX_PANEL_ADDRESS_KEY,pair?.baseToken?.address||pair?.pairAddress||'');
-    renderDexPanelChart(pair);
-  }
-  renderDexPanelList(dexPanelPairs);
-}
-
-function normalizeSolanaChartAddress(rawInput){
-  let value=String(rawInput||'').trim();
-  if (!value) return null;
-  try {
-    if (/^https?:\/\//i.test(value)){
-      const url=new URL(value);
-      if (!/(^|\.)dexscreener\.com$|(^|\.)geckoterminal\.com$/i.test(url.hostname)) return null;
-      const parts=url.pathname.split('/').filter(Boolean);
-      const chainIndex=parts.findIndex(part=>part.toLowerCase()==='solana');
-      const next=chainIndex>=0 ? parts[chainIndex+1]?.toLowerCase() : '';
-      value=chainIndex>=0
-        ? (next==='tokens' || next==='pools' ? parts[chainIndex+2] : parts[chainIndex+1])
-        : parts[parts.length-1];
-    }
-  } catch(e){ return null; }
-  value=value.split(/\s+/)[0].replace(/[?#].*$/,'');
+function normalizeTokenInspectAddress(rawInput){
+  const value=String(rawInput||'').trim().split(/\s+/)[0].replace(/[?#].*$/,'');
   return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(value) ? value : null;
 }
 
-function dexScreenerChartUrl(address){
-  return `https://dexscreener.com/solana/${encodeURIComponent(address)}?embed=1&theme=dark&info=0&trades=0`;
-}
-
-function dexScreenerOpenUrl(address){
-  return `https://dexscreener.com/solana/${encodeURIComponent(address)}`;
-}
-
-function geckoTerminalChartUrl(pairAddress){
-  return `https://www.geckoterminal.com/solana/pools/${encodeURIComponent(pairAddress)}?embed=1&info=0&swaps=0&light_chart=0&chart_type=price&resolution=1d&bg_color=071214`;
-}
-
-function geckoTerminalOpenUrl(address,pairAddress){
-  return pairAddress
-    ? `https://www.geckoterminal.com/solana/pools/${encodeURIComponent(pairAddress)}`
-    : `https://www.geckoterminal.com/solana/tokens/${encodeURIComponent(address)}`;
-}
-
-function updateDexPanelProviderButtons(){
-  document.querySelectorAll('[data-dex-provider]').forEach(button=>{
-    const active=button.dataset.dexProvider===dexPanelProvider;
-    button.classList.toggle('active',active);
-    button.setAttribute('aria-selected',String(active));
-  });
-}
-
-function clearDexPanel(){
-  dexPanelGeneration++;
-  dexPanelChartGeneration++;
-  dexPanelSelectedPair=null;
-  const host=$('#dexPanelChart');
-  if (host){
-    host.removeAttribute('aria-busy');
-    host.replaceChildren();
-  }
-  const list=$('#dexPanelList');
-  if (list) list.replaceChildren();
-  const count=$('#dexPanelSummaryCount');
-  if (count) count.textContent='—';
-  const title=$('#dexPanelSelectedTitle');
-  const meta=$('#dexPanelSelectedMeta');
-  if (title) title.textContent='SELECT A PAIR';
-  if (meta) meta.textContent='Click a Solana pair to open its chart';
-  const external=$('#dexPanelExternal');
-  if (external){
-    external.hidden=true;
-    external.removeAttribute('href');
-  }
-}
-
-function renderDexPanelChart(pair){
-  const host=$('#dexPanelChart');
-  if (!host) return;
-  dexPanelChartGeneration++;
-  const generation=dexPanelChartGeneration;
-  host.removeAttribute('aria-busy');
-  host.replaceChildren();
-  const external=$('#dexPanelExternal');
-  if (!pair){
-    if (external){ external.hidden=true; external.removeAttribute('href'); }
-    host.append(dexPanelState('SELECT A PAIR TO VIEW THE CHART'));
-    return;
-  }
-  const pairAddress=pair?.pairAddress||null;
-  const address=pair?.baseToken?.address||pairAddress;
-  const dexAddress=pairAddress||address;
-  const dexUrl=dexScreenerChartUrl(dexAddress);
-  const geckoUrl=pairAddress ? geckoTerminalChartUrl(pairAddress) : '';
-  const externalUrl=dexPanelProvider==='gecko' ? geckoTerminalOpenUrl(address,pairAddress) : dexScreenerOpenUrl(dexAddress);
-  if (external){
-    external.href=externalUrl;
-    external.textContent=`OPEN ${dexPanelProvider==='gecko'?'GECKO':'DEX'} ↗`;
-    external.hidden=false;
-  }
-  if (dexPanelProvider==='gecko' && !geckoUrl){
-    host.append(dexPanelState('GECKOTERMINAL POOL NOT FOUND · TRY DEXSCREENER'));
-    return;
-  }
-  host.setAttribute('aria-busy','true');
-  const frame=document.createElement('iframe');
-  frame.title=`${dexPanelProvider==='gecko'?'GeckoTerminal':'DEX Screener'} chart for ${dexPanelPairLabel(pair)}`;
-  frame.loading='lazy';
-  frame.allow='clipboard-write';
-  frame.allowFullscreen=true;
-  frame.referrerPolicy='no-referrer-when-downgrade';
-  frame.src=dexPanelProvider==='gecko' ? geckoUrl : dexUrl;
-  frame.addEventListener('load',()=>{
-    if (generation===dexPanelChartGeneration) host.removeAttribute('aria-busy');
-  },{once:true});
-  frame.addEventListener('error',()=>{
-    if (generation!==dexPanelChartGeneration) return;
-    if (dexPanelProvider==='dex' && geckoUrl){
-      dexPanelProvider='gecko';
-      cacheSet(DEX_PANEL_PROVIDER_KEY,dexPanelProvider);
-      renderDexPanelChart(pair);
-      return;
-    }
-    host.removeAttribute('aria-busy');
-    host.replaceChildren(dexPanelState('CHART COULD NOT LOAD · USE OPEN LINK'));
-  },{once:true});
-  host.append(frame);
-}
-
-async function renderDexPanel(force=false){
-  const panel=$('#panel-dexscreener');
-  const list=$('#dexPanelList');
-  if (!panel || panel.hidden || panelVisibility['panel-dexscreener']!==true || !list) return;
-  const generation=++dexPanelGeneration;
-  updateDexPanelProviderButtons();
-  const input=$('#dexPanelAddress');
-  const query=String(input?.value || cacheGet(DEX_PANEL_QUERY_KEY) || '').trim();
-  if (input) input.value=query;
-  const summaryLabel=$('#dexPanelSummaryLabel');
-  if (summaryLabel) summaryLabel.textContent=query ? 'SEARCH RESULTS' : 'TOP SOLANA PAIRS';
-  renderDexPanelList([],query?'SEARCHING SOLANA PAIRS…':'LOADING TOP SOLANA PAIRS…');
+function tokenInspectTrustedUrl(value,allowedHosts=[]){
   try {
-    const pairs=await dexPanelFetchPairs(query,force);
-    if (generation!==dexPanelGeneration) return;
-    dexPanelPairs=pairs;
-    const savedAddress=String(cacheGet(DEX_PANEL_ADDRESS_KEY)||'');
-    const selected=pairs.find(pair=>dexPanelPairKey(pair)===savedAddress || pair?.baseToken?.address===savedAddress) || null;
-    renderDexPanelList(pairs);
-    renderDexPanelSelection(selected);
+    const url=new URL(String(value||''));
+    if (url.protocol!=='https:') return '';
+    if (allowedHosts.length && !allowedHosts.some(host=>url.hostname===host || url.hostname.endsWith(`.${host}`))) return '';
+    return url.href;
+  } catch(e){ return ''; }
+}
+
+function tokenInspectSourceStatus(meta){
+  const status=String(meta?.status||'Unverified').toLowerCase();
+  if (status==='active') return {label:'ACTIVE',className:'active'};
+  if (status==='not configured' || status==='api key missing') return {label:'NOT CONFIGURED',className:'inactive'};
+  return {label:'UNVERIFIED',className:'unverified'};
+}
+
+function tokenInspectSourceLink(label,url,meta){
+  const status=tokenInspectSourceStatus(meta);
+  const safeUrl=tokenInspectTrustedUrl(url);
+  const content=`${label} · ${status.label}`;
+  return safeUrl
+    ? `<a class="token-inspect-source ${status.className}" href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">${content}</a>`
+    : `<span class="token-inspect-source ${status.className}">${content}</span>`;
+}
+
+function clearTokenInspector(){
+  tokenInspectGeneration++;
+  const state=$('#tokenInspectState');
+  const result=$('#tokenInspectResult');
+  if (state){ state.hidden=false; state.className='token-inspect-state'; state.textContent='PASTE A SOLANA CA TO START'; }
+  if (result) result.hidden=true;
+}
+
+function renderTokenInspectorResult(payload){
+  const token=payload?.token;
+  const state=$('#tokenInspectState');
+  const result=$('#tokenInspectResult');
+  if (!token || !result) throw new Error('Token data is unavailable.');
+  if (state) state.hidden=true;
+  result.hidden=false;
+  const decision=String(token.decision||'yellow');
+  const score=Math.max(0,Math.min(100,Number(token.score)||0));
+  const name=$('#tokenInspectName');
+  const address=$('#tokenInspectAddressValue');
+  const scoreNode=$('#tokenInspectScore');
+  const decisionNode=$('#tokenInspectDecision');
+  if (name) name.textContent=`${token.name||token.symbol||'Unknown token'}${token.symbol?` (${token.symbol})`:''}`;
+  if (address) address.textContent=token.address||'—';
+  if (scoreNode){ scoreNode.textContent=`${score}/100`; scoreNode.className=`token-inspect-score ${decision}`; }
+  if (decisionNode){ decisionNode.textContent=token.decisionLabel||'🟡 Conditional watch'; decisionNode.className=`token-inspect-decision ${decision}`; }
+  $('#tokenInspectPrice').textContent=tokenInspectPrice(token.priceUsd);
+  $('#tokenInspectMarketCap').textContent=tokenInspectMoney(token.marketCap);
+  $('#tokenInspectLiquidity').textContent=tokenInspectMoney(token.liquidity);
+  $('#tokenInspectVolume').textContent=tokenInspectMoney(token.volume?.h24);
+  const security=token.security||{};
+  const lockPct=security.lpLockedPct!==null && security.lpLockedPct!==undefined
+    ? Number(security.lpLockedPct)
+    : Number(security.goplus?.lpLockedPct);
+  const top10=Number(security.effectiveTop10Pct);
+  const traders=Number(security.birdeye?.uniqueTraders);
+  const h1Buys=Number(token.txns?.h1?.buys)||0;
+  const h1Sells=Number(token.txns?.h1?.sells)||0;
+  const authorityMark=value=>value==='revoked'?'✅':value==='open'?'⚠️':'?';
+  const securityNode=$('#tokenInspectSecurity');
+  if (securityNode){
+    securityNode.innerHTML=`<strong>SECURITY</strong> · Mint ${authorityMark(security.mint)} Freeze ${authorityMark(security.freeze)} · LP ${Number.isFinite(lockPct)?`${lockPct.toFixed(0)}%`:'Unverified'} · Top 10 ${Number.isFinite(top10)?`${top10.toFixed(1)}%`:'Unverified'} · Traders ${Number.isFinite(traders)?Math.round(traders):'Unverified'} · 1H B/S ${h1Buys}/${h1Sells}`;
+  }
+  const updated=$('#tokenInspectUpdated');
+  if (updated){
+    const date=new Date(payload.generatedAt);
+    updated.textContent=`UPDATED ${Number.isNaN(date.getTime())?'—':date.toLocaleString('en-GB',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}`;
+  }
+  const reasons=$('#tokenInspectReasons');
+  const hard=Array.isArray(token.hardReasons)?token.hardReasons:[];
+  const caution=Array.isArray(token.cautionReasons)?token.cautionReasons:[];
+  const visibleReasons=[...hard,...caution].slice(0,5);
+  if (reasons){
+    reasons.innerHTML=`<strong>ASSESSMENT</strong> ${escapeHtml(token.reason||'No additional assessment available.')}`
+      + (visibleReasons.length?`<br><span>RISKS · ${escapeHtml(visibleReasons.join(' · '))}</span>`:'')
+      + (payload.warning?`<br><span>NOTICE · ${escapeHtml(payload.warning)}</span>`:'');
+  }
+  const sourceMeta=payload.sourceMeta||{};
+  const ca=normalizeTokenInspectAddress(token.address)||'';
+  const pairAddress=Array.isArray(token.pairAddresses)?token.pairAddresses[0]:'';
+  const dexUrl=tokenInspectTrustedUrl(token.dexUrl,['dexscreener.com']) || (ca?`https://dexscreener.com/solana/${encodeURIComponent(pairAddress||ca)}`:'');
+  const sources=$('#tokenInspectSources');
+  if (sources && ca){
+    sources.innerHTML=[
+      tokenInspectSourceLink('RUGCHECK',`https://rugcheck.xyz/tokens/${ca}`,sourceMeta.rugCheck),
+      tokenInspectSourceLink('DEXSCREENER',dexUrl,sourceMeta.dexScreener),
+      tokenInspectSourceLink('BIRDEYE',`https://birdeye.so/solana/token/${ca}`,sourceMeta.birdeye),
+      tokenInspectSourceLink('SOLSCAN',`https://solscan.io/token/${ca}`,{status:'Active'}),
+      tokenInspectSourceLink('BUBBLEMAPS',`https://app.bubblemaps.io/sol/token/${ca}`,sourceMeta.bubblemaps),
+      tokenInspectSourceLink('GECKOTERMINAL',`https://www.geckoterminal.com/solana/tokens/${ca}`,sourceMeta.geckoTerminal)
+    ].join('');
+  }
+}
+
+let tokenInspectGeneration=0;
+async function renderTokenInspector(force=false){
+  const panel=$('#panel-dexscreener');
+  const input=$('#tokenInspectAddress');
+  const state=$('#tokenInspectState');
+  if (!panel || panel.hidden || panelVisibility['panel-dexscreener']!==true || !input || !state) return;
+  const address=normalizeTokenInspectAddress(input.value || cacheGet(TOKEN_INSPECT_ADDRESS_KEY) || '');
+  if (!address){
+    clearTokenInspector();
+    if (String(input.value||'').trim()){
+      state.textContent='ENTER A VALID SOLANA CONTRACT ADDRESS';
+      state.classList.add('err');
+    }
+    return;
+  }
+  input.value=address;
+  cacheSet(TOKEN_INSPECT_ADDRESS_KEY,address);
+  const generation=++tokenInspectGeneration;
+  state.hidden=false;
+  state.className='token-inspect-state';
+  state.textContent='INSPECTING TOKEN DATA…';
+  $('#tokenInspectResult').hidden=true;
+  try {
+    const response=await fetchWithTimeout(`${TRENCH_API_BASE}?address=${encodeURIComponent(address)}`,{cache:force?'no-store':'default'},25000);
+    const payload=await response.json().catch(()=>({}));
+    if (!response.ok) throw new Error(payload?.error||`HTTP ${response.status}`);
+    if (generation!==tokenInspectGeneration) return;
+    renderTokenInspectorResult(payload);
   } catch(error){
-    console.warn('DEX pair list failed',error);
-    if (generation!==dexPanelGeneration) return;
-    dexPanelPairs=[];
-    renderDexPanelList([],query?'SEARCH FAILED · TRY AGAIN':'PAIR LIST UNAVAILABLE');
-    renderDexPanelSelection(null);
+    if (generation!==tokenInspectGeneration) return;
+    console.warn('token inspection failed',error);
+    state.hidden=false;
+    state.className='token-inspect-state err';
+    state.textContent=String(error?.message||'TOKEN INSPECTION FAILED');
+    $('#tokenInspectResult').hidden=true;
   }
 }
 
@@ -4934,33 +4872,13 @@ tradingViewPanelForm?.addEventListener('submit', event => {
   if (tradingViewPanelInput) tradingViewPanelInput.value=symbol;
   renderTradingViewPanel();
 });
-const dexPanelForm=$('#dexPanelForm');
-const dexPanelInput=$('#dexPanelAddress');
-const dexPanelList=$('#dexPanelList');
-const initialDexQuery=String(cacheGet(DEX_PANEL_QUERY_KEY) || cacheGet(DEX_PANEL_ADDRESS_KEY) || '').trim();
-if (dexPanelInput) dexPanelInput.value=initialDexQuery;
-updateDexPanelProviderButtons();
-dexPanelForm?.addEventListener('submit', event => {
+const tokenInspectForm=$('#tokenInspectForm');
+const tokenInspectInput=$('#tokenInspectAddress');
+const initialTokenInspectAddress=normalizeTokenInspectAddress(cacheGet(TOKEN_INSPECT_ADDRESS_KEY) || '');
+if (tokenInspectInput && initialTokenInspectAddress) tokenInspectInput.value=initialTokenInspectAddress;
+tokenInspectForm?.addEventListener('submit', event => {
   event.preventDefault();
-  const query=String(dexPanelInput?.value || '').trim();
-  cacheSet(DEX_PANEL_QUERY_KEY,query);
-  renderDexPanel(true);
-});
- dexPanelList?.addEventListener('click', event => {
-  const row=event.target.closest?.('[data-dex-pair]');
-  if (!row) return;
-  const pair=dexPanelPairs.find(item=>dexPanelPairKey(item)===row.dataset.dexPair);
-  if (pair) renderDexPanelSelection(pair);
- });
-document.querySelectorAll('[data-dex-provider]').forEach(button=>{
-  button.addEventListener('click',()=>{
-    const provider=button.dataset.dexProvider;
-    if (provider!=='dex' && provider!=='gecko') return;
-    dexPanelProvider=provider;
-    cacheSet(DEX_PANEL_PROVIDER_KEY,dexPanelProvider);
-    updateDexPanelProviderButtons();
-    renderDexPanelChart(dexPanelSelectedPair);
-  });
+  renderTokenInspector(true);
 });
 setupIndependentPanelFrames();
 renderPanelManager();
