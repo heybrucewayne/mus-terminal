@@ -1037,10 +1037,9 @@
   .trench-popover-links a { color:#6bdcff; text-decoration:none; }
   .trench-popover-links a:hover { text-decoration:underline; }
   .trench-change { color:#ffd66b; margin-left:5px; }
-  .trench-eliminated, .trench-state {
+  .trench-state {
     padding:10px; color:rgba(228,238,242,.84); font:500 10.5px/1.5 'JetBrains Mono',monospace;
   }
-  .trench-eliminated { color:rgba(255,137,157,.78); }
   .trench-state.err { color:var(--red); }
   #panel-trenches.command-focus { animation:trenchFocus .8s ease-out; }
   @keyframes trenchFocus { 0%,45%{box-shadow:0 0 0 2px rgba(80,215,255,.65),0 18px 42px rgba(0,0,0,.3)} 100%{box-shadow:0 18px 42px rgba(0,0,0,.3)} }
@@ -2653,15 +2652,10 @@ function renderTrenches(payload,{persist=true}={}){
       </div></td>
     </tr>`;
   }).join('');
-  const reasons=(Array.isArray(payload.eliminationReasons)?payload.eliminationReasons:[])
-    .map(item=>`${trenchEscape(trenchEnglish(item?.reason))} ${Number(item?.count)||0}`).join(' · ');
-  const eliminated=payload.eliminatedCount
-    ? `<div class="trench-eliminated">🔴 ${Number(payload.eliminatedCount)} eliminated${reasons?` — ${reasons}`:''}</div>`:'';
-  const warning=payload.warning?`<div class="trench-state">${trenchEscape(trenchEnglish(payload.warning))}</div>`:'';
   const empty=!tokens.length?'<div class="trench-state">No qualifying 🟢 or 🟡 results found.</div>':'';
   content.outerHTML=`<div id="trench-content">
     <table class="trenches" aria-label="SOL Meme Trenches results"><thead><tr><th>Token</th><th>MC</th><th>LP</th><th>Volume 1h / 6h / 24h</th><th>Price 6h / 24h</th><th>Decision</th></tr></thead><tbody>${rows}${details}</tbody></table>
-    ${empty}${eliminated}${warning}
+    ${empty}
   </div>`;
   const date=new Date(payload.generatedAt);
   time.textContent=isNaN(date)?'—':date.toLocaleString('en-GB',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
