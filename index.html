@@ -442,22 +442,32 @@
     background:rgba(225,242,250,.88); box-shadow:0 0 0 4px rgba(155,220,255,.12),0 5px 16px rgba(0,0,0,.24); transform:scale(1.08);
   }
   .panel-resizer:focus-visible { outline:none; }
-  .resizer-columns {
-    top:0; bottom:0; left:calc(var(--bubble-width) + 6px); width:12px;
+  .resizer-columns-top,
+  .resizer-columns-bottom {
+    width:12px;
     transform:translateX(-50%); cursor:col-resize;
   }
-  .resizer-columns::before { width:2px; height:46px; left:5px; top:50%; transform:translateY(-50%); }
-  .resizer-columns:hover::before,
-  .resizer-columns:focus-visible::before,
-  .resizer-columns.active::before { transform:translateY(-50%) scale(1.08); }
-  .resizer-rows {
-    left:calc(var(--bubble-width) + 12px); right:0; top:calc(var(--prices-height) + 6px); height:12px;
+  .resizer-columns-top::before,
+  .resizer-columns-bottom::before { width:2px; height:46px; left:5px; top:50%; transform:translateY(-50%); }
+  .resizer-columns-top:hover::before,
+  .resizer-columns-top:focus-visible::before,
+  .resizer-columns-top.active::before,
+  .resizer-columns-bottom:hover::before,
+  .resizer-columns-bottom:focus-visible::before,
+  .resizer-columns-bottom.active::before { transform:translateY(-50%) scale(1.08); }
+  .resizer-rows-left,
+  .resizer-rows-right {
+    height:12px;
     transform:translateY(-50%); cursor:row-resize;
   }
-  .resizer-rows::before { width:46px; height:2px; left:50%; top:5px; transform:translateX(-50%); }
-  .resizer-rows:hover::before,
-  .resizer-rows:focus-visible::before,
-  .resizer-rows.active::before { transform:translateX(-50%) scale(1.08); }
+  .resizer-rows-left::before,
+  .resizer-rows-right::before { width:46px; height:2px; left:50%; top:5px; transform:translateX(-50%); }
+  .resizer-rows-left:hover::before,
+  .resizer-rows-left:focus-visible::before,
+  .resizer-rows-left.active::before,
+  .resizer-rows-right:hover::before,
+  .resizer-rows-right:focus-visible::before,
+  .resizer-rows-right.active::before { transform:translateX(-50%) scale(1.08); }
   body.panel-resizing { cursor:grabbing; user-select:none; -webkit-user-select:none; }
   body.panel-resizing .panel { pointer-events:none; }
 
@@ -561,21 +571,10 @@
       min-width:280px;
       min-height:190px;
       overflow:hidden;
-      resize:both;
+      resize:none;
       z-index:1;
     }
     .grid.panel-freeform > .panel:focus-within { z-index:4; }
-    .grid.panel-freeform > .panel::after {
-      content:'↘';
-      position:absolute;
-      right:7px;
-      bottom:4px;
-      z-index:3;
-      color:rgba(225,242,250,.48);
-      font:700 12px/1 'Space Grotesk',sans-serif;
-      pointer-events:none;
-      text-shadow:0 1px 3px rgba(0,0,0,.45);
-    }
     .grid.panel-freeform .panel-resizer { display:block; }
   }
 
@@ -1314,8 +1313,10 @@
       </div>
     </section>
 
-    <div id="resize-columns" class="panel-resizer resizer-columns" role="separator" aria-label="Resize bubble and data panels" aria-orientation="vertical" aria-valuemin="30" aria-valuemax="70" tabindex="0"></div>
-    <div id="resize-rows" class="panel-resizer resizer-rows" role="separator" aria-label="Resize prices and trenches panels" aria-orientation="horizontal" aria-valuemin="32" aria-valuemax="70" tabindex="0"></div>
+    <div id="resize-columns-top" class="panel-resizer resizer-columns-top" role="separator" aria-label="Resize top panels independently" aria-orientation="vertical" tabindex="0" hidden></div>
+    <div id="resize-columns-bottom" class="panel-resizer resizer-columns-bottom" role="separator" aria-label="Resize bottom panels independently" aria-orientation="vertical" tabindex="0" hidden></div>
+    <div id="resize-rows-left" class="panel-resizer resizer-rows-left" role="separator" aria-label="Resize left panels independently" aria-orientation="horizontal" tabindex="0" hidden></div>
+    <div id="resize-rows-right" class="panel-resizer resizer-rows-right" role="separator" aria-label="Resize right panels independently" aria-orientation="horizontal" tabindex="0" hidden></div>
 
   </div>
 </div>
@@ -1398,9 +1399,13 @@ async function fetchWithTimeout(url,options={},timeoutMs=12000){
 const PANEL_LAYOUT_KEY = 'mus_panel_layout_v1';
 function setupPanelResizers(){
   const grid=$('.grid');
-  const columnHandle=$('#resize-columns');
-  const rowHandle=$('#resize-rows');
-  if (!grid || !columnHandle || !rowHandle) return;
+  const handles={
+    'columns-top':$('#resize-columns-top'),
+    'columns-bottom':$('#resize-columns-bottom'),
+    'rows-left':$('#resize-rows-left'),
+    'rows-right':$('#resize-rows-right')
+  };
+  if (!grid || Object.values(handles).some(handle=>!handle)) return;
 
   const GAP=12;
   const stored=cacheGet(PANEL_LAYOUT_KEY);
@@ -1409,6 +1414,7 @@ function setupPanelResizers(){
     rows:Number(stored?.rows),
     dragAxis:null,
     pointerId:null,
+    activeHandle:null,
     resizeFrame:0
   };
   const clamp=(value,min,max)=>Math.min(max,Math.max(min,value));
@@ -1448,8 +1454,6 @@ function setupPanelResizers(){
     state.rows=top/rect.height;
     grid.style.setProperty('--bubble-width',`${left.toFixed(2)}px`);
     grid.style.setProperty('--prices-height',`${top.toFixed(2)}px`);
-    columnHandle.setAttribute('aria-valuenow',String(Math.round(state.columns*100)));
-    rowHandle.setAttribute('aria-valuenow',String(Math.round(state.rows*100)));
   }
   function saveLayout(){ cacheSet(PANEL_LAYOUT_KEY,{columns:state.columns,rows:state.rows}); }
   function resetLayout(){
@@ -1460,12 +1464,68 @@ function setupPanelResizers(){
     applyBalancedPanelFrames(state.columns,state.rows);
     saveLayout();
   }
+
+  function panelPair(axis){
+    const pairs={
+      'columns-top':['panel-bubbles','panel-table'],
+      'columns-bottom':['panel-trenches','panel-tradingview'],
+      'rows-left':['panel-bubbles','panel-trenches'],
+      'rows-right':['panel-table','panel-tradingview']
+    };
+    const ids=pairs[axis];
+    if (!ids || !panelVisibility[ids[0]] || !panelVisibility[ids[1]]) return null;
+    const first=activePanelFrames[ids[0]];
+    const second=activePanelFrames[ids[1]];
+    if (!first || !second) return null;
+    const horizontal=axis.startsWith('columns');
+    const overlap=horizontal
+      ? Math.min(first.y+first.h,second.y+second.h)-Math.max(first.y,second.y)
+      : Math.min(first.x+first.w,second.x+second.w)-Math.max(first.x,second.x);
+    if (overlap<.08) return null;
+    return {firstId:ids[0],secondId:ids[1],first,second};
+  }
+
+  function resizePairAt(axis,point,rect){
+    const pair=panelPair(axis);
+    if (!pair || !rect?.width || !rect?.height) return false;
+    const horizontal=axis.startsWith('columns');
+    const scale=horizontal?rect.width:rect.height;
+    const minSize=horizontal?280:190;
+    const gap=12/scale;
+    const firstStart=(horizontal?pair.first.x:pair.first.y)*scale;
+    const secondEnd=(horizontal
+      ? pair.second.x+pair.second.w
+      : pair.second.y+pair.second.h)*scale;
+    const low=firstStart+minSize+6;
+    const high=secondEnd-minSize-6;
+    const boundary=clamp(point,Math.min(low,high),Math.max(low,high));
+    const ratio=boundary/scale;
+    const firstEdge=ratio-gap/2;
+    const secondEdge=ratio+gap/2;
+    const firstNext={...pair.first};
+    const secondNext={...pair.second};
+    if (horizontal){
+      firstNext.w=Math.max(.1,firstEdge-firstNext.x);
+      secondNext.x=secondEdge;
+      secondNext.w=Math.max(.1,(pair.second.x+pair.second.w)-secondEdge);
+    } else {
+      firstNext.h=Math.max(.1,firstEdge-firstNext.y);
+      secondNext.y=secondEdge;
+      secondNext.h=Math.max(.1,(pair.second.y+pair.second.h)-secondEdge);
+    }
+    activePanelFrames[pair.firstId]=firstNext;
+    activePanelFrames[pair.secondId]=secondNext;
+    applyPanelFrames();
+    return true;
+  }
+
   function beginDrag(axis,event){
-    if (!desktop() || event.button!==0) return;
+    if (!desktop() || event.button!==0 || !panelPair(axis)) return;
     event.preventDefault();
     state.dragAxis=axis;
     state.pointerId=event.pointerId;
-    const handle=axis==='columns'?columnHandle:rowHandle;
+    const handle=handles[axis];
+    state.activeHandle=handle;
     handle.classList.add('active');
     handle.setPointerCapture?.(event.pointerId);
     document.body.classList.add('panel-resizing');
@@ -1473,29 +1533,23 @@ function setupPanelResizers(){
   function moveDrag(event){
     if (!state.dragAxis || event.pointerId!==state.pointerId) return;
     const rect=grid.getBoundingClientRect();
-    const limit=bounds(rect);
-    if (state.dragAxis==='columns'){
-      const max=Math.max(limit.minLeft,rect.width-GAP-limit.minRight);
-      state.columns=clamp(event.clientX-rect.left,limit.minLeft,max)/rect.width;
-    } else {
-      const max=Math.max(limit.minTop,rect.height-GAP-limit.minBottom);
-      state.rows=clamp(event.clientY-rect.top,limit.minTop,max)/rect.height;
-    }
-    applyLayout();
-    applyBalancedPanelFrames(state.columns,state.rows);
+    const horizontal=state.dragAxis.startsWith('columns');
+    resizePairAt(state.dragAxis,horizontal?event.clientX-rect.left:event.clientY-rect.top,rect);
   }
   function endDrag(event){
     if (!state.dragAxis || event.pointerId!==state.pointerId) return;
-    const handle=state.dragAxis==='columns'?columnHandle:rowHandle;
+    const handle=state.activeHandle;
     handle.classList.remove('active');
     if (handle.hasPointerCapture?.(event.pointerId)) handle.releasePointerCapture(event.pointerId);
     state.dragAxis=null;
     state.pointerId=null;
+    state.activeHandle=null;
     document.body.classList.remove('panel-resizing');
     saveLayout();
   }
   function keyboardResize(axis,event){
-    const relevant=axis==='columns' ? ['ArrowLeft','ArrowRight'] : ['ArrowUp','ArrowDown'];
+    const horizontal=axis.startsWith('columns');
+    const relevant=horizontal ? ['ArrowLeft','ArrowRight'] : ['ArrowUp','ArrowDown'];
     if (!relevant.includes(event.key)){
       if (event.key==='Home' || event.key==='Enter'){
         event.preventDefault();
@@ -1504,30 +1558,27 @@ function setupPanelResizers(){
       return;
     }
     event.preventDefault();
+    const pair=panelPair(axis);
+    if (!pair) return;
     const rect=grid.getBoundingClientRect();
     const step=event.shiftKey?60:24;
     const positive=event.key==='ArrowRight' || event.key==='ArrowDown';
-    if (axis==='columns') state.columns=(rect.width*state.columns+(positive?step:-step))/rect.width;
-    else state.rows=(rect.height*state.rows+(positive?step:-step))/rect.height;
-    applyLayout();
-    applyBalancedPanelFrames(state.columns,state.rows);
+    const boundary=(horizontal
+      ? ((pair.first.x+pair.first.w+pair.second.x)/2)*rect.width
+      : ((pair.first.y+pair.first.h+pair.second.y)/2)*rect.height) + (positive?step:-step);
+    resizePairAt(axis,boundary,rect);
     saveLayout();
   }
 
-  columnHandle.title='Drag to resize · double-click to reset';
-  rowHandle.title='Drag to resize · double-click to reset';
-  columnHandle.addEventListener('pointerdown',event=>beginDrag('columns',event));
-  rowHandle.addEventListener('pointerdown',event=>beginDrag('rows',event));
-  columnHandle.addEventListener('pointermove',moveDrag);
-  rowHandle.addEventListener('pointermove',moveDrag);
-  columnHandle.addEventListener('pointerup',endDrag);
-  rowHandle.addEventListener('pointerup',endDrag);
-  columnHandle.addEventListener('pointercancel',endDrag);
-  rowHandle.addEventListener('pointercancel',endDrag);
-  columnHandle.addEventListener('dblclick',resetLayout);
-  rowHandle.addEventListener('dblclick',resetLayout);
-  columnHandle.addEventListener('keydown',event=>keyboardResize('columns',event));
-  rowHandle.addEventListener('keydown',event=>keyboardResize('rows',event));
+  Object.entries(handles).forEach(([axis,handle])=>{
+    handle.title='Drag to resize this side · double-click to reset';
+    handle.addEventListener('pointerdown',event=>beginDrag(axis,event));
+    handle.addEventListener('pointermove',moveDrag);
+    handle.addEventListener('pointerup',endDrag);
+    handle.addEventListener('pointercancel',endDrag);
+    handle.addEventListener('dblclick',resetLayout);
+    handle.addEventListener('keydown',event=>keyboardResize(axis,event));
+  });
   window.addEventListener('resize',()=>{
     cancelAnimationFrame(state.resizeFrame);
     state.resizeFrame=requestAnimationFrame(applyLayout);
@@ -1636,12 +1687,80 @@ function clearPanelFrameStyles(){
   });
 }
 
+function panelFramePairForResize(axis){
+  const pairs={
+    'columns-top':['panel-bubbles','panel-table'],
+    'columns-bottom':['panel-trenches','panel-tradingview'],
+    'rows-left':['panel-bubbles','panel-trenches'],
+    'rows-right':['panel-table','panel-tradingview']
+  };
+  const ids=pairs[axis];
+  if (!ids || !panelVisibility[ids[0]] || !panelVisibility[ids[1]]) return null;
+  const first=activePanelFrames[ids[0]];
+  const second=activePanelFrames[ids[1]];
+  if (!first || !second) return null;
+  const horizontal=axis.startsWith('columns');
+  const overlap=horizontal
+    ? Math.min(first.y+first.h,second.y+second.h)-Math.max(first.y,second.y)
+    : Math.min(first.x+first.w,second.x+second.w)-Math.max(first.x,second.x);
+  if (overlap<.08) return null;
+  return {first,second};
+}
+
+function positionPanelResizers(){
+  const grid=$('.grid');
+  const rect=grid?.getBoundingClientRect?.();
+  const specs=[
+    ['columns-top','resize-columns-top'],
+    ['columns-bottom','resize-columns-bottom'],
+    ['rows-left','resize-rows-left'],
+    ['rows-right','resize-rows-right']
+  ];
+  specs.forEach(([axis,id])=>{
+    const handle=$('#'+id);
+    const pair=panelFramePairForResize(axis);
+    if (!handle || !rect?.width || !rect?.height || !matchMedia('(min-width:901px)').matches || !pair){
+      if (handle){
+        handle.hidden=true;
+        ['left','right','top','bottom','width','height'].forEach(property=>handle.style.removeProperty(property));
+      }
+      return;
+    }
+    const horizontal=axis.startsWith('columns');
+    if (horizontal){
+      const boundary=(pair.first.x+pair.first.w+pair.second.x)/2;
+      const top=Math.max(pair.first.y,pair.second.y);
+      const bottom=Math.min(pair.first.y+pair.first.h,pair.second.y+pair.second.h);
+      handle.style.left=`${boundary*100}%`;
+      handle.style.right='auto';
+      handle.style.top=`${top*100}%`;
+      handle.style.bottom='auto';
+      handle.style.width='12px';
+      handle.style.height=`${Math.max(8,(bottom-top)*100)}%`;
+      handle.setAttribute('aria-valuenow',String(Math.round(boundary*100)));
+    } else {
+      const boundary=(pair.first.y+pair.first.h+pair.second.y)/2;
+      const left=Math.max(pair.first.x,pair.second.x);
+      const right=Math.min(pair.first.x+pair.first.w,pair.second.x+pair.second.w);
+      handle.style.left=`${left*100}%`;
+      handle.style.right='auto';
+      handle.style.top=`${boundary*100}%`;
+      handle.style.bottom='auto';
+      handle.style.width=`${Math.max(8,(right-left)*100)}%`;
+      handle.style.height='12px';
+      handle.setAttribute('aria-valuenow',String(Math.round(boundary*100)));
+    }
+    handle.hidden=false;
+  });
+}
+
 function applyPanelFrames(){
   const grid=$('.grid');
   if (!grid) return;
   if (!matchMedia('(min-width:901px)').matches){
     grid.classList.remove('panel-freeform');
     clearPanelFrameStyles();
+    positionPanelResizers();
     return;
   }
   const rect=grid.getBoundingClientRect();
@@ -1670,6 +1789,7 @@ function applyPanelFrames(){
     element.style.height=`${safeFrame.h*100}%`;
     element.style.margin='0';
   });
+  positionPanelResizers();
   panelFrameApplying=false;
   if (changed) savePanelFrames();
 }
@@ -1746,8 +1866,6 @@ function applyBalancedPanelFrames(columnsRatio,rowsRatio){
   const rows=Math.max(minRowRatio,Math.min(maxRowRatio,Number(rowsRatio)||.54));
   grid.style.setProperty('--bubble-width',`${(columns*rect.width).toFixed(2)}px`);
   grid.style.setProperty('--prices-height',`${(rows*rect.height).toFixed(2)}px`);
-  $('#resize-columns')?.setAttribute('aria-valuenow',String(Math.round(columns*100)));
-  $('#resize-rows')?.setAttribute('aria-valuenow',String(Math.round(rows*100)));
   const ids=new Set(visible.map(panel=>panel.id));
   const assign=(id,frame)=>{
     if (ids.has(id)) activePanelFrames[id]=clampPanelFrame(frame,activePanelFrames[id] || frame);
@@ -1813,8 +1931,7 @@ function updatePanelLayout(){
     }
   });
   syncPanelFramesForLayout(visible);
-  $('#resize-columns')?.toggleAttribute('hidden',visible.length<2);
-  $('#resize-rows')?.toggleAttribute('hidden',visible.length<3);
+  positionPanelResizers();
   if (tradingViewPanelFrame) cancelAnimationFrame(tradingViewPanelFrame);
   tradingViewPanelFrame=0;
   if (panelVisibility['panel-tradingview']===true){
