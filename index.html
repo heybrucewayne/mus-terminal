@@ -547,6 +547,38 @@
   .grid.panel-layout-standard.panel-count-2 {
     grid-template-rows:minmax(320px,1fr);
   }
+
+  /* Desktop panels use independent frames. This prevents the Market and
+     Trenches windows from inheriting one shared column/row size. */
+  @media (min-width:901px) {
+    .grid.panel-freeform {
+      display:block;
+      position:relative;
+    }
+    .grid.panel-freeform > .panel {
+      position:absolute;
+      box-sizing:border-box;
+      min-width:280px;
+      min-height:190px;
+      overflow:hidden;
+      resize:both;
+      z-index:1;
+    }
+    .grid.panel-freeform > .panel:focus-within { z-index:4; }
+    .grid.panel-freeform > .panel::after {
+      content:'↘';
+      position:absolute;
+      right:7px;
+      bottom:4px;
+      z-index:3;
+      color:rgba(225,242,250,.48);
+      font:700 12px/1 'Space Grotesk',sans-serif;
+      pointer-events:none;
+      text-shadow:0 1px 3px rgba(0,0,0,.45);
+    }
+    .grid.panel-freeform .panel-resizer { display:none !important; }
+  }
+
   .grid.panel-layout-quad #panel-bubbles,
   .grid.panel-layout-standard #panel-bubbles,
   .grid.panel-layout-single #panel-bubbles { grid-row:auto; }
@@ -1500,6 +1532,174 @@ let panelVisibility = Object.fromEntries(PANEL_DEFS.map(panel => [
   typeof storedPanelVisibility?.[panel.id] === 'boolean' ? storedPanelVisibility[panel.id] : panel.defaultVisible
 ]));
 
+const PANEL_FRAMES_KEY = 'mus_panel_frames_v1';
+const storedPanelFrames = cacheGet(PANEL_FRAMES_KEY);
+let panelFrameStore = storedPanelFrames && typeof storedPanelFrames === 'object' && !Array.isArray(storedPanelFrames)
+  ? storedPanelFrames
+  : {};
+let activePanelFrameSignature = '';
+let activePanelFrames = {};
+let panelFrameApplying = false;
+let panelFrameObserver = null;
+let panelFrameResizeFrame = 0;
+
+function panelFrameSignature(visible){
+  return visible.map(panel => panel.id).join('|');
+}
+
+function clampPanelFrame(frame, fallback={x:0,y:0,w:1,h:1}){
+  const number=(value,backup)=>Number.isFinite(Number(value)) ? Number(value) : backup;
+  const w=Math.max(.18,Math.min(1,number(frame?.w,fallback.w)));
+  const h=Math.max(.18,Math.min(1,number(frame?.h,fallback.h)));
+  return {
+    x:Math.max(0,Math.min(1-w,number(frame?.x,fallback.x))),
+    y:Math.max(0,Math.min(1-h,number(frame?.y,fallback.y))),
+    w,
+    h
+  };
+}
+
+function defaultPanelFrames(visible){
+  const grid=$('.grid');
+  const rect=grid?.getBoundingClientRect?.() || {width:1,height:1};
+  const gapX=Math.min(.08,12/Math.max(rect.width,1));
+  const gapY=Math.min(.08,12/Math.max(rect.height,1));
+  const layout=cacheGet(PANEL_LAYOUT_KEY);
+  const columns=Number.isFinite(Number(layout?.columns)) ? Math.max(.36,Math.min(.72,Number(layout.columns))) : .61;
+  const rows=Number.isFinite(Number(layout?.rows)) ? Math.max(.34,Math.min(.72,Number(layout.rows))) : .54;
+  const frames={};
+  const ids=new Set(visible.map(panel => panel.id));
+  const set=(id,frame)=>{ if (ids.has(id)) frames[id]=clampPanelFrame(frame); };
+
+  if (ids.has('panel-bubbles') && ids.has('panel-table') && ids.has('panel-trenches') && !ids.has('panel-tradingview')){
+    const rightX=Math.min(.74,columns+gapX);
+    const rightY=Math.min(.74,rows+gapY);
+    set('panel-bubbles',{x:0,y:0,w:columns,h:1});
+    set('panel-table',{x:rightX,y:0,w:1-rightX,h:rows});
+    set('panel-trenches',{x:rightX,y:rightY,w:1-rightX,h:1-rightY});
+    return frames;
+  }
+
+  const halfW=(1-gapX)/2;
+  const halfH=(1-gapY)/2;
+  const quad={
+    'panel-bubbles':{x:0,y:0,w:halfW,h:halfH},
+    'panel-table':{x:halfW+gapX,y:0,w:halfW,h:halfH},
+    'panel-trenches':{x:0,y:halfH+gapY,w:halfW,h:halfH},
+    'panel-tradingview':{x:halfW+gapX,y:halfH+gapY,w:halfW,h:halfH}
+  };
+
+  if (visible.length===2){
+    visible.forEach((panel,index)=>set(panel.id,{x:index ? halfW+gapX : 0,y:0,w:halfW,h:1}));
+    return frames;
+  }
+  if (visible.length>=3){
+    visible.forEach(panel=>set(panel.id,quad[panel.id] || {x:0,y:0,w:halfW,h:halfH}));
+    return frames;
+  }
+  if (visible.length===1) set(visible[0].id,{x:0,y:0,w:1,h:1});
+  return frames;
+}
+
+function savePanelFrames(){
+  if (!activePanelFrameSignature) return;
+  panelFrameStore[activePanelFrameSignature]=activePanelFrames;
+  cacheSet(PANEL_FRAMES_KEY,panelFrameStore);
+}
+
+function clearPanelFrameStyles(){
+  PANEL_DEFS.forEach(panel=>{
+    const element=$('#'+panel.id);
+    if (!element) return;
+    ['position','left','top','width','height','margin'].forEach(property=>element.style.removeProperty(property));
+  });
+}
+
+function applyPanelFrames(){
+  const grid=$('.grid');
+  if (!grid) return;
+  if (!matchMedia('(min-width:901px)').matches){
+    grid.classList.remove('panel-freeform');
+    clearPanelFrameStyles();
+    return;
+  }
+  const rect=grid.getBoundingClientRect();
+  if (!rect.width || !rect.height){
+    requestAnimationFrame(applyPanelFrames);
+    return;
+  }
+  grid.classList.add('panel-freeform');
+  panelFrameApplying=true;
+  PANEL_DEFS.forEach(panel=>{
+    const element=$('#'+panel.id);
+    const frame=activePanelFrames[panel.id];
+    if (!element || element.hidden || !frame) return;
+    element.style.position='absolute';
+    element.style.left=`${frame.x*100}%`;
+    element.style.top=`${frame.y*100}%`;
+    element.style.width=`${frame.w*100}%`;
+    element.style.height=`${frame.h*100}%`;
+    element.style.margin='0';
+  });
+  panelFrameApplying=false;
+}
+
+function syncPanelFramesForLayout(visible){
+  const signature=panelFrameSignature(visible);
+  if (signature!==activePanelFrameSignature){
+    activePanelFrameSignature=signature;
+    const defaults=defaultPanelFrames(visible);
+    const saved=panelFrameStore[signature] && typeof panelFrameStore[signature]==='object' ? panelFrameStore[signature] : {};
+    activePanelFrames={};
+    visible.forEach(panel=>{
+      activePanelFrames[panel.id]=clampPanelFrame(saved[panel.id],defaults[panel.id] || {x:0,y:0,w:1,h:1});
+    });
+    savePanelFrames();
+  }
+  applyPanelFrames();
+}
+
+function setupIndependentPanelFrames(){
+  const grid=$('.grid');
+  if (!grid) return;
+  if (typeof ResizeObserver==='function'){
+    panelFrameObserver=new ResizeObserver(entries=>{
+      if (panelFrameApplying || !activePanelFrameSignature || !matchMedia('(min-width:901px)').matches) return;
+      const gridRect=grid.getBoundingClientRect();
+      if (!gridRect.width || !gridRect.height) return;
+      let changed=false;
+      entries.forEach(entry=>{
+        const id=entry.target.id;
+        if (!panelVisibility[id] || entry.target.hidden) return;
+        const rect=entry.target.getBoundingClientRect();
+        const next=clampPanelFrame({
+          x:(rect.left-gridRect.left)/gridRect.width,
+          y:(rect.top-gridRect.top)/gridRect.height,
+          w:rect.width/gridRect.width,
+          h:rect.height/gridRect.height
+        },activePanelFrames[id]);
+        const previous=activePanelFrames[id];
+        if (!previous || ['x','y','w','h'].some(key=>Math.abs(previous[key]-next[key])>.001)){
+          activePanelFrames[id]=next;
+          changed=true;
+        }
+      });
+      if (changed) savePanelFrames();
+    });
+    PANEL_DEFS.forEach(panel=>{
+      const element=$('#'+panel.id);
+      if (element) panelFrameObserver.observe(element);
+    });
+  }
+  window.addEventListener('resize',()=>{
+    cancelAnimationFrame(panelFrameResizeFrame);
+    panelFrameResizeFrame=requestAnimationFrame(()=>{
+      panelFrameResizeFrame=0;
+      applyPanelFrames();
+    });
+  });
+}
+
 function visiblePanelDefs(){
   return PANEL_DEFS.filter(panel => panelVisibility[panel.id]);
 }
@@ -1536,6 +1736,7 @@ function updatePanelLayout(){
       else element.style.display='none';
     }
   });
+  syncPanelFramesForLayout(visible);
   $('#resize-columns')?.toggleAttribute('hidden',visible.length<2);
   $('#resize-rows')?.toggleAttribute('hidden',visible.length<3);
   if (tradingViewPanelFrame) cancelAnimationFrame(tradingViewPanelFrame);
@@ -3770,6 +3971,7 @@ tradingViewPanelForm?.addEventListener('submit', event => {
   if (tradingViewPanelInput) tradingViewPanelInput.value=symbol;
   renderTradingViewPanel();
 });
+setupIndependentPanelFrames();
 renderPanelManager();
 updatePanelLayout();
 setupPanelResizers();
