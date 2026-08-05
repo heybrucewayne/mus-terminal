@@ -1123,7 +1123,6 @@
   .panel-manager-toggle:hover { background:rgba(255,255,255,.11); border-color:rgba(255,255,255,.28); }
   .panel-manager-toggle[aria-pressed="true"] { border-color:rgba(0,255,136,.34); background:rgba(0,255,136,.075); }
   .panel-manager-toggle[aria-disabled="true"] { opacity:.48; cursor:not-allowed; }
-  .panel-manager-icon { width:15px; color:var(--green); text-align:center; }
   .panel-manager-state { margin-left:auto; color:var(--muted2); font:600 8px 'JetBrains Mono',monospace; }
   .background-picker {
     display:grid;
@@ -1861,11 +1860,11 @@ function setupPanelResizers(){
    ============================================================ */
 const PANEL_VISIBILITY_KEY = 'mus_panel_visibility_v1';
 const PANEL_DEFS = [
-  { id:'panel-bubbles', label:'BUBBLES', icon:'◉', defaultVisible:true },
-  { id:'panel-table', label:'MARKET', icon:'▤', defaultVisible:true },
-  { id:'panel-trenches', label:'SOL MEME TRENCHES', icon:'◌', defaultVisible:true },
-  { id:'panel-tradingview', label:'TRADINGVIEW', icon:'⌁', defaultVisible:false },
-  { id:'panel-dexscreener', label:'DEXSCREENER', icon:'◈', defaultVisible:false }
+  { id:'panel-bubbles', label:'BUBBLES', defaultVisible:true },
+  { id:'panel-table', label:'MARKET', defaultVisible:true },
+  { id:'panel-trenches', label:'SOL MEME TRENCHES', defaultVisible:true },
+  { id:'panel-tradingview', label:'TRADINGVIEW', defaultVisible:false },
+  { id:'panel-dexscreener', label:'DEXSCREENER', defaultVisible:false }
 ];
 const storedPanelVisibility = cacheGet(PANEL_VISIBILITY_KEY);
 let panelVisibility = Object.fromEntries(PANEL_DEFS.map(panel => [
@@ -2397,7 +2396,6 @@ function renderPanelManager(){
     const visible=Boolean(panelVisibility[panel.id]);
     const disabled=visible && cannotHideLast;
     return `<button class="panel-manager-toggle" type="button" role="menuitemcheckbox" data-panel-toggle="${panel.id}" aria-pressed="${visible}" aria-disabled="${disabled}">
-      <span class="panel-manager-icon" aria-hidden="true">${panel.icon}</span>
       <span>${panel.label}</span>
       <span class="panel-manager-state">${visible?'ON':'OFF'}</span>
     </button>`;
