@@ -672,7 +672,7 @@
   }
   .tradingview-panel-chart .tradingview-widget-copyright a { color:rgba(132,211,235,.58); text-decoration:none; }
 
-  /* ===== DEX CHART PANEL ===== */
+  /* ===== DEXSCREENER PANEL ===== */
   #panel-dexscreener .panel-body {
     display:flex;
     flex-direction:column;
@@ -734,6 +734,7 @@
     gap:5px;
     min-height:32px;
     padding:4px 9px;
+    border-top:1px solid rgba(255,255,255,.08);
     border-bottom:1px solid rgba(255,255,255,.08);
   }
   .dex-panel-provider {
@@ -753,6 +754,95 @@
     white-space:nowrap;
   }
   .dex-panel-external:hover { color:#fff; text-decoration:underline; }
+  .dex-panel-summary {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+    min-height:25px;
+    padding:4px 9px;
+    color:rgba(222,235,240,.72);
+    font:600 8px 'Space Grotesk',sans-serif;
+    letter-spacing:.10em;
+    text-transform:uppercase;
+  }
+  .dex-panel-summary-count { color:var(--green); font:600 8px 'JetBrains Mono',monospace; letter-spacing:.04em; }
+  .dex-panel-list {
+    flex:1 1 54%;
+    min-height:112px;
+    overflow:auto;
+    padding:0 7px 7px;
+    overscroll-behavior:contain;
+  }
+  .dex-pair-row {
+    display:grid;
+    grid-template-columns:minmax(108px,1.35fr) minmax(76px,.78fr) minmax(92px,.90fr);
+    align-items:center;
+    gap:7px;
+    min-height:49px;
+    padding:6px 7px;
+    width:100%;
+    box-sizing:border-box;
+    border:1px solid rgba(255,255,255,.10);
+    border-radius:8px;
+    background:rgba(255,255,255,.035);
+    color:inherit;
+    font:inherit;
+    text-align:left;
+    cursor:pointer;
+    transition:background .14s,border-color .14s,transform .14s;
+  }
+  .dex-pair-row + .dex-pair-row { margin-top:5px; }
+  .dex-pair-row:hover,
+  .dex-pair-row[aria-selected="true"] {
+    border-color:rgba(0,255,136,.42);
+    background:rgba(0,255,136,.085);
+  }
+  .dex-pair-row:active { transform:translateY(1px); }
+  .dex-pair-row:focus-visible { outline:2px solid rgba(118,220,255,.72); outline-offset:2px; }
+  .dex-pair-main,
+  .dex-pair-price,
+  .dex-pair-metrics { min-width:0; }
+  .dex-pair-main { display:flex; align-items:center; gap:7px; }
+  .dex-pair-logo {
+    flex:0 0 24px;
+    width:24px;
+    height:24px;
+    border-radius:50%;
+    object-fit:cover;
+    background:rgba(255,255,255,.10);
+    border:1px solid rgba(255,255,255,.18);
+  }
+  .dex-pair-symbol,
+  .dex-pair-price-value { color:var(--text-bright); font:700 10px 'Space Grotesk',sans-serif; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .dex-pair-sub,
+  .dex-pair-meta { display:block; margin-top:2px; color:rgba(213,227,232,.56); font:500 8px 'JetBrains Mono',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .dex-pair-price { text-align:right; }
+  .dex-pair-price-value { font-family:'JetBrains Mono',monospace; }
+  .dex-pair-change { display:block; margin-top:3px; font:600 8px 'JetBrains Mono',monospace; }
+  .dex-pair-change.pos { color:#00f58a; }
+  .dex-pair-change.neg { color:#ff5577; }
+  .dex-pair-metrics { text-align:right; }
+  .dex-pair-metric { display:block; color:rgba(235,245,247,.78); font:500 8px 'JetBrains Mono',monospace; white-space:nowrap; }
+  .dex-pair-metric + .dex-pair-metric { margin-top:3px; color:rgba(213,227,232,.56); }
+  .dex-panel-detail {
+    display:flex;
+    flex:1 1 46%;
+    flex-direction:column;
+    min-height:136px;
+    border-top:1px solid rgba(255,255,255,.12);
+  }
+  .dex-panel-selected {
+    display:flex;
+    align-items:center;
+    gap:8px;
+    min-height:34px;
+    padding:5px 9px;
+  }
+  .dex-panel-selected-copy { min-width:0; flex:1 1 auto; }
+  .dex-panel-selected-title { color:var(--text-bright); font:700 10px 'Space Grotesk',sans-serif; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .dex-panel-selected-meta { margin-top:2px; color:rgba(213,227,232,.58); font:500 8px 'JetBrains Mono',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .dex-panel-detail .dex-panel-tools { min-height:27px; padding:3px 9px; border-top:0; }
   .dex-panel-chart {
     position:relative;
     flex:1 1 auto;
@@ -770,6 +860,12 @@
     color:var(--muted);
     font:500 10px/1.5 'JetBrains Mono',monospace;
     text-align:center;
+  }
+  @media (max-width:700px) {
+    .dex-pair-row { grid-template-columns:minmax(110px,1fr) minmax(78px,.75fr); }
+    .dex-pair-metrics { display:none; }
+    .dex-panel-list { min-height:190px; }
+    .dex-panel-detail { min-height:220px; }
   }
 
   /* ===== SOL MEME TRENCHES ===== */
@@ -1416,21 +1512,35 @@
       </div>
     </section>
 
-    <section class="panel" id="panel-dexscreener" aria-label="DEX Screener chart" hidden>
+    <section class="panel" id="panel-dexscreener" aria-label="DEX Screener pairs" hidden>
       <div class="panel-body">
         <div class="dex-panel-head">
-          <div class="dex-panel-title">DEX CHART</div>
+          <div class="dex-panel-title">DEXSCREENER</div>
           <form id="dexPanelForm" class="dex-panel-form">
-            <input id="dexPanelAddress" aria-label="Solana token or pair address" placeholder="Solana token / pair address" autocomplete="off" spellcheck="false" />
-            <button type="submit">LOAD</button>
+            <input id="dexPanelAddress" aria-label="Search token, pair or address" placeholder="Search token, pair or address" autocomplete="off" spellcheck="false" />
+            <button type="submit">SEARCH</button>
           </form>
         </div>
-        <div class="dex-panel-tools" role="tablist" aria-label="DEX chart provider">
-          <button class="dex-panel-provider active" type="button" data-dex-provider="dex" role="tab" aria-selected="true">DEXSCREENER</button>
-          <button class="dex-panel-provider" type="button" data-dex-provider="gecko" role="tab" aria-selected="false">GECKOTERMINAL</button>
-          <a id="dexPanelExternal" class="dex-panel-external" target="_blank" rel="noopener noreferrer" hidden>OPEN ↗</a>
+        <div id="dexPanelSummary" class="dex-panel-summary">
+          <span id="dexPanelSummaryLabel">TOP SOLANA PAIRS</span><span id="dexPanelSummaryCount" class="dex-panel-summary-count">—</span>
         </div>
-        <div id="dexPanelChart" class="dex-panel-chart" aria-label="Live DEX chart"></div>
+        <div id="dexPanelList" class="dex-panel-list scroll" aria-label="Solana DEX pairs" aria-live="polite">
+          <div class="dex-panel-state">LOADING PAIRS…</div>
+        </div>
+        <div id="dexPanelDetail" class="dex-panel-detail">
+          <div class="dex-panel-selected">
+            <div class="dex-panel-selected-copy">
+              <div id="dexPanelSelectedTitle" class="dex-panel-selected-title">SELECT A PAIR</div>
+              <div id="dexPanelSelectedMeta" class="dex-panel-selected-meta">Click a Solana pair to open its chart</div>
+            </div>
+          </div>
+          <div class="dex-panel-tools" role="tablist" aria-label="Chart provider">
+            <button class="dex-panel-provider active" type="button" data-dex-provider="dex" role="tab" aria-selected="true">DEXSCREENER</button>
+            <button class="dex-panel-provider" type="button" data-dex-provider="gecko" role="tab" aria-selected="false">GECKOTERMINAL</button>
+            <a id="dexPanelExternal" class="dex-panel-external" target="_blank" rel="noopener noreferrer" hidden>OPEN ↗</a>
+          </div>
+          <div id="dexPanelChart" class="dex-panel-chart" aria-label="Selected pair chart"></div>
+        </div>
       </div>
     </section>
 
@@ -1755,7 +1865,7 @@ const PANEL_DEFS = [
   { id:'panel-table', label:'MARKET', icon:'▤', defaultVisible:true },
   { id:'panel-trenches', label:'SOL MEME TRENCHES', icon:'◌', defaultVisible:true },
   { id:'panel-tradingview', label:'TRADINGVIEW', icon:'⌁', defaultVisible:false },
-  { id:'panel-dexscreener', label:'DEX CHART', icon:'◈', defaultVisible:false }
+  { id:'panel-dexscreener', label:'DEXSCREENER', icon:'◈', defaultVisible:false }
 ];
 const storedPanelVisibility = cacheGet(PANEL_VISIBILITY_KEY);
 let panelVisibility = Object.fromEntries(PANEL_DEFS.map(panel => [
@@ -3213,9 +3323,15 @@ let tradingViewPanelGeneration = 0;
 let tradingViewPanelFrame = 0;
 const TRADINGVIEW_PANEL_SYMBOL_KEY = 'mus_tradingview_panel_symbol_v1';
 const DEX_PANEL_ADDRESS_KEY = 'mus_dex_panel_address_v1';
+const DEX_PANEL_QUERY_KEY = 'mus_dex_panel_query_v2';
+const DEX_PANEL_CACHE_KEY = 'mus_dex_panel_pairs_v2';
 const DEX_PANEL_PROVIDER_KEY = 'mus_dex_panel_provider_v1';
+const DEX_PANEL_CACHE_MS = 90 * 1000;
 let dexPanelGeneration = 0;
+let dexPanelChartGeneration = 0;
 let dexPanelProvider = cacheGet(DEX_PANEL_PROVIDER_KEY) === 'gecko' ? 'gecko' : 'dex';
+let dexPanelPairs = [];
+let dexPanelSelectedPair = null;
 
 function customAssetSnapshot(c){
   const common = {
@@ -3456,6 +3572,140 @@ function dexPanelState(message){
   return state;
 }
 
+function dexPanelMoney(value){
+  const number=Number(value);
+  if (!Number.isFinite(number) || number<=0) return '—';
+  if (number>=1e9) return '$'+(number/1e9).toFixed(1)+'B';
+  if (number>=1e6) return '$'+(number/1e6).toFixed(1)+'M';
+  if (number>=1e3) return '$'+(number/1e3).toFixed(number>=1e5?0:1)+'K';
+  return '$'+number.toFixed(number>=100?0:2);
+}
+
+function dexPanelPrice(value){
+  const number=Number(value);
+  if (!Number.isFinite(number)) return '—';
+  if (number>=1000) return '$'+number.toLocaleString('en-US',{maximumFractionDigits:2});
+  if (number>=1) return '$'+number.toLocaleString('en-US',{maximumFractionDigits:4});
+  if (number>=.01) return '$'+number.toLocaleString('en-US',{maximumFractionDigits:6});
+  return '$'+number.toLocaleString('en-US',{maximumFractionDigits:10});
+}
+
+function dexPanelPercent(value){
+  const number=Number(value);
+  if (!Number.isFinite(number)) return '—';
+  return `${number>=0?'+':''}${number.toFixed(Math.abs(number)>=100?0:2)}%`;
+}
+
+function dexPanelPairKey(pair){
+  return String(pair?.pairAddress||`${pair?.baseToken?.address||''}:${pair?.quoteToken?.address||''}`).trim();
+}
+
+function dexPanelPairLabel(pair){
+  const base=String(pair?.baseToken?.symbol||'?').toUpperCase();
+  const quote=String(pair?.quoteToken?.symbol||'?').toUpperCase();
+  return `${base} / ${quote}`;
+}
+
+function dexPanelNormalizePairs(data){
+  const values=Array.isArray(data) ? data : Array.isArray(data?.pairs) ? data.pairs : [];
+  const seen=new Set();
+  return values
+    .filter(pair=>String(pair?.chainId||'').toLowerCase()==='solana' && pair?.pairAddress)
+    .filter(pair=>{
+      const key=dexPanelPairKey(pair);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a,b)=>(Number(b?.volume?.h24)||0)-(Number(a?.volume?.h24)||0)
+      || (Number(b?.liquidity?.usd)||0)-(Number(a?.liquidity?.usd)||0))
+    .slice(0,24);
+}
+
+async function dexPanelFetchJson(url){
+  const response=await fetchWithTimeout(url,{cache:'no-store'},12000);
+  if (!response.ok) throw new Error(`DEX API ${response.status}`);
+  return response.json();
+}
+
+async function dexPanelFetchPairs(query,force=false){
+  const normalized=String(query||'').trim();
+  const cached=cacheGet(DEX_PANEL_CACHE_KEY);
+  if (!force && cached?.query===normalized && Date.now()-Number(cached.updatedAt||0)<DEX_PANEL_CACHE_MS && Array.isArray(cached.pairs)){
+    return cached.pairs;
+  }
+
+  let pairs=[];
+  if (normalized){
+    const address=normalizeSolanaChartAddress(normalized);
+    if (address){
+      pairs=dexPanelNormalizePairs(await dexPanelFetchJson(`https://api.dexscreener.com/token-pairs/v1/solana/${encodeURIComponent(address)}`));
+      if (!pairs.length){
+        pairs=dexPanelNormalizePairs(await dexPanelFetchJson(`https://api.dexscreener.com/latest/dex/pairs/solana/${encodeURIComponent(address)}`));
+      }
+    } else {
+      pairs=dexPanelNormalizePairs(await dexPanelFetchJson(`https://api.dexscreener.com/latest/dex/search?q=${encodeURIComponent(normalized)}`));
+    }
+  } else {
+    const boosts=await dexPanelFetchJson('https://api.dexscreener.com/token-boosts/top/v1');
+    const addresses=[...new Set((Array.isArray(boosts)?boosts:[])
+      .filter(item=>String(item?.chainId||'').toLowerCase()==='solana' && item?.tokenAddress)
+      .map(item=>item.tokenAddress))].slice(0,30);
+    if (addresses.length){
+      pairs=dexPanelNormalizePairs(await dexPanelFetchJson(`https://api.dexscreener.com/tokens/v1/solana/${addresses.join(',')}`));
+    }
+  }
+  cacheSet(DEX_PANEL_CACHE_KEY,{query:normalized,updatedAt:Date.now(),pairs});
+  return pairs;
+}
+
+function renderDexPanelList(pairs,stateMessage=''){
+  const list=$('#dexPanelList');
+  const count=$('#dexPanelSummaryCount');
+  if (!list) return;
+  if (count) count.textContent=stateMessage ? '—' : `${pairs.length} PAIRS`;
+  if (stateMessage){
+    list.replaceChildren(dexPanelState(stateMessage));
+    return;
+  }
+  if (!pairs.length){
+    list.replaceChildren(dexPanelState('NO SOLANA PAIRS FOUND'));
+    return;
+  }
+  list.innerHTML=pairs.map(pair=>{
+    const key=escapeHtml(dexPanelPairKey(pair));
+    const selected=dexPanelSelectedPair && dexPanelPairKey(dexPanelSelectedPair)===dexPanelPairKey(pair);
+    const logo=String(pair?.info?.imageUrl||'').trim();
+    const change=Number(pair?.priceChange?.h24);
+    return `<button class="dex-pair-row" type="button" data-dex-pair="${key}" aria-selected="${selected?'true':'false'}">
+      <span class="dex-pair-main">
+        ${logo?`<img class="dex-pair-logo" src="${escapeHtml(logo)}" alt="" loading="lazy" referrerpolicy="no-referrer">`:'<span class="dex-pair-logo" aria-hidden="true">◈</span>'}
+        <span><strong class="dex-pair-symbol">${escapeHtml(dexPanelPairLabel(pair))}</strong><span class="dex-pair-sub">${escapeHtml(String(pair?.dexId||'DEX').toUpperCase())} · ${escapeHtml(String(pair?.baseToken?.name||pair?.baseToken?.symbol||'Solana token'))}</span></span>
+      </span>
+      <span class="dex-pair-price"><strong class="dex-pair-price-value">${escapeHtml(dexPanelPrice(pair?.priceUsd))}</strong><span class="dex-pair-change ${change>=0?'pos':'neg'}">${escapeHtml(dexPanelPercent(change))} 24H</span></span>
+      <span class="dex-pair-metrics"><span class="dex-pair-metric">VOL ${escapeHtml(dexPanelMoney(pair?.volume?.h24))}</span><span class="dex-pair-metric">LP ${escapeHtml(dexPanelMoney(pair?.liquidity?.usd))}</span></span>
+    </button>`;
+  }).join('');
+}
+
+function renderDexPanelSelection(pair){
+  dexPanelSelectedPair=pair||null;
+  const title=$('#dexPanelSelectedTitle');
+  const meta=$('#dexPanelSelectedMeta');
+  if (!pair){
+    if (title) title.textContent='SELECT A PAIR';
+    if (meta) meta.textContent='Click a Solana pair to open its chart';
+    renderDexPanelChart(null);
+  } else {
+    const label=dexPanelPairLabel(pair);
+    if (title) title.textContent=label;
+    if (meta) meta.textContent=`${String(pair?.dexId||'DEX').toUpperCase()} · ${dexPanelPrice(pair?.priceUsd)} · ${dexPanelPercent(pair?.priceChange?.h24)} 24H`;
+    cacheSet(DEX_PANEL_ADDRESS_KEY,pair?.baseToken?.address||pair?.pairAddress||'');
+    renderDexPanelChart(pair);
+  }
+  renderDexPanelList(dexPanelPairs);
+}
+
 function normalizeSolanaChartAddress(rawInput){
   let value=String(rawInput||'').trim();
   if (!value) return null;
@@ -3493,17 +3743,6 @@ function geckoTerminalOpenUrl(address,pairAddress){
     : `https://www.geckoterminal.com/solana/tokens/${encodeURIComponent(address)}`;
 }
 
-async function resolveDexSolanaPair(address){
-  const response=await fetchWithTimeout(`https://api.dexscreener.com/token-pairs/v1/solana/${encodeURIComponent(address)}`,{cache:'no-store'},12000);
-  if (!response.ok) throw new Error(`DEX API ${response.status}`);
-  const data=await response.json();
-  const pairs=(Array.isArray(data)?data:[])
-    .filter(pair=>String(pair?.chainId||'').toLowerCase()==='solana' && pair?.pairAddress)
-    .sort((a,b)=>(Number(b?.liquidity?.usd)||0)-(Number(a?.liquidity?.usd)||0)
-      || (Number(b?.volume?.h24)||0)-(Number(a?.volume?.h24)||0));
-  return pairs[0] || null;
-}
-
 function updateDexPanelProviderButtons(){
   document.querySelectorAll('[data-dex-provider]').forEach(button=>{
     const active=button.dataset.dexProvider===dexPanelProvider;
@@ -3514,11 +3753,21 @@ function updateDexPanelProviderButtons(){
 
 function clearDexPanel(){
   dexPanelGeneration++;
+  dexPanelChartGeneration++;
+  dexPanelSelectedPair=null;
   const host=$('#dexPanelChart');
   if (host){
     host.removeAttribute('aria-busy');
     host.replaceChildren();
   }
+  const list=$('#dexPanelList');
+  if (list) list.replaceChildren();
+  const count=$('#dexPanelSummaryCount');
+  if (count) count.textContent='—';
+  const title=$('#dexPanelSelectedTitle');
+  const meta=$('#dexPanelSelectedMeta');
+  if (title) title.textContent='SELECT A PAIR';
+  if (meta) meta.textContent='Click a Solana pair to open its chart';
   const external=$('#dexPanelExternal');
   if (external){
     external.hidden=true;
@@ -3526,32 +3775,24 @@ function clearDexPanel(){
   }
 }
 
-async function renderDexPanel(){
-  const panel=$('#panel-dexscreener');
+function renderDexPanelChart(pair){
   const host=$('#dexPanelChart');
-  if (!panel || panel.hidden || panelVisibility['panel-dexscreener']!==true || !host) return;
-  clearDexPanel();
-  updateDexPanelProviderButtons();
-  const generation=dexPanelGeneration;
-  const input=$('#dexPanelAddress');
-  const saved=cacheGet(DEX_PANEL_ADDRESS_KEY);
-  const address=normalizeSolanaChartAddress(input?.value || saved || '');
-  if (!address){
-    host.append(dexPanelState('SOLANA TOKEN OR PAIR ADDRESS'));
+  if (!host) return;
+  dexPanelChartGeneration++;
+  const generation=dexPanelChartGeneration;
+  host.removeAttribute('aria-busy');
+  host.replaceChildren();
+  const external=$('#dexPanelExternal');
+  if (!pair){
+    if (external){ external.hidden=true; external.removeAttribute('href'); }
+    host.append(dexPanelState('SELECT A PAIR TO VIEW THE CHART'));
     return;
   }
-  if (input) input.value=address;
-  cacheSet(DEX_PANEL_ADDRESS_KEY,address);
-  host.setAttribute('aria-busy','true');
-  host.append(dexPanelState('RESOLVING SOLANA POOL…'));
-  let pair=null;
-  try { pair=await resolveDexSolanaPair(address); } catch(e){ console.warn('DEX pair lookup failed',e); }
-  if (generation!==dexPanelGeneration) return;
-  const pairAddress=pair?.pairAddress || null;
-  const dexAddress=pairAddress || address;
+  const pairAddress=pair?.pairAddress||null;
+  const address=pair?.baseToken?.address||pairAddress;
+  const dexAddress=pairAddress||address;
   const dexUrl=dexScreenerChartUrl(dexAddress);
   const geckoUrl=pairAddress ? geckoTerminalChartUrl(pairAddress) : '';
-  const external=$('#dexPanelExternal');
   const externalUrl=dexPanelProvider==='gecko' ? geckoTerminalOpenUrl(address,pairAddress) : dexScreenerOpenUrl(dexAddress);
   if (external){
     external.href=externalUrl;
@@ -3559,32 +3800,61 @@ async function renderDexPanel(){
     external.hidden=false;
   }
   if (dexPanelProvider==='gecko' && !geckoUrl){
-    host.removeAttribute('aria-busy');
-    host.replaceChildren(dexPanelState('GECKOTERMINAL POOL NOT FOUND · TRY DEXSCREENER'));
+    host.append(dexPanelState('GECKOTERMINAL POOL NOT FOUND · TRY DEXSCREENER'));
     return;
   }
+  host.setAttribute('aria-busy','true');
   const frame=document.createElement('iframe');
-  frame.title=`${dexPanelProvider==='gecko'?'GeckoTerminal':'DEX Screener'} chart`;
-  frame.loading='eager';
+  frame.title=`${dexPanelProvider==='gecko'?'GeckoTerminal':'DEX Screener'} chart for ${dexPanelPairLabel(pair)}`;
+  frame.loading='lazy';
   frame.allow='clipboard-write';
   frame.allowFullscreen=true;
   frame.referrerPolicy='no-referrer-when-downgrade';
   frame.src=dexPanelProvider==='gecko' ? geckoUrl : dexUrl;
   frame.addEventListener('load',()=>{
-    if (generation===dexPanelGeneration) host.removeAttribute('aria-busy');
+    if (generation===dexPanelChartGeneration) host.removeAttribute('aria-busy');
   },{once:true});
   frame.addEventListener('error',()=>{
-    if (generation!==dexPanelGeneration) return;
+    if (generation!==dexPanelChartGeneration) return;
     if (dexPanelProvider==='dex' && geckoUrl){
       dexPanelProvider='gecko';
       cacheSet(DEX_PANEL_PROVIDER_KEY,dexPanelProvider);
-      renderDexPanel();
+      renderDexPanelChart(pair);
       return;
     }
     host.removeAttribute('aria-busy');
     host.replaceChildren(dexPanelState('CHART COULD NOT LOAD · USE OPEN LINK'));
   },{once:true});
-  host.replaceChildren(frame);
+  host.append(frame);
+}
+
+async function renderDexPanel(force=false){
+  const panel=$('#panel-dexscreener');
+  const list=$('#dexPanelList');
+  if (!panel || panel.hidden || panelVisibility['panel-dexscreener']!==true || !list) return;
+  const generation=++dexPanelGeneration;
+  updateDexPanelProviderButtons();
+  const input=$('#dexPanelAddress');
+  const query=String(input?.value || cacheGet(DEX_PANEL_QUERY_KEY) || '').trim();
+  if (input) input.value=query;
+  const summaryLabel=$('#dexPanelSummaryLabel');
+  if (summaryLabel) summaryLabel.textContent=query ? 'SEARCH RESULTS' : 'TOP SOLANA PAIRS';
+  renderDexPanelList([],query?'SEARCHING SOLANA PAIRS…':'LOADING TOP SOLANA PAIRS…');
+  try {
+    const pairs=await dexPanelFetchPairs(query,force);
+    if (generation!==dexPanelGeneration) return;
+    dexPanelPairs=pairs;
+    const savedAddress=String(cacheGet(DEX_PANEL_ADDRESS_KEY)||'');
+    const selected=pairs.find(pair=>dexPanelPairKey(pair)===savedAddress || pair?.baseToken?.address===savedAddress) || null;
+    renderDexPanelList(pairs);
+    renderDexPanelSelection(selected);
+  } catch(error){
+    console.warn('DEX pair list failed',error);
+    if (generation!==dexPanelGeneration) return;
+    dexPanelPairs=[];
+    renderDexPanelList([],query?'SEARCH FAILED · TRY AGAIN':'PAIR LIST UNAVAILABLE');
+    renderDexPanelSelection(null);
+  }
 }
 
 function renderAssetChart(asset){
@@ -4668,13 +4938,22 @@ tradingViewPanelForm?.addEventListener('submit', event => {
 });
 const dexPanelForm=$('#dexPanelForm');
 const dexPanelInput=$('#dexPanelAddress');
-const initialDexAddress=normalizeSolanaChartAddress(cacheGet(DEX_PANEL_ADDRESS_KEY) || '');
-if (dexPanelInput && initialDexAddress) dexPanelInput.value=initialDexAddress;
+const dexPanelList=$('#dexPanelList');
+const initialDexQuery=String(cacheGet(DEX_PANEL_QUERY_KEY) || cacheGet(DEX_PANEL_ADDRESS_KEY) || '').trim();
+if (dexPanelInput) dexPanelInput.value=initialDexQuery;
 updateDexPanelProviderButtons();
 dexPanelForm?.addEventListener('submit', event => {
   event.preventDefault();
-  renderDexPanel();
+  const query=String(dexPanelInput?.value || '').trim();
+  cacheSet(DEX_PANEL_QUERY_KEY,query);
+  renderDexPanel(true);
 });
+ dexPanelList?.addEventListener('click', event => {
+  const row=event.target.closest?.('[data-dex-pair]');
+  if (!row) return;
+  const pair=dexPanelPairs.find(item=>dexPanelPairKey(item)===row.dataset.dexPair);
+  if (pair) renderDexPanelSelection(pair);
+ });
 document.querySelectorAll('[data-dex-provider]').forEach(button=>{
   button.addEventListener('click',()=>{
     const provider=button.dataset.dexProvider;
@@ -4682,7 +4961,7 @@ document.querySelectorAll('[data-dex-provider]').forEach(button=>{
     dexPanelProvider=provider;
     cacheSet(DEX_PANEL_PROVIDER_KEY,dexPanelProvider);
     updateDexPanelProviderButtons();
-    renderDexPanel();
+    renderDexPanelChart(dexPanelSelectedPair);
   });
 });
 setupIndependentPanelFrames();
