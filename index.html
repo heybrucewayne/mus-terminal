@@ -658,16 +658,20 @@
     background:rgba(4,9,14,.18);
   }
   .tradingview-panel-chart .tradingview-widget-container { width:100%; height:100%; }
-  .tradingview-panel-chart .tradingview-widget-container__widget { width:100%; height:calc(100% - 20px); }
+  .tradingview-panel-chart .tradingview-widget-container__widget { width:100%; height:calc(100% - 16px); }
   .tradingview-panel-chart .tradingview-widget-copyright {
-    height:20px;
+    height:16px;
     display:flex;
     align-items:center;
-    justify-content:center;
-    color:var(--muted);
+    justify-content:flex-end;
+    padding:0 8px;
+    box-sizing:border-box;
+    color:rgba(213,226,232,.42);
+    background:transparent;
     font:500 8px 'JetBrains Mono',monospace;
+    opacity:.72;
   }
-  .tradingview-panel-chart .tradingview-widget-copyright a { color:#6bdcff; text-decoration:none; }
+  .tradingview-panel-chart .tradingview-widget-copyright a { color:rgba(132,211,235,.58); text-decoration:none; }
 
   /* ===== SOL MEME TRENCHES ===== */
   #panel-trenches .panel-body {
@@ -836,16 +840,20 @@
     width:100%;
     height:100%;
   }
-  .asset-menu-chart .tradingview-widget-container__widget { width:100%; height:calc(100% - 20px); }
+  .asset-menu-chart .tradingview-widget-container__widget { width:100%; height:calc(100% - 16px); }
   .asset-menu-chart .tradingview-widget-copyright {
-    height:20px;
+    height:16px;
     display:flex;
     align-items:center;
-    justify-content:center;
-    color:var(--muted);
+    justify-content:flex-end;
+    padding:0 8px;
+    box-sizing:border-box;
+    color:rgba(213,226,232,.42);
+    background:transparent;
     font:500 8px 'JetBrains Mono',monospace;
+    opacity:.72;
   }
-  .asset-menu-chart .tradingview-widget-copyright a { color:#6bdcff; text-decoration:none; }
+  .asset-menu-chart .tradingview-widget-copyright a { color:rgba(132,211,235,.58); text-decoration:none; }
   .asset-chart-state {
     position:absolute;
     inset:0;
@@ -1412,11 +1420,19 @@ function setupPanelResizers(){
 
   function bounds(rect){
     const compact=rect.width<=1380;
+    const minFrameWidth=280;
+    const minFrameHeight=190;
+    const preferredLeft=compact?320:340;
+    const preferredRight=compact?500:360;
+    const minLeft=Math.min(preferredLeft,Math.max(minFrameWidth,rect.width-GAP-minFrameWidth));
+    const minRight=Math.min(preferredRight,Math.max(minFrameWidth,rect.width-GAP-minLeft));
+    const minTop=Math.min(220,Math.max(minFrameHeight,rect.height-GAP-minFrameHeight));
+    const minBottom=Math.min(220,Math.max(minFrameHeight,rect.height-GAP-minTop));
     return {
-      minLeft:compact?320:340,
-      minRight:compact?500:360,
-      minTop:220,
-      minBottom:220
+      minLeft,
+      minRight,
+      minTop,
+      minBottom
     };
   }
   function applyLayout(){
@@ -1550,10 +1566,12 @@ function panelFrameSignature(visible){
   return visible.map(panel => panel.id).join('|');
 }
 
-function clampPanelFrame(frame, fallback={x:0,y:0,w:1,h:1}){
+function clampPanelFrame(frame, fallback={x:0,y:0,w:1,h:1}, minimum={w:.18,h:.18}){
   const number=(value,backup)=>Number.isFinite(Number(value)) ? Number(value) : backup;
-  const w=Math.max(.18,Math.min(1,number(frame?.w,fallback.w)));
-  const h=Math.max(.18,Math.min(1,number(frame?.h,fallback.h)));
+  const minW=Math.max(.1,Math.min(.8,number(minimum?.w,.18)));
+  const minH=Math.max(.1,Math.min(.8,number(minimum?.h,.18)));
+  const w=Math.max(minW,Math.min(1,number(frame?.w,fallback.w)));
+  const h=Math.max(minH,Math.min(1,number(frame?.h,fallback.h)));
   return {
     x:Math.max(0,Math.min(1-w,number(frame?.x,fallback.x))),
     y:Math.max(0,Math.min(1-h,number(frame?.y,fallback.y))),
@@ -1633,18 +1651,27 @@ function applyPanelFrames(){
   }
   grid.classList.add('panel-freeform');
   panelFrameApplying=true;
+  const minFrameW=Math.min(.46,280/rect.width);
+  const minFrameH=Math.min(.46,190/rect.height);
+  let changed=false;
   PANEL_DEFS.forEach(panel=>{
     const element=$('#'+panel.id);
     const frame=activePanelFrames[panel.id];
     if (!element || element.hidden || !frame) return;
+    const safeFrame=clampPanelFrame(frame,{x:0,y:0,w:1,h:1},{w:minFrameW,h:minFrameH});
+    if (['x','y','w','h'].some(key=>Math.abs((frame[key]||0)-safeFrame[key])>.001)){
+      activePanelFrames[panel.id]=safeFrame;
+      changed=true;
+    }
     element.style.position='absolute';
-    element.style.left=`${frame.x*100}%`;
-    element.style.top=`${frame.y*100}%`;
-    element.style.width=`${frame.w*100}%`;
-    element.style.height=`${frame.h*100}%`;
+    element.style.left=`${safeFrame.x*100}%`;
+    element.style.top=`${safeFrame.y*100}%`;
+    element.style.width=`${safeFrame.w*100}%`;
+    element.style.height=`${safeFrame.h*100}%`;
     element.style.margin='0';
   });
   panelFrameApplying=false;
+  if (changed) savePanelFrames();
 }
 
 function syncPanelFramesForLayout(visible){
@@ -1711,15 +1738,23 @@ function applyBalancedPanelFrames(columnsRatio,rowsRatio){
   if (!grid || !rect?.width || !rect?.height || !visible.length) return;
   const gapX=Math.min(.08,12/Math.max(rect.width,1));
   const gapY=Math.min(.08,12/Math.max(rect.height,1));
-  const columns=Math.max(.36,Math.min(.72,Number(columnsRatio)||.61));
-  const rows=Math.max(.34,Math.min(.72,Number(rowsRatio)||.54));
+  const minColumnRatio=Math.min(.46,280/rect.width);
+  const maxColumnRatio=Math.max(minColumnRatio,1-gapX-minColumnRatio);
+  const minRowRatio=Math.min(.46,190/rect.height);
+  const maxRowRatio=Math.max(minRowRatio,1-gapY-minRowRatio);
+  const columns=Math.max(minColumnRatio,Math.min(maxColumnRatio,Number(columnsRatio)||.61));
+  const rows=Math.max(minRowRatio,Math.min(maxRowRatio,Number(rowsRatio)||.54));
+  grid.style.setProperty('--bubble-width',`${(columns*rect.width).toFixed(2)}px`);
+  grid.style.setProperty('--prices-height',`${(rows*rect.height).toFixed(2)}px`);
+  $('#resize-columns')?.setAttribute('aria-valuenow',String(Math.round(columns*100)));
+  $('#resize-rows')?.setAttribute('aria-valuenow',String(Math.round(rows*100)));
   const ids=new Set(visible.map(panel=>panel.id));
   const assign=(id,frame)=>{
     if (ids.has(id)) activePanelFrames[id]=clampPanelFrame(frame,activePanelFrames[id] || frame);
   };
-  const rightX=Math.min(.74,columns+gapX);
+  const rightX=columns+gapX;
   const rightW=1-rightX;
-  const lowerY=Math.min(.74,rows+gapY);
+  const lowerY=rows+gapY;
   const lowerH=1-lowerY;
 
   if (ids.has('panel-bubbles') && ids.has('panel-table') && ids.has('panel-trenches') && !ids.has('panel-tradingview')){
