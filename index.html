@@ -474,6 +474,7 @@
     color:var(--text);
     text-shadow:0 1px 3px rgba(0,0,0,.54);
   }
+  .panel[hidden] { display:none !important; visibility:hidden !important; pointer-events:none !important; }
 
   .panel::before {
     z-index: 0;
@@ -536,8 +537,8 @@
      the TradingView panel is enabled. */
   .grid.panel-layout-quad,
   .grid.panel-layout-standard {
-    grid-template-columns:repeat(2,minmax(0,1fr));
-    grid-template-rows:repeat(2,minmax(220px,1fr));
+    grid-template-columns:minmax(340px,var(--bubble-width)) minmax(360px,1fr);
+    grid-template-rows:minmax(220px,var(--prices-height)) minmax(220px,1fr);
   }
   .grid.panel-layout-single {
     grid-template-columns:minmax(0,1fr);
@@ -552,6 +553,17 @@
   .grid.panel-layout-quad > .panel,
   .grid.panel-layout-standard > .panel,
   .grid.panel-layout-single > .panel { grid-column:auto; }
+
+  /* Keep the optional TradingView panel in the lower-right slot when it is
+     used alongside the standard panels, instead of relying on DOM order. */
+  .grid.panel-layout-quad #panel-bubbles { grid-column:1; grid-row:1; }
+  .grid.panel-layout-quad #panel-table { grid-column:2; grid-row:1; }
+  .grid.panel-layout-quad #panel-trenches { grid-column:1; grid-row:2; }
+  .grid.panel-layout-quad #panel-tradingview { grid-column:2; grid-row:2; }
+  .grid.panel-layout-standard.panel-count-3.has-tradingview #panel-tradingview { grid-column:2; grid-row:2; }
+  .grid.panel-layout-standard.panel-count-3.has-tradingview #panel-bubbles { grid-column:1; grid-row:1; }
+  .grid.panel-layout-standard.panel-count-3.has-tradingview #panel-table { grid-column:2; grid-row:1; }
+  .grid.panel-layout-standard.panel-count-3.has-tradingview #panel-trenches { grid-column:1; grid-row:2; }
 
   #panel-tradingview .panel-body {
     display:flex;
@@ -1100,6 +1112,17 @@
     .grid.panel-layout-standard.panel-count-2 { grid-template-rows:repeat(2,auto); }
     .grid.panel-layout-standard.panel-count-3 { grid-template-rows:repeat(3,auto); }
     .grid.panel-layout-single { grid-template-rows:auto; }
+    .grid.panel-layout-quad #panel-bubbles,
+    .grid.panel-layout-quad #panel-table,
+    .grid.panel-layout-quad #panel-trenches,
+    .grid.panel-layout-quad #panel-tradingview,
+    .grid.panel-layout-standard.panel-count-3.has-tradingview #panel-bubbles,
+    .grid.panel-layout-standard.panel-count-3.has-tradingview #panel-table,
+    .grid.panel-layout-standard.panel-count-3.has-tradingview #panel-trenches,
+    .grid.panel-layout-standard.panel-count-3.has-tradingview #panel-tradingview {
+      grid-column:auto;
+      grid-row:auto;
+    }
     .panel {
       min-height:0;
       border-radius:12px;
@@ -1501,13 +1524,28 @@ function updatePanelLayout(){
   grid.classList.remove('panel-count-1','panel-count-2','panel-count-3','panel-count-4');
   grid.classList.add(`panel-count-${visible.length}`);
   PANEL_DEFS.forEach(panel => {
-    const element=$('#'+panel.id);
-    if (element) element.hidden=!panelVisibility[panel.id];
+    grid.classList.toggle(`has-${panel.id.replace(/^panel-/,'')}`,ids.has(panel.id));
   });
-  $('#resize-columns')?.toggleAttribute('hidden',!defaultThree);
-  $('#resize-rows')?.toggleAttribute('hidden',!defaultThree);
-  if (panelVisibility['panel-tradingview']) requestAnimationFrame(()=>renderTradingViewPanel());
-  else clearTradingViewPanel();
+  PANEL_DEFS.forEach(panel => {
+    const element=$('#'+panel.id);
+    if (element){
+      const visible=panelVisibility[panel.id]===true;
+      element.hidden=!visible;
+      element.setAttribute('aria-hidden',visible?'false':'true');
+      if (visible) element.style.removeProperty('display');
+      else element.style.display='none';
+    }
+  });
+  $('#resize-columns')?.toggleAttribute('hidden',visible.length<2);
+  $('#resize-rows')?.toggleAttribute('hidden',visible.length<3);
+  if (tradingViewPanelFrame) cancelAnimationFrame(tradingViewPanelFrame);
+  tradingViewPanelFrame=0;
+  if (panelVisibility['panel-tradingview']===true){
+    tradingViewPanelFrame=requestAnimationFrame(()=>{
+      tradingViewPanelFrame=0;
+      renderTradingViewPanel();
+    });
+  } else clearTradingViewPanel();
 }
 
 function renderPanelManager(){
@@ -2418,6 +2456,7 @@ const saveMarketOrder = () => cacheSet('cc_market_order_v1', marketOrder);
 let activeAssetMenu = null;
 let assetChartGeneration = 0;
 let tradingViewPanelGeneration = 0;
+let tradingViewPanelFrame = 0;
 const TRADINGVIEW_PANEL_SYMBOL_KEY = 'mus_tradingview_panel_symbol_v1';
 
 function customAssetSnapshot(c){
@@ -2588,7 +2627,7 @@ function clearTradingViewPanel(){
 function renderTradingViewPanel(){
   const panel=$('#panel-tradingview');
   const host=$('#tradingviewPanelChart');
-  if (!panel || panel.hidden || !host) return;
+  if (!panel || panel.hidden || panelVisibility['panel-tradingview']!==true || !host) return;
   clearTradingViewPanel();
   const generation=tradingViewPanelGeneration;
   const input=$('#tradingviewPanelSymbol');
