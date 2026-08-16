@@ -309,6 +309,7 @@
     background:transparent;
     color:rgba(238,248,250,.48);
     cursor:grab;
+    touch-action:none;
     opacity:.42;
     transition:opacity .14s,background .14s,border-color .14s;
     transform:translateX(-50%);
@@ -330,6 +331,29 @@
   .panel-drag-handle:focus-visible { outline:2px solid var(--focus); outline-offset:2px; }
   .panel-drag-handle:active { cursor:grabbing; }
   .panel.panel-dragging { z-index:10 !important; }
+  .panel.panel-dragging {
+    opacity:.92;
+    outline:1px solid rgba(120,230,255,.72);
+    outline-offset:3px;
+    box-shadow:0 24px 60px rgba(0,0,0,.48),0 0 0 1px rgba(120,230,255,.24),inset 0 1px 0 rgba(255,255,255,.24) !important;
+    transition:none !important;
+  }
+  .panel.panel-drop-target {
+    outline:2px dashed var(--focus);
+    outline-offset:5px;
+    filter:brightness(1.10) saturate(1.08);
+  }
+  .panel-drop-placeholder {
+    position:absolute;
+    z-index:0;
+    box-sizing:border-box;
+    border:1px dashed rgba(0,255,136,.72);
+    border-radius:16px;
+    background:rgba(0,255,136,.06);
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.08),0 0 24px rgba(0,255,136,.10);
+    pointer-events:none;
+    transition:background .14s,border-color .14s;
+  }
   body.panel-moving { cursor:grabbing; user-select:none; -webkit-user-select:none; }
   body.panel-moving .panel-drag-handle { cursor:grabbing; }
 
@@ -2372,9 +2396,21 @@ function setupPanelDragging(){
   if (!grid || !handles.length) return;
 
   const copyFrames=()=>Object.fromEntries(Object.entries(activePanelFrames).map(([id,frame])=>[id,{...frame}]));
+  const panelAtPoint=(x,y,currentId)=>{
+    const element=document.elementFromPoint(x,y)?.closest?.('.panel');
+    return element && element.id!==currentId && panelVisibility[element.id]===true ? element : null;
+  };
+  const setDropTarget=(state,target)=>{
+    if (state.targetPanel===target) return;
+    state.targetPanel?.classList.remove('panel-drop-target');
+    state.targetPanel=target || null;
+    state.targetPanel?.classList.add('panel-drop-target');
+  };
   const clearMoveStyles=state=>{
     const panel=state?.panel;
     if (!panel) return;
+    state.targetPanel?.classList.remove('panel-drop-target');
+    state.placeholder?.remove();
     panel.classList.remove('panel-dragging');
     panel.style.removeProperty('transform');
     panel.style.removeProperty('pointer-events');
@@ -2387,10 +2423,8 @@ function setupPanelDragging(){
     const visible=visiblePanelDefs();
     let changed=false;
     if (!cancel && matchMedia('(min-width:901px)').matches){
-      const targetElement=document.elementFromPoint(event.clientX,event.clientY)?.closest?.('.panel');
-      const target=targetElement && targetElement.id!==panel.id && panelVisibility[targetElement.id]===true
-        ? targetElement
-        : null;
+      setDropTarget(state,panelAtPoint(event.clientX,event.clientY,panel.id));
+      const target=state.targetPanel;
       if (target && activePanelFrames[target.id]){
         const targetFrame={...activePanelFrames[target.id]};
         activePanelFrames[target.id]={...state.frame};
@@ -2427,6 +2461,7 @@ function setupPanelDragging(){
     state.previewX=clamp(state.frame.x+dx,0,1-state.frame.w);
     state.previewY=clamp(state.frame.y+dy,0,1-state.frame.h);
     state.panel.style.transform=`translate3d(${(state.previewX-state.frame.x)*state.gridRect.width}px,${(state.previewY-state.frame.y)*state.gridRect.height}px,0)`;
+    setDropTarget(state,panelAtPoint(event.clientX,event.clientY,state.panel.id));
   };
   handles.forEach(handle=>{
     handle.addEventListener('pointerdown',event=>{
@@ -2437,6 +2472,14 @@ function setupPanelDragging(){
       if (!panel || panel.hidden || !frame || !gridRect.width || !gridRect.height) return;
       event.preventDefault();
       event.stopPropagation();
+      const placeholder=document.createElement('div');
+      placeholder.className='panel-drop-placeholder';
+      placeholder.setAttribute('aria-hidden','true');
+      placeholder.style.left=`${frame.x*100}%`;
+      placeholder.style.top=`${frame.y*100}%`;
+      placeholder.style.width=`${frame.w*100}%`;
+      placeholder.style.height=`${frame.h*100}%`;
+      grid.appendChild(placeholder);
       panelMoveState={
         panel,
         pointerId:event.pointerId,
@@ -2446,7 +2489,9 @@ function setupPanelDragging(){
         frame:{...frame},
         framesBefore:copyFrames(),
         previewX:frame.x,
-        previewY:frame.y
+        previewY:frame.y,
+        placeholder,
+        targetPanel:null
       };
       panel.classList.add('panel-dragging');
       panel.style.zIndex='10';
@@ -2998,6 +3043,9 @@ function refreshBubbles(){
       price, vol:finiteValue(d.vol), high:finiteValue(d.high), low:finiteValue(d.low), size:Math.abs(pct) });
   });
   customItems.forEach(c => {
+    // Keep economic indicators in the Market table only; they do not belong
+    // in the price-mover bubble map.
+    if (String(c?.sym || '').toUpperCase() === 'USIRYY') return;
     const d = customAssetSnapshot(c);
     if (!d || !isFinite(+d.price)) return;
     const pct = finiteValue(d.chg,0);
