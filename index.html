@@ -199,13 +199,17 @@
     gap: 8px;
     padding: 8px;
     overflow:auto;
+    background:linear-gradient(135deg,rgba(255,255,255,.018),rgba(4,10,14,.035));
   }
   .forecast-asset {
     min-width: 0;
     padding: 7px 9px;
-    border: 1px solid rgba(255,255,255,.12);
+    border: 1px solid rgba(255,255,255,.16);
     border-radius: 10px;
-    background: rgba(255,255,255,.045);
+    background:linear-gradient(145deg,rgba(255,255,255,.085),rgba(255,255,255,.035) 42%,rgba(7,12,18,.16));
+    -webkit-backdrop-filter:blur(9px) saturate(125%);
+    backdrop-filter:blur(9px) saturate(125%);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.13),inset 0 -1px 0 rgba(255,255,255,.035),0 8px 20px rgba(0,0,0,.12);
   }
   .forecast-current,
   .forecast-row {
@@ -1396,7 +1400,13 @@
     box-shadow:0 8px 22px rgba(22,38,48,.18),inset 0 1px 0 rgba(255,255,255,.95);
   }
   html[data-theme="white"] .perf-overlay { background:rgba(230,235,238,.76); backdrop-filter:none; }
-  html[data-theme="white"] .forecast-asset { background:#f7f9fa; border-color:rgba(22,38,48,.14); }
+  html[data-theme="white"] .forecast-asset {
+    background:rgba(255,255,255,.58);
+    border-color:rgba(22,38,48,.14);
+    -webkit-backdrop-filter:blur(8px) saturate(110%);
+    backdrop-filter:blur(8px) saturate(110%);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.88),0 8px 20px rgba(22,38,48,.08);
+  }
   html[data-theme="white"] .forecast-range { color:#24333c; }
 
   /* ===== PHONE LAYOUT ===== */
