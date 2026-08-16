@@ -1559,8 +1559,8 @@
       </div>
     </section>
 
-    <div id="resize-columns-top" class="panel-resizer resizer-columns-top" role="separator" aria-label="Resize top panels independently" aria-orientation="vertical" tabindex="0" hidden></div>
-    <div id="resize-columns-bottom" class="panel-resizer resizer-columns-bottom" role="separator" aria-label="Resize bottom panels independently" aria-orientation="vertical" tabindex="0" hidden></div>
+    <div id="resize-columns-top" class="panel-resizer resizer-columns-top" role="separator" aria-label="Resize top and bottom panel columns together" aria-orientation="vertical" tabindex="0" hidden></div>
+    <div id="resize-columns-bottom" class="panel-resizer resizer-columns-bottom" role="separator" aria-label="Resize top and bottom panel columns together" aria-orientation="vertical" tabindex="0" hidden></div>
     <div id="resize-rows-left" class="panel-resizer resizer-rows-left" role="separator" aria-label="Resize left panels independently" aria-orientation="horizontal" tabindex="0" hidden></div>
     <div id="resize-rows-right" class="panel-resizer resizer-rows-right" role="separator" aria-label="Resize right panels independently" aria-orientation="horizontal" tabindex="0" hidden></div>
 
@@ -1750,7 +1750,18 @@ function setupPanelResizers(){
       ? Math.min(first.y+first.h,second.y+second.h)-Math.max(first.y,second.y)
       : Math.min(first.x+first.w,second.x+second.w)-Math.max(first.x,second.x);
     if (overlap<.08) return null;
-    return {firstId:ids[0],secondId:ids[1],first,second};
+    const visible=visiblePanelDefs();
+    const linkedPairs=axis.startsWith('columns') && visible.length===4
+      ? [[visible[0]?.id,visible[1]?.id],[visible[2]?.id,visible[3]?.id]]
+        .map(([firstId,secondId])=>({
+          firstId,
+          secondId,
+          first:activePanelFrames[firstId],
+          second:activePanelFrames[secondId]
+        }))
+        .filter(pair=>pair.first && pair.second)
+      : null;
+    return {firstId:ids[0],secondId:ids[1],first,second,linkedPairs};
   }
 
   function resizePairAt(axis,point,rect){
@@ -1774,6 +1785,27 @@ function setupPanelResizers(){
         const frame=activePanelFrames[id];
         const nextStart=ratio+gap/2;
         activePanelFrames[id]={...frame,x:nextStart,w:Math.max(.1,(frame.x+frame.w)-nextStart)};
+      });
+      if (panelFramesOverlap(visiblePanelDefs())){
+        activePanelFrames=previousFrames;
+        return false;
+      }
+      applyPanelFrames();
+      return true;
+    }
+    if (horizontal && pair.linkedPairs?.length){
+      const low=Math.max(...pair.linkedPairs.map(linkedPair=>linkedPair.first.x*scale+minSize+6));
+      const high=Math.min(...pair.linkedPairs.map(linkedPair=>(linkedPair.second.x+linkedPair.second.w)*scale-minSize-6));
+      if (low>high) return false;
+      const boundary=clamp(point,low,high);
+      const ratio=boundary/scale;
+      const firstEdge=ratio-gap/2;
+      const secondEdge=ratio+gap/2;
+      pair.linkedPairs.forEach(linkedPair=>{
+        const firstNext={...linkedPair.first,w:Math.max(.1,firstEdge-linkedPair.first.x)};
+        const secondNext={...linkedPair.second,x:secondEdge,w:Math.max(.1,(linkedPair.second.x+linkedPair.second.w)-secondEdge)};
+        activePanelFrames[linkedPair.firstId]=firstNext;
+        activePanelFrames[linkedPair.secondId]=secondNext;
       });
       if (panelFramesOverlap(visiblePanelDefs())){
         activePanelFrames=previousFrames;
