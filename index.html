@@ -2846,23 +2846,14 @@ const bubbles = (function(){
 const CRYPTO_LIST = [
   { base:'BTC',  supply:19.8e6  },
   { base:'ETH',  supply:120.5e6 },
-  { base:'BNB',  supply:142e6   },
   { base:'SOL',  supply:540e6   },
-  { base:'XRP',  supply:60e9    },
-  { base:'DOGE', supply:150e9   },
-  { base:'TRX',  supply:95e9    },
-  { base:'ZEC',  supply:16.5e6  },
-  { base:'LINK', supply:680e6   },
-  { base:'NEAR', supply:1.25e9  },
-  { base:'TAO',  supply:7.5e6   },
-  { base:'SUI',  supply:3.4e9   },
 ];
 // traditional markets via CNBC (mcap = static rank weight, USD)
 const TRADFI = [
+  { key:'OIL',  name:'OIL WTI', sub:'CRUDE · BBL', cls:'COMMODITY', ysym:'CL=F',  mcap:12e12, usd:true  },
+  { key:'GOLD', name:'GOLD',    sub:'XAU · OZ',    cls:'COMMODITY', ysym:'GC=F',  mcap:22e12, usd:true  },
   { key:'SPX',  name:'S&P 500', sub:'',            cls:'INDEX',     ysym:'^GSPC', mcap:50e12, usd:false },
   { key:'NDX',  name:'NASDAQ',  sub:'',            cls:'INDEX',     ysym:'^IXIC', mcap:35e12, usd:false },
-  { key:'GOLD', name:'GOLD',    sub:'XAU · OZ',    cls:'COMMODITY', ysym:'GC=F',  mcap:22e12, usd:true  },
-  { key:'OIL',  name:'OIL WTI', sub:'CRUDE · BBL', cls:'COMMODITY', ysym:'CL=F',  mcap:12e12, usd:true  },
 ];
 
 // Reserve familiar commodity names before crypto lookup. This prevents a
@@ -2905,6 +2896,17 @@ const CUSTOM_ECONOMIC_ALIASES = {
 const CUSTOM_ECONOMIC_INPUTS = {
   USIRYY:'USIRYY', USINFLATION:'USIRYY', USINFLATIONRATE:'USIRYY'
 };
+
+const DEFAULT_CUSTOM_ITEMS = [
+  { ...CUSTOM_TRADFI_ALIASES.SILVER },
+  { ...CUSTOM_PAIR_ALIASES.XAUTRYG },
+  { ...CUSTOM_ECONOMIC_ALIASES.USIRYY },
+  { ...CUSTOM_PAIR_ALIASES.USDTTRY }
+];
+const DEFAULT_MARKET_ORDER = [
+  'OIL', 'GOLD', 'c:SILVER', 'c:XAUTRYG', 'SPX', 'NDX',
+  'c:USIRYY', 'c:USDTTRY', 'BTC', 'ETH', 'SOL'
+];
 
 function customTradFiAlias(rawInput){
   const key=String(rawInput||'').trim().toUpperCase().replace(/[^A-Z0-9ÇĞİÖŞÜ]/g,'');
@@ -2958,13 +2960,14 @@ function normalizeCustomItem(item){
 }
 const normalizedCustomItems = Array.isArray(cachedCustomItems)
   ? cachedCustomItems.map(normalizeCustomItem).filter(Boolean)
-  : [];
+  : DEFAULT_CUSTOM_ITEMS.map(normalizeCustomItem).filter(Boolean);
 let customItems  = normalizedCustomItems;
 let customQuotes = cachedCustomQuotes && typeof cachedCustomQuotes === 'object' ? cachedCustomQuotes : {};
 let customCoinQuotes = cachedCustomCoinQuotes && typeof cachedCustomCoinQuotes === 'object' ? cachedCustomCoinQuotes : {};
 if (Array.isArray(cachedCustomItems) && normalizedCustomItems.length !== cachedCustomItems.length){
   cacheSet('cc_custom', normalizedCustomItems);
 }
+if (!Array.isArray(cachedCustomItems)) cacheSet('cc_custom', normalizedCustomItems);
 
 // Repair SILVER entries saved by older versions that classified it as crypto.
 let repairedLegacySilver=false;
@@ -3016,7 +3019,7 @@ let hiddenAssets = Array.isArray(cachedHiddenAssets)
   : [];
 let marketOrder = Array.isArray(cachedMarketOrder)
   ? [...new Set(cachedMarketOrder.filter(id => typeof id === 'string' && id))]
-  : [];
+  : [...DEFAULT_MARKET_ORDER];
 let prevPrices = {};
 let tableSort  = marketOrder.length ? { key:'manual', dir:1 } : { key:'mcap', dir:-1 };
 let draggedMarketId = null;
