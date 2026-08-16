@@ -1484,6 +1484,98 @@
     background:#191b20;
     border-color:rgba(255,255,255,.26);
   }
+  html[data-theme="black"] input,
+  html[data-theme="black"] select,
+  html[data-theme="black"] #panel-table .px-search input,
+  html[data-theme="black"] .tradingview-panel-form input {
+    color:var(--text-bright);
+    background:#111216 !important;
+    border-color:rgba(255,255,255,.14);
+    -webkit-backdrop-filter:none;
+    backdrop-filter:none;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.05);
+    text-shadow:none;
+  }
+  html[data-theme="black"] input::placeholder,
+  html[data-theme="black"] #panel-table .px-search input::placeholder,
+  html[data-theme="black"] .tradingview-panel-form input::placeholder { color:var(--muted2); }
+  html[data-theme="black"] input:focus,
+  html[data-theme="black"] select:focus,
+  html[data-theme="black"] #panel-table .px-search input:focus,
+  html[data-theme="black"] .tradingview-panel-form input:focus {
+    background:#15171b !important;
+    border-color:rgba(155,220,255,.62);
+    box-shadow:0 0 0 2px rgba(155,220,255,.12);
+  }
+  html[data-theme="black"] .btn,
+  html[data-theme="black"] .tradingview-panel-form button {
+    background:#111216;
+    border-color:rgba(255,255,255,.16);
+    -webkit-backdrop-filter:none;
+    backdrop-filter:none;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.06);
+  }
+  html[data-theme="black"] .btn:hover,
+  html[data-theme="black"] .tradingview-panel-form button:hover {
+    background:#191b20;
+    border-color:rgba(0,255,136,.46);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
+  }
+  html[data-theme="black"] #bubbleTip,
+  html[data-theme="black"] .tradingview-panel-chart,
+  html[data-theme="black"] .asset-menu-chart {
+    background:#050608;
+    -webkit-backdrop-filter:none;
+    backdrop-filter:none;
+  }
+  html[data-theme="black"] .mobile-background-trigger {
+    background:#111216;
+    border-color:rgba(255,255,255,.16);
+    -webkit-backdrop-filter:none;
+    backdrop-filter:none;
+    box-shadow:0 8px 22px rgba(0,0,0,.42),inset 0 1px 0 rgba(255,255,255,.07);
+  }
+  html[data-theme="black"] table.ticker thead th,
+  html[data-theme="black"] table.trenches th {
+    background:#0d0f12 !important;
+    background-image:none !important;
+    -webkit-backdrop-filter:none !important;
+    backdrop-filter:none !important;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.07),inset 0 -1px 0 rgba(255,255,255,.04) !important;
+  }
+  html[data-theme="black"] .trench-head,
+  html[data-theme="black"] .trench-refresh,
+  html[data-theme="black"] .trench-decision-toggle,
+  html[data-theme="black"] .asset-menu-close,
+  html[data-theme="black"] .perf-close {
+    background:#111216;
+    border-color:rgba(255,255,255,.13);
+    box-shadow:none;
+  }
+  html[data-theme="black"] .panel-resizer::before {
+    background:rgba(150,158,168,.42);
+    box-shadow:none;
+  }
+  html[data-theme="black"] .panel-resizer:hover::before,
+  html[data-theme="black"] .panel-resizer:focus-visible::before,
+  html[data-theme="black"] .panel-resizer.active::before {
+    background:rgba(220,228,236,.78);
+    box-shadow:0 0 0 3px rgba(155,220,255,.10);
+  }
+  html[data-theme="black"] .perf-overlay {
+    background:rgba(0,0,0,.84);
+    -webkit-backdrop-filter:none;
+    backdrop-filter:none;
+  }
+  html[data-theme="black"] .perf-card {
+    background:#111216;
+    border-color:rgba(255,255,255,.12);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.06);
+  }
+  html[data-theme="black"] .perf-loading {
+    background:#17191d;
+    animation:none;
+  }
 
   /* ===== PHONE LAYOUT ===== */
   @media (max-width:700px) {
