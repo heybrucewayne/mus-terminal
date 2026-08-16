@@ -182,8 +182,19 @@ function parseDirection(market, threshold, spot) {
   return threshold >= spot ? 'up' : 'down';
 }
 
-function parseLevels(event, spot) {
+function horizonPriceBounds(spot, horizon) {
+  if (!Number.isFinite(spot) || spot <= 0) return null;
+  const factors = {
+    '1D': [0.65, 1.45],
+    '1M': [0.35, 2.75],
+    YE: [0.08, 8]
+  }[horizon] || [0.08, 8];
+  return { min: spot * factors[0], max: spot * factors[1] };
+}
+
+function parseLevels(event, spot, horizon) {
   const markets = Array.isArray(event?.markets) ? event.markets : [];
+  const bounds = horizonPriceBounds(spot, horizon);
   return markets.map(market => {
     const outcomes = jsonValue(market.outcomes);
     const prices = jsonValue(market.outcomePrices);
@@ -191,6 +202,7 @@ function parseLevels(event, spot) {
     const yes = number(prices[yesIndex >= 0 ? yesIndex : 0]);
     const threshold = parseThreshold(market);
     if (yes === null || threshold === null || yes <= 0 || threshold <= 0) return null;
+    if (bounds && (threshold < bounds.min || threshold > bounds.max)) return null;
     return { threshold, yes: clamp(yes, 0, 1), direction: parseDirection(market, threshold, spot) };
   }).filter(Boolean);
 }
@@ -215,18 +227,25 @@ function normalizeLevels(levels) {
 
 function rangeFromLevels(levels, spot, horizon, marketData) {
   const normalized = normalizeLevels(levels);
-  if (!normalized.length) return null;
+  const bounds = horizonPriceBounds(spot, horizon);
+  if (!normalized.length || !bounds) return null;
   const points = normalized.map(level => ({ value: level.threshold, weight: level.probability }));
   const low = weightedQuantile(points, 0.18);
   const high = weightedQuantile(points, 0.82);
   if (!Number.isFinite(low) || !Number.isFinite(high)) return null;
   const volatility = Number.isFinite(marketData?.dailyVolatility) ? marketData.dailyVolatility : 0.025;
-  const padding = spot * (horizon === '1D' ? Math.max(0.004, volatility * 0.35) : horizon === '1M' ? Math.max(0.012, volatility * 1.2) : Math.max(0.025, volatility * 2.8));
+  const paddingRatio = horizon === '1D'
+    ? Math.min(0.12, Math.max(0.004, volatility * 0.35))
+    : horizon === '1M'
+      ? Math.min(0.32, Math.max(0.012, volatility * 1.2))
+      : Math.min(0.90, Math.max(0.025, volatility * 2.8));
+  const padding = spot * paddingRatio;
+  const polyMid = normalized.reduce((sum, level) => sum + level.threshold * level.probability, 0);
   return {
-    low: Math.max(0, Math.min(spot, low) - padding),
-    high: Math.max(spot, high) + padding,
+    low: clamp(Math.min(spot, low) - padding, bounds.min, spot),
+    high: clamp(Math.max(spot, high) + padding, spot, bounds.max),
     normalizedCount: normalized.length,
-    polyMid: normalized.reduce((sum, level) => sum + level.threshold * level.probability, 0),
+    polyMid: clamp(polyMid, bounds.min, bounds.max),
     coverage: 0.64
   };
 }
@@ -440,7 +459,7 @@ function forecastForAsset(symbol, marketData, eventMap, cycle, macro) {
   const asset = ASSETS[symbol];
   const result = { symbol, price: marketData.price, horizons: {} };
   for (const horizon of ['1D', '1M', 'YE']) {
-    const levels = parseLevels(eventMap?.[horizon], marketData.price || 0);
+    const levels = parseLevels(eventMap?.[horizon], marketData.price || 0, horizon);
     const range = rangeFromLevels(levels, marketData.price, horizon, marketData) || fallbackRange(marketData.price, horizon, marketData);
     const polyBias = range?.polyMid && marketData.price ? clamp((range.polyMid - marketData.price) / (marketData.price * 0.16), -1, 1) : 0;
     const cycleWeight = symbol === 'BTC' ? (horizon === 'YE' ? 0.20 : horizon === '1M' ? 0.12 : 0.03) : 0.05;

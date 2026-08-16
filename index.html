@@ -296,6 +296,42 @@
 
   .panel-body { flex: 1 1 auto; min-height: 0; position: relative; }
   .scroll { overflow-y: auto; overflow-x: hidden; height: 100%; }
+  .panel-drag-handle {
+    position:absolute;
+    top:5px;
+    left:50%;
+    z-index:8;
+    width:42px;
+    height:12px;
+    padding:0;
+    border:1px solid transparent;
+    border-radius:99px;
+    background:transparent;
+    color:rgba(238,248,250,.48);
+    cursor:grab;
+    opacity:.42;
+    transition:opacity .14s,background .14s,border-color .14s;
+    transform:translateX(-50%);
+  }
+  .panel-drag-handle::before {
+    content:'•••';
+    display:block;
+    height:10px;
+    font:700 10px/7px 'JetBrains Mono',monospace;
+    letter-spacing:3px;
+    text-align:center;
+  }
+  .panel-drag-handle:hover,
+  .panel-drag-handle:focus-visible {
+    opacity:.95;
+    background:rgba(255,255,255,.08);
+    border-color:rgba(255,255,255,.16);
+  }
+  .panel-drag-handle:focus-visible { outline:2px solid var(--focus); outline-offset:2px; }
+  .panel-drag-handle:active { cursor:grabbing; }
+  .panel.panel-dragging { z-index:10 !important; }
+  body.panel-moving { cursor:grabbing; user-select:none; -webkit-user-select:none; }
+  body.panel-moving .panel-drag-handle { cursor:grabbing; }
 
   /* scrollbars */
   .scroll::-webkit-scrollbar, .panel-body::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -1205,6 +1241,7 @@
       grid-template-rows: minmax(360px, 1fr) minmax(300px, .85fr);
     }
     .panel-resizer { display:none; }
+    .panel-drag-handle { display:none; }
   }
 
   @media (max-width: 700px) {
@@ -1488,6 +1525,7 @@
   <div class="grid">
     <!-- BUBBLES -->
     <section class="panel" id="panel-bubbles" aria-label="Market bubbles">
+      <button class="panel-drag-handle" type="button" data-panel-drag-handle aria-label="Move bubbles panel" title="Drag to move panel"></button>
       <div class="panel-body">
         <canvas id="bubbleCanvas"></canvas>
       </div>
@@ -1495,6 +1533,7 @@
 
     <!-- PRICE TABLE -->
     <section class="panel" id="panel-table" aria-label="Market prices">
+      <button class="panel-drag-handle" type="button" data-panel-drag-handle aria-label="Move market panel" title="Drag to move panel"></button>
       <div class="panel-body">
         <div id="px-msg" class="px-msg"></div>
         <div class="px-scroll scroll">
@@ -1523,6 +1562,7 @@
     </section>
 
     <section class="panel" id="panel-trenches" aria-label="SOL Meme Trenches">
+      <button class="panel-drag-handle" type="button" data-panel-drag-handle aria-label="Move SOL Meme Trenches panel" title="Drag to move panel"></button>
       <div class="panel-body">
         <div class="trench-head">
           <div class="trench-title">SOL MEME TRENCHES</div>
@@ -1536,6 +1576,7 @@
     </section>
 
     <section class="panel" id="panel-forecast" aria-label="Crypto Forecast">
+      <button class="panel-drag-handle" type="button" data-panel-drag-handle aria-label="Move Crypto Forecast panel" title="Drag to move panel"></button>
       <div class="panel-body">
         <div class="forecast-panel-head">
           <div class="forecast-panel-title">CRYPTO FORECAST</div>
@@ -1547,6 +1588,7 @@
     </section>
 
     <section class="panel" id="panel-tradingview" aria-label="TradingView chart" hidden>
+      <button class="panel-drag-handle" type="button" data-panel-drag-handle aria-label="Move TradingView panel" title="Drag to move panel"></button>
       <div class="panel-body">
         <div class="tradingview-panel-head">
           <div class="tradingview-panel-title">TRADINGVIEW</div>
@@ -1959,6 +2001,7 @@ let activePanelFrames = {};
 let panelFrameApplying = false;
 let panelFrameObserver = null;
 let panelFrameResizeFrame = 0;
+let panelMoveState = null;
 
 function panelFrameSignature(visible){
   return visible.map(panel => panel.id).join('|');
@@ -2282,7 +2325,7 @@ function setupIndependentPanelFrames(){
   if (!grid) return;
   if (typeof ResizeObserver==='function'){
     panelFrameObserver=new ResizeObserver(entries=>{
-      if (panelFrameApplying || !activePanelFrameSignature || !matchMedia('(min-width:901px)').matches || !grid.classList.contains('panel-freeform')) return;
+      if (panelFrameApplying || panelMoveState || !activePanelFrameSignature || !matchMedia('(min-width:901px)').matches || !grid.classList.contains('panel-freeform')) return;
       const gridRect=grid.getBoundingClientRect();
       if (!gridRect.width || !gridRect.height) return;
       let changed=false;
@@ -2320,6 +2363,100 @@ function setupIndependentPanelFrames(){
       panelFrameResizeFrame=0;
       applyPanelFrames();
     });
+  });
+}
+
+function setupPanelDragging(){
+  const grid=$('.grid');
+  const handles=[...document.querySelectorAll('[data-panel-drag-handle]')];
+  if (!grid || !handles.length) return;
+
+  const copyFrames=()=>Object.fromEntries(Object.entries(activePanelFrames).map(([id,frame])=>[id,{...frame}]));
+  const clearMoveStyles=state=>{
+    const panel=state?.panel;
+    if (!panel) return;
+    panel.classList.remove('panel-dragging');
+    panel.style.removeProperty('transform');
+    panel.style.removeProperty('pointer-events');
+    panel.style.removeProperty('z-index');
+  };
+  const finishMove=(event,cancel=false)=>{
+    const state=panelMoveState;
+    if (!state || (event?.pointerId!=null && event.pointerId!==state.pointerId)) return;
+    const panel=state.panel;
+    const visible=visiblePanelDefs();
+    let changed=false;
+    if (!cancel && matchMedia('(min-width:901px)').matches){
+      const targetElement=document.elementFromPoint(event.clientX,event.clientY)?.closest?.('.panel');
+      const target=targetElement && targetElement.id!==panel.id && panelVisibility[targetElement.id]===true
+        ? targetElement
+        : null;
+      if (target && activePanelFrames[target.id]){
+        const targetFrame={...activePanelFrames[target.id]};
+        activePanelFrames[target.id]={...state.frame};
+        activePanelFrames[panel.id]=targetFrame;
+        changed=true;
+      } else {
+        activePanelFrames[panel.id]={
+          ...state.frame,
+          x:state.previewX,
+          y:state.previewY
+        };
+        changed=Math.abs(state.previewX-state.frame.x)>.001 || Math.abs(state.previewY-state.frame.y)>.001;
+      }
+      if (panelFramesOverlap(visible)){
+        activePanelFrames=state.framesBefore;
+        changed=false;
+      }
+    }
+    clearMoveStyles(state);
+    panelMoveState=null;
+    document.body.classList.remove('panel-moving');
+    if (changed){
+      savePanelFrames();
+      applyPanelFrames();
+    } else if (!cancel){
+      applyPanelFrames();
+    }
+  };
+  const move=(event)=>{
+    const state=panelMoveState;
+    if (!state || event.pointerId!==state.pointerId) return;
+    const dx=(event.clientX-state.startX)/state.gridRect.width;
+    const dy=(event.clientY-state.startY)/state.gridRect.height;
+    state.previewX=clamp(state.frame.x+dx,0,1-state.frame.w);
+    state.previewY=clamp(state.frame.y+dy,0,1-state.frame.h);
+    state.panel.style.transform=`translate3d(${(state.previewX-state.frame.x)*state.gridRect.width}px,${(state.previewY-state.frame.y)*state.gridRect.height}px,0)`;
+  };
+  handles.forEach(handle=>{
+    handle.addEventListener('pointerdown',event=>{
+      if (panelMoveState || !matchMedia('(min-width:901px)').matches || event.button!==0 || !grid.classList.contains('panel-freeform')) return;
+      const panel=handle.closest('.panel');
+      const frame=panel && activePanelFrames[panel.id];
+      const gridRect=grid.getBoundingClientRect();
+      if (!panel || panel.hidden || !frame || !gridRect.width || !gridRect.height) return;
+      event.preventDefault();
+      event.stopPropagation();
+      panelMoveState={
+        panel,
+        pointerId:event.pointerId,
+        startX:event.clientX,
+        startY:event.clientY,
+        gridRect,
+        frame:{...frame},
+        framesBefore:copyFrames(),
+        previewX:frame.x,
+        previewY:frame.y
+      };
+      panel.classList.add('panel-dragging');
+      panel.style.zIndex='10';
+      panel.style.pointerEvents='none';
+      handle.setPointerCapture?.(event.pointerId);
+      document.body.classList.add('panel-moving');
+    });
+    handle.addEventListener('pointermove',move);
+    handle.addEventListener('pointerup',finishMove);
+    handle.addEventListener('pointercancel',event=>finishMove(event,true));
   });
 }
 
@@ -2758,7 +2895,7 @@ function renderAll(){
    normalized ranges and direction markers so it stays cheap to repaint.
    ============================================================ */
 const FORECAST_API = `${APP_API_ORIGIN}/api/forecast`;
-const FORECAST_CACHE_KEY = 'cc_forecast_v1';
+const FORECAST_CACHE_KEY = 'cc_forecast_v2';
 const FORECAST_REFRESH_MS = 60 * 60 * 1000;
 let forecastInFlight = false;
 
@@ -4788,6 +4925,7 @@ tradingViewPanelForm?.addEventListener('submit', event => {
   renderTradingViewPanel();
 });
 setupIndependentPanelFrames();
+setupPanelDragging();
 renderPanelManager();
 updatePanelLayout();
 setupPanelResizers();
