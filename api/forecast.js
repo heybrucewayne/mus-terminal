@@ -186,7 +186,7 @@ function horizonPriceBounds(spot, horizon) {
   if (!Number.isFinite(spot) || spot <= 0) return null;
   const factors = {
     '1D': [0.65, 1.45],
-    '1M': [0.35, 2.75],
+    '1M': [0.70, 1.35],
     YE: [0.08, 8]
   }[horizon] || [0.08, 8];
   return { min: spot * factors[0], max: spot * factors[1] };
@@ -237,7 +237,7 @@ function rangeFromLevels(levels, spot, horizon, marketData) {
   const paddingRatio = horizon === '1D'
     ? Math.min(0.12, Math.max(0.004, volatility * 0.35))
     : horizon === '1M'
-      ? Math.min(0.32, Math.max(0.012, volatility * 1.2))
+      ? Math.min(0.18, Math.max(0.012, volatility * 1.2))
       : Math.min(0.90, Math.max(0.025, volatility * 2.8));
   const padding = spot * paddingRatio;
   const polyMid = normalized.reduce((sum, level) => sum + level.threshold * level.probability, 0);
@@ -253,8 +253,8 @@ function rangeFromLevels(levels, spot, horizon, marketData) {
 function fallbackRange(spot, horizon, marketData) {
   const volatility = Number.isFinite(marketData?.dailyVolatility) ? marketData.dailyVolatility : 0.035;
   if (!Number.isFinite(spot) || spot <= 0) return null;
-  const factor = horizon === '1D' ? 2 : horizon === '1M' ? Math.sqrt(21) * 2 : Math.sqrt(120) * 2;
-  const band = clamp(volatility * factor, horizon === '1D' ? 0.02 : horizon === '1M' ? 0.08 : 0.18, horizon === '1D' ? 0.12 : horizon === '1M' ? 0.45 : 1.5);
+  const factor = horizon === '1D' ? 2 : horizon === '1M' ? Math.sqrt(21) * 1.5 : Math.sqrt(120) * 2;
+  const band = clamp(volatility * factor, horizon === '1D' ? 0.02 : horizon === '1M' ? 0.08 : 0.18, horizon === '1D' ? 0.12 : horizon === '1M' ? 0.30 : 1.5);
   return { low: Math.max(0, spot * (1 - band)), high: spot * (1 + band), normalizedCount: 0, polyMid: null, coverage: null };
 }
 
