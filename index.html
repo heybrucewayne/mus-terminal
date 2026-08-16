@@ -184,6 +184,75 @@
     padding: 12px;
     gap: 12px;
   }
+
+  /* Forecast panel */
+  #panel-forecast .panel-body {
+    display:flex;
+    flex-direction:column;
+    min-height:0;
+  }
+  .forecast-panel-head {
+    display:flex;
+    align-items:center;
+    min-height:38px;
+    padding:7px 10px;
+    border-bottom:1px solid rgba(255,255,255,.12);
+  }
+  .forecast-panel-title {
+    color: var(--text-bright);
+    font: 700 9px 'Space Grotesk', sans-serif;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+  }
+  .forecast-grid {
+    flex:1 1 auto;
+    min-height:0;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    padding: 8px;
+    overflow:auto;
+  }
+  .forecast-asset {
+    min-width: 0;
+    padding: 7px 9px;
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 10px;
+    background: rgba(255,255,255,.045);
+  }
+  .forecast-current,
+  .forecast-row {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr);
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+  .forecast-current {
+    grid-template-columns: 38px minmax(0, 1fr);
+    color: var(--text-bright);
+    font-size: 11px;
+    font-weight: 750;
+    margin-bottom: 5px;
+  }
+  .forecast-current span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .forecast-row {
+    grid-template-columns: 26px 18px minmax(0, 1fr);
+    min-height: 18px;
+    color: var(--muted);
+    font-size: 9.5px;
+    cursor: help;
+  }
+  .forecast-row:hover { color: var(--text-bright); }
+  .forecast-period { color: var(--muted2); }
+  .forecast-direction { font-size: 12px; line-height: 1; }
+  .forecast-direction.bullish { color: var(--green); }
+  .forecast-direction.bearish { color: var(--red); }
+  .forecast-direction.neutral { color: var(--yellow); }
+  .forecast-range { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+  .forecast-state { color: var(--muted2); font: 500 10px 'JetBrains Mono', monospace; }
   ::selection { background: rgba(0,255,136,0.25); }
 
   /* ===== GRID ===== */
@@ -612,6 +681,7 @@
   .grid.panel-layout-quad #panel-bubbles { grid-column:1; grid-row:1; }
   .grid.panel-layout-quad #panel-table { grid-column:2; grid-row:1; }
   .grid.panel-layout-quad #panel-trenches { grid-column:1; grid-row:2; }
+  .grid.panel-layout-quad #panel-forecast,
   .grid.panel-layout-quad #panel-tradingview { grid-column:2; grid-row:2; }
   .grid.panel-layout-standard.panel-count-3.has-tradingview #panel-tradingview { grid-column:2; grid-row:2; }
   .grid.panel-layout-standard.panel-count-3.has-tradingview #panel-bubbles { grid-column:1; grid-row:1; }
@@ -622,6 +692,9 @@
     display:flex;
     flex-direction:column;
     min-height:0;
+    background:linear-gradient(135deg,rgba(255,255,255,.018),rgba(4,10,14,.035));
+  }
+  #panel-forecast .panel-body {
     background:linear-gradient(135deg,rgba(255,255,255,.018),rgba(4,10,14,.035));
   }
   .tradingview-panel-head {
@@ -1206,7 +1279,8 @@
   html[data-theme="white"] #panel-bubbles .panel-body,
   html[data-theme="white"] #panel-table .panel-body,
   html[data-theme="white"] #panel-trenches .panel-body,
-  html[data-theme="white"] #panel-tradingview .panel-body {
+  html[data-theme="white"] #panel-tradingview .panel-body,
+  html[data-theme="white"] #panel-forecast .panel-body {
     background:transparent !important;
   }
   html[data-theme="white"] .asset-menu,
@@ -1270,6 +1344,9 @@
     box-shadow:0 8px 22px rgba(22,38,48,.18),inset 0 1px 0 rgba(255,255,255,.95);
   }
   html[data-theme="white"] .perf-overlay { background:rgba(230,235,238,.76); backdrop-filter:none; }
+  html[data-theme="white"] .forecast-asset { background:#f7f9fa; border-color:rgba(22,38,48,.14); }
+  html[data-theme="white"] .forecast-range { color:#24333c; }
+  html[data-theme="white"] .forecast-panel-head { border-color:rgba(22,38,48,.14); }
 
   /* ===== PHONE LAYOUT ===== */
   @media (max-width:700px) {
@@ -1286,6 +1363,10 @@
       padding:8px;
       gap:8px;
     }
+    #panel-forecast { min-height:250px; height:250px; }
+    .forecast-grid { grid-template-columns:1fr; gap:6px; }
+    .forecast-asset { padding:6px 8px; }
+    .forecast-current { margin-bottom:3px; }
     .grid {
       display:grid;
       height:auto;
@@ -1306,6 +1387,7 @@
     .grid.panel-layout-quad #panel-bubbles,
     .grid.panel-layout-quad #panel-table,
     .grid.panel-layout-quad #panel-trenches,
+    .grid.panel-layout-quad #panel-forecast,
     .grid.panel-layout-quad #panel-tradingview,
     .grid.panel-layout-standard.panel-count-3.has-tradingview #panel-bubbles,
     .grid.panel-layout-standard.panel-count-3.has-tradingview #panel-table,
@@ -1320,6 +1402,7 @@
     }
     #panel-bubbles { height:300px; }
     #panel-table, #panel-trenches { min-height:0; height:auto; }
+    #panel-forecast { min-height:250px; height:250px; }
     #panel-table .panel-body,
     #panel-trenches .panel-body {
       min-height:0;
@@ -1448,6 +1531,17 @@
         </div>
         <div id="trench-scroll" class="trench-scroll scroll">
           <div id="trench-content" class="trench-state">Preparing scan…</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-forecast" aria-label="Crypto Forecast">
+      <div class="panel-body">
+        <div class="forecast-panel-head">
+          <div class="forecast-panel-title">CRYPTO FORECAST</div>
+        </div>
+        <div id="forecastGrid" class="forecast-grid" aria-live="polite">
+          <div class="forecast-state">—</div>
         </div>
       </div>
     </section>
@@ -1634,9 +1728,15 @@ function setupPanelResizers(){
     }
     const pairs={
       'columns-top':['panel-bubbles','panel-table'],
-      'columns-bottom':['panel-trenches','panel-tradingview'],
-      'rows-left':['panel-bubbles','panel-trenches'],
-      'rows-right':isDefaultThreePanelLayout()
+      'columns-bottom':visiblePanelDefs().length===4
+        ? visiblePanelDefs().slice(2,4).map(panel=>panel.id)
+        : ['panel-trenches','panel-tradingview'],
+      'rows-left':visiblePanelDefs().length===4
+        ? [visiblePanelDefs()[0]?.id,visiblePanelDefs()[2]?.id]
+        : ['panel-bubbles','panel-trenches'],
+      'rows-right':visiblePanelDefs().length===4
+        ? [visiblePanelDefs()[1]?.id,visiblePanelDefs()[3]?.id]
+        : isDefaultThreePanelLayout()
         ? ['panel-table',defaultThreeLowerPanelId()]
         : ['panel-table','panel-tradingview']
     };
@@ -1786,10 +1886,12 @@ function setupPanelResizers(){
    PANEL VISIBILITY + LAYOUT
    ============================================================ */
 const PANEL_VISIBILITY_KEY = 'mus_panel_visibility_v1';
+const MAX_VISIBLE_PANELS = 4;
 const PANEL_DEFS = [
   { id:'panel-bubbles', label:'BUBBLES', defaultVisible:true },
   { id:'panel-table', label:'MARKET', defaultVisible:true },
   { id:'panel-trenches', label:'SOL MEME TRENCHES', defaultVisible:true },
+  { id:'panel-forecast', label:'CRYPTO FORECAST', defaultVisible:true },
   { id:'panel-tradingview', label:'TRADINGVIEW', defaultVisible:false }
 ];
 const storedPanelVisibility = cacheGet(PANEL_VISIBILITY_KEY);
@@ -1797,6 +1899,13 @@ let panelVisibility = Object.fromEntries(PANEL_DEFS.map(panel => [
   panel.id,
   typeof storedPanelVisibility?.[panel.id] === 'boolean' ? storedPanelVisibility[panel.id] : panel.defaultVisible
 ]));
+if (Object.values(panelVisibility).filter(Boolean).length>MAX_VISIBLE_PANELS){
+  [...PANEL_DEFS].reverse().forEach(panel=>{
+    if (Object.values(panelVisibility).filter(Boolean).length<=MAX_VISIBLE_PANELS) return;
+    if (panel.id==='panel-bubbles' || panel.id==='panel-table' || panel.id==='panel-trenches') return;
+    panelVisibility[panel.id]=false;
+  });
+}
 cacheSet(PANEL_VISIBILITY_KEY,panelVisibility);
 
 const PANEL_FRAMES_KEY = 'mus_panel_frames_v1';
@@ -1987,11 +2096,18 @@ function defaultThreeLowerPanelId(){
 }
 
 function panelFramePairForResize(axis){
+  const visible=visiblePanelDefs();
   const pairs={
     'columns-top':['panel-bubbles','panel-table'],
-    'columns-bottom':['panel-trenches','panel-tradingview'],
-    'rows-left':['panel-bubbles','panel-trenches'],
-    'rows-right':isDefaultThreePanelLayout()
+    'columns-bottom':visible.length===4
+      ? visible.slice(2,4).map(panel=>panel.id)
+      : ['panel-trenches','panel-tradingview'],
+    'rows-left':visible.length===4
+      ? [visible[0]?.id,visible[2]?.id]
+      : ['panel-bubbles','panel-trenches'],
+    'rows-right':visible.length===4
+      ? [visible[1]?.id,visible[3]?.id]
+      : isDefaultThreePanelLayout()
       ? ['panel-table',defaultThreeLowerPanelId()]
       : ['panel-table','panel-tradingview']
   };
@@ -2300,6 +2416,7 @@ function togglePanel(panelId){
   if (!Object.prototype.hasOwnProperty.call(panelVisibility,panelId)) return;
   const willShow=!panelVisibility[panelId];
   if (!willShow && visiblePanelDefs().length<=1) return;
+  if (willShow && visiblePanelDefs().length>=MAX_VISIBLE_PANELS) return;
   panelVisibility[panelId]=willShow;
   savePanelVisibility();
   updatePanelLayout();
@@ -2601,6 +2718,85 @@ function renderAll(){
     refreshBubbles();
     renderMarketTable();
   });
+}
+
+/* ============================================================
+   CRYPTO FORECAST PANEL
+   Polymarket is aggregated server-side; this panel only renders the
+   normalized ranges and direction markers so it stays cheap to repaint.
+   ============================================================ */
+const FORECAST_API = `${APP_API_ORIGIN}/api/forecast`;
+const FORECAST_CACHE_KEY = 'cc_forecast_v1';
+const FORECAST_REFRESH_MS = 60 * 60 * 1000;
+let forecastInFlight = false;
+
+function forecastPrice(value){
+  const price=Number(value);
+  if (!Number.isFinite(price) || price<=0) return '—';
+  if (price>=1e9) return `$${(price/1e9).toFixed(2)}B`;
+  if (price>=1e6) return `$${(price/1e6).toFixed(2)}M`;
+  if (price>=1000) return `$${(price/1000).toFixed(price>=10000?1:2)}K`;
+  if (price>=1) return `$${price.toFixed(price>=100?1:2)}`;
+  return `$${price.toFixed(4)}`;
+}
+
+function forecastRange(horizon){
+  const low=Number(horizon?.low), high=Number(horizon?.high);
+  if (!Number.isFinite(low) || !Number.isFinite(high) || low<=0 || high<=0) return '—';
+  return `${forecastPrice(low)}–${forecastPrice(high)}`;
+}
+
+function forecastEmoji(direction){
+  return direction==='bullish' ? '🟢' : direction==='bearish' ? '🔴' : '🟡';
+}
+
+function renderForecast(payload){
+  const grid=$('#forecastGrid');
+  const assets=Array.isArray(payload?.assets) ? payload.assets : [];
+  if (!grid || !assets.length){
+    if (grid) grid.innerHTML='<div class="forecast-state">—</div>';
+    return;
+  }
+  grid.innerHTML=assets.map(asset => {
+    const symbol=String(asset?.symbol||'').toUpperCase();
+    const title=`Based on Polymarket probabilities, market data, and BTC cycle timing.`;
+    return `<article class="forecast-asset">
+      <div class="forecast-current"><strong>${symbol}</strong><span>${forecastPrice(asset?.price)}</span></div>
+      ${['1D','1M','YE'].map(label => {
+        const horizon=asset?.horizons?.[label] || {};
+        const direction=horizon.direction || 'neutral';
+        return `<div class="forecast-row" title="${title}" aria-label="${symbol} ${label} forecast">
+          <span class="forecast-period">${label}</span><span class="forecast-direction ${direction}">${forecastEmoji(direction)}</span><span class="forecast-range">${forecastRange(horizon)}</span>
+        </div>`;
+      }).join('')}
+    </article>`;
+  }).join('');
+}
+
+function validForecastPayload(payload){
+  return Array.isArray(payload?.assets) && payload.assets.length===3
+    && payload.assets.every(asset => ['BTC','SOL','ETH'].includes(String(asset?.symbol||'').toUpperCase()));
+}
+
+async function loadForecast(force=false){
+  if (forecastInFlight) return;
+  const cached=cacheGet(FORECAST_CACHE_KEY);
+  if (!force && validForecastPayload(cached)) renderForecast(cached);
+  forecastInFlight=true;
+  try {
+    const query=force ? `?t=${Date.now()}` : '';
+    const response=await fetchWithTimeout(`${FORECAST_API}${query}`,{ cache:force?'no-store':'default' },20000);
+    if (!response.ok) throw new Error(`forecast HTTP ${response.status}`);
+    const payload=await response.json();
+    if (!validForecastPayload(payload)) throw new Error('invalid forecast payload');
+    cacheSet(FORECAST_CACHE_KEY,payload);
+    renderForecast(payload);
+  } catch(error){
+    if (!validForecastPayload(cached)) renderForecast(null);
+    console.warn('forecast refresh failed',error);
+  } finally {
+    forecastInFlight=false;
+  }
 }
 
 // bubble dataset = everything in the Prices table (crypto + TradFi),
@@ -4582,6 +4778,7 @@ fetchCustomCoinGecko();
 fetchCustomForex();
 fetchCustomEconomic();
 loadTrenches(false);
+loadForecast(false);
 
 // early retries: if no TradFi loaded yet (a proxy was briefly down), try again soon
 setTimeout(() => { if (!Object.keys(tradfiRows).length) fetchTradFi(); }, 5000);
@@ -4598,6 +4795,7 @@ pollWhenVisible(fetchCustomForex, 60*1000); // 60s (added FX pairs)
 pollWhenVisible(fetchCustomEconomic, 60*60*1000); // 60m (BLS economic indicators)
 pollWhenVisible(fetchTradFi, 60*1000);    // 60s (CNBC — S&P/NASDAQ/Gold/Oil)
 pollWhenVisible(() => loadTrenches(false), TRENCH_AUTO_MS); // 16m SOL Meme Trenches scan
+pollWhenVisible(() => loadForecast(false), FORECAST_REFRESH_MS); // hourly crypto forecast refresh
 
 // Refresh the fast market feed once when returning to the tab, instead of
 // keeping all timers and canvas work active while the page is backgrounded.
