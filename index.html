@@ -2139,6 +2139,33 @@ function panelFramesOverlap(visible){
   return false;
 }
 
+function panelFramesHaveSafeSpacing(visible){
+  const grid=$('.grid');
+  const rect=grid?.getBoundingClientRect?.();
+  if (!rect?.width || !rect?.height) return true;
+  const gapX=Math.min(.08,12/rect.width);
+  const gapY=Math.min(.08,12/rect.height);
+  for (let i=0;i<visible.length;i++){
+    const first=activePanelFrames[visible[i].id];
+    if (!first) continue;
+    for (let j=i+1;j<visible.length;j++){
+      const second=activePanelFrames[visible[j].id];
+      if (!second) continue;
+      const verticalOverlap=Math.min(first.y+first.h,second.y+second.h)-Math.max(first.y,second.y);
+      const horizontalOverlap=Math.min(first.x+first.w,second.x+second.w)-Math.max(first.x,second.x);
+      const horizontalGap=second.x>=first.x
+        ? second.x-(first.x+first.w)
+        : first.x-(second.x+second.w);
+      const verticalGap=second.y>=first.y
+        ? second.y-(first.y+first.h)
+        : first.y-(second.y+second.h);
+      if (verticalOverlap>0 && horizontalGap<gapX-.001) return false;
+      if (horizontalOverlap>0 && verticalGap<gapY-.001) return false;
+    }
+  }
+  return true;
+}
+
 function panelFrameCoverage(visible){
   const frames=visible.map(panel=>activePanelFrames[panel.id]).filter(Boolean);
   if (frames.length!==visible.length) return 0;
@@ -2162,7 +2189,9 @@ function panelFrameCoverage(visible){
 }
 
 function panelFramesNeedRepair(visible){
-  return panelFramesOverlap(visible) || panelFrameCoverage(visible)<.92;
+  return panelFramesOverlap(visible)
+    || !panelFramesHaveSafeSpacing(visible)
+    || panelFrameCoverage(visible)<.92;
 }
 
 function restoreDefaultPanelFrames(visible){
@@ -2462,7 +2491,7 @@ function setupPanelDragging(){
         };
         changed=Math.abs(state.previewX-state.frame.x)>.001 || Math.abs(state.previewY-state.frame.y)>.001;
       }
-      if (panelFramesOverlap(visible)){
+      if (panelFramesOverlap(visible) || !panelFramesHaveSafeSpacing(visible)){
         activePanelFrames=state.framesBefore;
         changed=false;
       }
