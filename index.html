@@ -336,7 +336,7 @@
     outline:1px solid rgba(120,230,255,.72);
     outline-offset:3px;
     box-shadow:0 24px 60px rgba(0,0,0,.48),0 0 0 1px rgba(120,230,255,.24),inset 0 1px 0 rgba(255,255,255,.24) !important;
-    will-change:transform;
+    will-change:left,top;
     transition:box-shadow .16s ease,opacity .16s ease;
   }
   .panel.panel-settling {
@@ -2414,13 +2414,15 @@ function setupPanelDragging(){
     if (panelMoveState!==state) return;
     state.currentX+=(state.targetX-state.currentX)*.24;
     state.currentY+=(state.targetY-state.currentY)*.24;
-    state.panel.style.transform=`translate3d(${state.currentX}px,${state.currentY}px,0)`;
+    state.panel.style.left=`${(state.frame.x+state.currentX/state.gridRect.width)*100}%`;
+    state.panel.style.top=`${(state.frame.y+state.currentY/state.gridRect.height)*100}%`;
     if (Math.abs(state.targetX-state.currentX)>.25 || Math.abs(state.targetY-state.currentY)>.25){
       state.dragFrame=requestAnimationFrame(()=>animateMove(state));
     } else {
       state.currentX=state.targetX;
       state.currentY=state.targetY;
-      state.panel.style.transform=`translate3d(${state.currentX}px,${state.currentY}px,0)`;
+      state.panel.style.left=`${(state.frame.x+state.currentX/state.gridRect.width)*100}%`;
+      state.panel.style.top=`${(state.frame.y+state.currentY/state.gridRect.height)*100}%`;
       state.dragFrame=0;
     }
   };
@@ -2433,6 +2435,8 @@ function setupPanelDragging(){
     state.placeholder?.remove();
     panel.classList.remove('panel-dragging');
     panel.style.removeProperty('transform');
+    panel.style.removeProperty('left');
+    panel.style.removeProperty('top');
     panel.style.removeProperty('pointer-events');
     panel.style.removeProperty('z-index');
   };
