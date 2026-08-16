@@ -2484,6 +2484,7 @@ function setupPanelDragging(){
   const move=(event)=>{
     const state=panelMoveState;
     if (!state || event.pointerId!==state.pointerId) return;
+    event.preventDefault();
     const dx=(event.clientX-state.startX)/state.gridRect.width;
     const dy=(event.clientY-state.startY)/state.gridRect.height;
     state.previewX=clamp(state.frame.x+dx,0,1-state.frame.w);
@@ -2535,10 +2536,10 @@ function setupPanelDragging(){
       document.body.classList.add('panel-moving');
       panelMoveState.dragFrame=requestAnimationFrame(()=>animateMove(panelMoveState));
     });
-    handle.addEventListener('pointermove',move);
-    handle.addEventListener('pointerup',finishMove);
-    handle.addEventListener('pointercancel',event=>finishMove(event,true));
   });
+  document.addEventListener('pointermove',move,{passive:false});
+  document.addEventListener('pointerup',finishMove);
+  document.addEventListener('pointercancel',event=>finishMove(event,true));
 }
 
 function applyBalancedPanelFrames(columnsRatio,rowsRatio){
