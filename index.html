@@ -672,293 +672,6 @@
   }
   .tradingview-panel-chart .tradingview-widget-copyright a { color:rgba(132,211,235,.58); text-decoration:none; }
 
-  /* ===== TOKEN INSPECTOR BASE ===== */
-  #panel-dexscreener .panel-body {
-    display:flex;
-    flex-direction:column;
-    min-height:0;
-    background:linear-gradient(135deg,rgba(255,255,255,.018),rgba(4,10,14,.035));
-  }
-  .dex-panel-head {
-    display:flex;
-    align-items:center;
-    gap:8px;
-    min-height:42px;
-    padding:7px 9px;
-    border-bottom:1px solid rgba(255,255,255,.12);
-  }
-  .dex-panel-title {
-    flex:0 0 auto;
-    color:var(--text-bright);
-    font:700 9px 'Space Grotesk',sans-serif;
-    letter-spacing:.14em;
-    white-space:nowrap;
-  }
-  .dex-panel-form {
-    display:flex;
-    flex:1 1 auto;
-    min-width:0;
-    gap:6px;
-  }
-  .dex-panel-form input {
-    min-width:0;
-    flex:1 1 auto;
-    height:27px;
-    padding:0 8px;
-    border:1px solid rgba(255,255,255,.20);
-    border-radius:7px;
-    background:rgba(255,255,255,.075);
-    color:var(--text-bright);
-    font:500 10px 'JetBrains Mono',monospace;
-    outline:none;
-  }
-  .dex-panel-form input::placeholder { color:var(--muted2); }
-  .dex-panel-form input:focus { border-color:rgba(155,220,255,.70); box-shadow:0 0 0 2px rgba(155,220,255,.12); }
-  .dex-panel-form button,
-  .dex-panel-provider {
-    flex:0 0 auto;
-    height:27px;
-    padding:0 9px;
-    border:1px solid rgba(0,255,136,.30);
-    border-radius:7px;
-    background:rgba(0,255,136,.09);
-    color:var(--green);
-    font:700 9px 'Space Grotesk',sans-serif;
-    cursor:pointer;
-  }
-  .dex-panel-form button:hover,
-  .dex-panel-provider:hover { background:rgba(0,255,136,.16); border-color:rgba(0,255,136,.58); }
-  .dex-panel-tools {
-    display:flex;
-    align-items:center;
-    gap:5px;
-    min-height:32px;
-    padding:4px 9px;
-    border-top:1px solid rgba(255,255,255,.08);
-    border-bottom:1px solid rgba(255,255,255,.08);
-  }
-  .dex-panel-provider {
-    height:22px;
-    padding:0 7px;
-    border-color:rgba(255,255,255,.18);
-    background:rgba(255,255,255,.055);
-    color:var(--muted);
-    font-size:8px;
-  }
-  .dex-panel-provider.active { border-color:rgba(0,255,136,.55); background:rgba(0,255,136,.14); color:var(--green); }
-  .dex-panel-external {
-    margin-left:auto;
-    color:#76dcff;
-    font:600 8px 'JetBrains Mono',monospace;
-    text-decoration:none;
-    white-space:nowrap;
-  }
-  .dex-panel-external:hover { color:#fff; text-decoration:underline; }
-  .dex-panel-summary {
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    gap:8px;
-    min-height:25px;
-    padding:4px 9px;
-    color:rgba(222,235,240,.72);
-    font:600 8px 'Space Grotesk',sans-serif;
-    letter-spacing:.10em;
-    text-transform:uppercase;
-  }
-  .dex-panel-summary-count { color:var(--green); font:600 8px 'JetBrains Mono',monospace; letter-spacing:.04em; }
-  .dex-panel-list {
-    flex:1 1 54%;
-    min-height:112px;
-    overflow:auto;
-    padding:0 7px 7px;
-    overscroll-behavior:contain;
-  }
-  .dex-pair-row {
-    display:grid;
-    grid-template-columns:minmax(108px,1.35fr) minmax(76px,.78fr) minmax(92px,.90fr);
-    align-items:center;
-    gap:7px;
-    min-height:49px;
-    padding:6px 7px;
-    width:100%;
-    box-sizing:border-box;
-    border:1px solid rgba(255,255,255,.10);
-    border-radius:8px;
-    background:rgba(255,255,255,.035);
-    color:inherit;
-    font:inherit;
-    text-align:left;
-    cursor:pointer;
-    transition:background .14s,border-color .14s,transform .14s;
-  }
-  .dex-pair-row + .dex-pair-row { margin-top:5px; }
-  .dex-pair-row:hover,
-  .dex-pair-row[aria-selected="true"] {
-    border-color:rgba(0,255,136,.42);
-    background:rgba(0,255,136,.085);
-  }
-  .dex-pair-row:active { transform:translateY(1px); }
-  .dex-pair-row:focus-visible { outline:2px solid rgba(118,220,255,.72); outline-offset:2px; }
-  .dex-pair-main,
-  .dex-pair-price,
-  .dex-pair-metrics { min-width:0; }
-  .dex-pair-main { display:flex; align-items:center; gap:7px; }
-  .dex-pair-logo {
-    flex:0 0 24px;
-    width:24px;
-    height:24px;
-    border-radius:50%;
-    object-fit:cover;
-    background:rgba(255,255,255,.10);
-    border:1px solid rgba(255,255,255,.18);
-  }
-  .dex-pair-symbol,
-  .dex-pair-price-value { color:var(--text-bright); font:700 10px 'Space Grotesk',sans-serif; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .dex-pair-sub,
-  .dex-pair-meta { display:block; margin-top:2px; color:rgba(213,227,232,.56); font:500 8px 'JetBrains Mono',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .dex-pair-price { text-align:right; }
-  .dex-pair-price-value { font-family:'JetBrains Mono',monospace; }
-  .dex-pair-change { display:block; margin-top:3px; font:600 8px 'JetBrains Mono',monospace; }
-  .dex-pair-change.pos { color:#00f58a; }
-  .dex-pair-change.neg { color:#ff5577; }
-  .dex-pair-metrics { text-align:right; }
-  .dex-pair-metric { display:block; color:rgba(235,245,247,.78); font:500 8px 'JetBrains Mono',monospace; white-space:nowrap; }
-  .dex-pair-metric + .dex-pair-metric { margin-top:3px; color:rgba(213,227,232,.56); }
-  .dex-panel-detail {
-    display:flex;
-    flex:1 1 46%;
-    flex-direction:column;
-    min-height:136px;
-    border-top:1px solid rgba(255,255,255,.12);
-  }
-  .dex-panel-selected {
-    display:flex;
-    align-items:center;
-    gap:8px;
-    min-height:34px;
-    padding:5px 9px;
-  }
-  .dex-panel-selected-copy { min-width:0; flex:1 1 auto; }
-  .dex-panel-selected-title { color:var(--text-bright); font:700 10px 'Space Grotesk',sans-serif; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .dex-panel-selected-meta { margin-top:2px; color:rgba(213,227,232,.58); font:500 8px 'JetBrains Mono',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .dex-panel-detail .dex-panel-tools { min-height:27px; padding:3px 9px; border-top:0; }
-  .dex-panel-chart {
-    position:relative;
-    flex:1 1 auto;
-    min-height:0;
-    overflow:hidden;
-    background:rgba(4,9,14,.18);
-  }
-  .dex-panel-chart iframe { display:block; width:100%; height:100%; border:0; }
-  .dex-panel-state {
-    display:grid;
-    place-items:center;
-    height:100%;
-    padding:20px;
-    box-sizing:border-box;
-    color:var(--muted);
-    font:500 10px/1.5 'JetBrains Mono',monospace;
-    text-align:center;
-  }
-  @media (max-width:700px) {
-    .dex-pair-row { grid-template-columns:minmax(110px,1fr) minmax(78px,.75fr); }
-    .dex-pair-metrics { display:none; }
-    .dex-panel-list { min-height:190px; }
-    .dex-panel-detail { min-height:220px; }
-  }
-
-  /* ===== TOKEN INSPECTOR ===== */
-  .token-inspect-head {
-    display:flex;
-    align-items:center;
-    gap:8px;
-    min-height:42px;
-    padding:7px 9px;
-    border-bottom:1px solid rgba(255,255,255,.12);
-  }
-  .token-inspect-title {
-    flex:0 0 auto;
-    color:var(--text-bright);
-    font:700 9px 'Space Grotesk',sans-serif;
-    letter-spacing:.14em;
-    white-space:nowrap;
-  }
-  .token-inspect-form { display:flex; flex:1 1 auto; min-width:0; gap:6px; }
-  .token-inspect-form input {
-    min-width:0;
-    flex:1 1 auto;
-    height:27px;
-    padding:0 8px;
-    border:1px solid rgba(255,255,255,.20);
-    border-radius:7px;
-    background:rgba(255,255,255,.075);
-    color:var(--text-bright);
-    font:500 10px 'JetBrains Mono',monospace;
-    outline:none;
-  }
-  .token-inspect-form input::placeholder { color:var(--muted2); }
-  .token-inspect-form input:focus { border-color:rgba(155,220,255,.70); box-shadow:0 0 0 2px rgba(155,220,255,.12); }
-  .token-inspect-form button {
-    flex:0 0 auto;
-    height:27px;
-    padding:0 9px;
-    border:1px solid rgba(0,255,136,.30);
-    border-radius:7px;
-    background:rgba(0,255,136,.09);
-    color:var(--green);
-    font:700 9px 'Space Grotesk',sans-serif;
-    cursor:pointer;
-  }
-  .token-inspect-form button:hover { background:rgba(0,255,136,.16); border-color:rgba(0,255,136,.58); }
-  .token-inspect-state {
-    flex:1 1 auto;
-    display:grid;
-    place-items:center;
-    min-height:150px;
-    padding:22px;
-    color:var(--muted);
-    font:500 10px/1.5 'JetBrains Mono',monospace;
-    text-align:center;
-  }
-  .token-inspect-state.err { color:#ff8fa8; }
-  .token-inspect-result { display:flex; flex:1 1 auto; flex-direction:column; min-height:0; padding:10px; overflow:auto; }
-  .token-inspect-result[hidden] { display:none; }
-  .token-inspect-identity { display:flex; align-items:center; gap:10px; min-width:0; }
-  .token-inspect-copy { flex:1 1 auto; min-width:0; }
-  .token-inspect-name { color:var(--text-bright); font:700 15px 'Space Grotesk',sans-serif; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .token-inspect-address { margin-top:4px; color:rgba(213,227,232,.58); font:500 8px 'JetBrains Mono',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .token-inspect-score { display:grid; place-items:center; flex:0 0 58px; width:58px; height:58px; border:1px solid rgba(255,214,107,.48); border-radius:50%; background:rgba(255,214,107,.10); color:#ffe18a; font:700 16px 'JetBrains Mono',monospace; }
-  .token-inspect-score.green { border-color:rgba(0,255,136,.55); background:rgba(0,255,136,.12); color:var(--green); }
-  .token-inspect-score.red { border-color:rgba(255,85,119,.55); background:rgba(255,85,119,.12); color:#ff7390; }
-  .token-inspect-decision { margin-top:9px; color:#ffe18a; font:700 11px 'Space Grotesk',sans-serif; }
-  .token-inspect-decision.green { color:var(--green); }
-  .token-inspect-decision.red { color:#ff7390; }
-  .token-inspect-metrics { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; margin-top:10px; }
-  .token-inspect-metrics div { min-width:0; padding:7px; border:1px solid rgba(255,255,255,.10); border-radius:8px; background:rgba(255,255,255,.045); }
-  .token-inspect-metrics span { display:block; color:rgba(213,227,232,.56); font:600 7px 'Space Grotesk',sans-serif; letter-spacing:.08em; }
-  .token-inspect-metrics strong { display:block; margin-top:4px; color:var(--text-bright); font:700 10px 'JetBrains Mono',monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .token-inspect-security { margin-top:8px; padding:7px 8px; border:1px solid rgba(255,255,255,.10); border-radius:8px; color:rgba(229,240,243,.78); font:500 8px/1.55 'JetBrains Mono',monospace; }
-  .token-inspect-security strong { color:var(--text-bright); font-weight:700; }
-  .token-inspect-summary { display:flex; justify-content:space-between; gap:8px; margin-top:10px; color:rgba(213,227,232,.60); font:500 8px 'JetBrains Mono',monospace; }
-  .token-inspect-summary span:last-child { white-space:nowrap; }
-  .token-inspect-reasons { margin-top:9px; padding:8px; border:1px solid rgba(255,255,255,.10); border-radius:8px; color:rgba(244,249,250,.88); font:500 9px/1.5 'JetBrains Mono',monospace; }
-  .token-inspect-reasons strong { color:#ffe18a; }
-  .token-inspect-sources { display:flex; flex-wrap:wrap; gap:5px 8px; margin-top:9px; color:rgba(213,227,232,.62); font:500 8px 'JetBrains Mono',monospace; }
-  .token-inspect-sources a { color:#76dcff; text-decoration:none; }
-  .token-inspect-sources a:hover { color:#fff; text-decoration:underline; }
-  .token-inspect-source { white-space:nowrap; }
-  .token-inspect-source.active { color:var(--green); }
-  .token-inspect-source.unverified { color:#ffe18a; }
-  .token-inspect-source.inactive { color:rgba(213,227,232,.48); }
-  @media (max-width:700px) {
-    .token-inspect-head { align-items:stretch; flex-direction:column; gap:6px; }
-    .token-inspect-title { font-size:8px; }
-    .token-inspect-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
-    .token-inspect-summary { flex-direction:column; gap:3px; }
-    .token-inspect-summary span:last-child { white-space:normal; }
-  }
-
   /* ===== SOL MEME TRENCHES ===== */
   #panel-trenches .panel-body {
     display:flex; flex-direction:column;
@@ -1469,10 +1182,8 @@
       overscroll-behavior:contain;
     }
     #panel-trenches .trench-scroll { height:560px; }
-    #panel-tradingview,
-    #panel-dexscreener { min-height:520px; height:520px; }
-    #panel-tradingview .tradingview-panel-chart,
-    #panel-dexscreener .dex-panel-chart { min-height:0; }
+    #panel-tradingview { min-height:520px; height:520px; }
+    #panel-tradingview .tradingview-panel-chart { min-height:0; }
     .mobile-background-trigger { display:grid; }
     #panel-table table.ticker { width:100%; min-width:0; }
     #panel-table table.ticker thead th,
@@ -1526,8 +1237,7 @@
     #panel-bubbles { height:270px; }
     #panel-table .px-scroll { height:460px; }
     #panel-trenches .trench-scroll { height:480px; }
-    #panel-tradingview,
-    #panel-dexscreener { min-height:460px; height:460px; }
+    #panel-tradingview { min-height:460px; height:460px; }
     #panel-table .market-sort-label { display:none; }
     #panel-table .px-search input { font-size:8.5px; }
     #panel-trenches table.trenches th { font-size:8px; letter-spacing:0; }
@@ -1598,42 +1308,6 @@
           </form>
         </div>
         <div id="tradingviewPanelChart" class="tradingview-panel-chart" aria-label="Live TradingView chart"></div>
-      </div>
-    </section>
-
-    <section class="panel" id="panel-dexscreener" aria-label="Token inspector" hidden>
-      <div class="panel-body">
-        <div class="token-inspect-head">
-          <div class="token-inspect-title">TOKEN INSPECTOR</div>
-          <form id="tokenInspectForm" class="token-inspect-form">
-            <input id="tokenInspectAddress" aria-label="Paste Solana contract address" placeholder="Paste Solana contract address (CA)" autocomplete="off" spellcheck="false" />
-            <button type="submit">INSPECT</button>
-          </form>
-        </div>
-        <div id="tokenInspectState" class="token-inspect-state" aria-live="polite">PASTE A SOLANA CA TO START</div>
-        <div id="tokenInspectResult" class="token-inspect-result" hidden>
-          <div class="token-inspect-identity">
-            <div class="token-inspect-copy">
-              <div id="tokenInspectName" class="token-inspect-name">—</div>
-              <div id="tokenInspectAddressValue" class="token-inspect-address">—</div>
-            </div>
-            <div id="tokenInspectScore" class="token-inspect-score">—</div>
-          </div>
-          <div id="tokenInspectDecision" class="token-inspect-decision">—</div>
-          <div class="token-inspect-metrics">
-            <div><span>PRICE</span><strong id="tokenInspectPrice">—</strong></div>
-            <div><span>MC</span><strong id="tokenInspectMarketCap">—</strong></div>
-            <div><span>LIQUIDITY</span><strong id="tokenInspectLiquidity">—</strong></div>
-            <div><span>VOLUME 24H</span><strong id="tokenInspectVolume">—</strong></div>
-          </div>
-          <div id="tokenInspectSecurity" class="token-inspect-security"></div>
-          <div class="token-inspect-summary">
-            <span>Score is based on available market and security data.</span>
-            <span id="tokenInspectUpdated">—</span>
-          </div>
-          <div id="tokenInspectReasons" class="token-inspect-reasons"></div>
-          <div id="tokenInspectSources" class="token-inspect-sources"></div>
-        </div>
       </div>
     </section>
 
@@ -1801,11 +1475,11 @@ function setupPanelResizers(){
     }
     const pairs={
       'columns-top':['panel-bubbles','panel-table'],
-      'columns-bottom':panelVisibility['panel-tradingview'] ? ['panel-trenches','panel-tradingview'] : ['panel-trenches','panel-dexscreener'],
+      'columns-bottom':['panel-trenches','panel-tradingview'],
       'rows-left':['panel-bubbles','panel-trenches'],
       'rows-right':isDefaultThreePanelLayout()
         ? ['panel-table',defaultThreeLowerPanelId()]
-        : panelVisibility['panel-tradingview'] ? ['panel-table','panel-tradingview'] : ['panel-table','panel-dexscreener']
+        : ['panel-table','panel-tradingview']
     };
     const ids=pairs[axis];
     if (!ids || !panelVisibility[ids[0]] || !panelVisibility[ids[1]]) return null;
@@ -1957,20 +1631,29 @@ const PANEL_DEFS = [
   { id:'panel-bubbles', label:'BUBBLES', defaultVisible:true },
   { id:'panel-table', label:'MARKET', defaultVisible:true },
   { id:'panel-trenches', label:'SOL MEME TRENCHES', defaultVisible:true },
-  { id:'panel-tradingview', label:'TRADINGVIEW', defaultVisible:false },
-  { id:'panel-dexscreener', label:'TOKEN INSPECTOR', defaultVisible:false }
+  { id:'panel-tradingview', label:'TRADINGVIEW', defaultVisible:false }
 ];
 const storedPanelVisibility = cacheGet(PANEL_VISIBILITY_KEY);
 let panelVisibility = Object.fromEntries(PANEL_DEFS.map(panel => [
   panel.id,
   typeof storedPanelVisibility?.[panel.id] === 'boolean' ? storedPanelVisibility[panel.id] : panel.defaultVisible
 ]));
+cacheSet(PANEL_VISIBILITY_KEY,panelVisibility);
 
 const PANEL_FRAMES_KEY = 'mus_panel_frames_v1';
 const storedPanelFrames = cacheGet(PANEL_FRAMES_KEY);
 let panelFrameStore = storedPanelFrames && typeof storedPanelFrames === 'object' && !Array.isArray(storedPanelFrames)
   ? storedPanelFrames
   : {};
+const validPanelIds = new Set(PANEL_DEFS.map(panel=>panel.id));
+panelFrameStore = Object.fromEntries(Object.entries(panelFrameStore).filter(([signature,frames])=>{
+  const ids=String(signature).split('|').filter(Boolean);
+  return ids.length>0
+    && ids.length<=PANEL_DEFS.length
+    && ids.every(id=>validPanelIds.has(id))
+    && frames && typeof frames==='object' && !Array.isArray(frames);
+}));
+cacheSet(PANEL_FRAMES_KEY,panelFrameStore);
 let activePanelFrameSignature = '';
 let activePanelFrames = {};
 let panelFrameApplying = false;
@@ -2019,27 +1702,12 @@ function defaultPanelFrames(visible){
 
   const halfW=(1-gapX)/2;
   const halfH=(1-gapY)/2;
-  const quad={
-    'panel-bubbles':{x:0,y:0,w:halfW,h:halfH},
-    'panel-table':{x:halfW+gapX,y:0,w:halfW,h:halfH},
-    'panel-trenches':{x:0,y:halfH+gapY,w:halfW,h:halfH},
-    'panel-tradingview':{x:halfW+gapX,y:halfH+gapY,w:halfW,h:halfH}
-  };
   const quadSlots=[
     {x:0,y:0,w:halfW,h:halfH},
     {x:halfW+gapX,y:0,w:halfW,h:halfH},
     {x:0,y:halfH+gapY,w:halfW,h:halfH},
     {x:halfW+gapX,y:halfH+gapY,w:halfW,h:halfH}
   ];
-  const fiveHeight=(1-gapY*2)/3;
-  const fiveSlots=[
-    {x:0,y:0,w:halfW,h:fiveHeight},
-    {x:halfW+gapX,y:0,w:halfW,h:fiveHeight},
-    {x:0,y:fiveHeight+gapY,w:halfW,h:fiveHeight},
-    {x:halfW+gapX,y:fiveHeight+gapY,w:halfW,h:fiveHeight},
-    {x:0,y:(fiveHeight+gapY)*2,w:1,h:fiveHeight}
-  ];
-
   if (visible.length===2){
     visible.forEach((panel,index)=>set(panel.id,{x:index ? halfW+gapX : 0,y:0,w:halfW,h:1}));
     return frames;
@@ -2048,16 +1716,8 @@ function defaultPanelFrames(visible){
     visible.forEach((panel,index)=>set(panel.id,quadSlots[index]));
     return frames;
   }
-  if (visible.length>=5){
-    visible.slice(0,5).forEach((panel,index)=>set(panel.id,fiveSlots[index]));
-    return frames;
-  }
   if (visible.length===3){
     visible.forEach((panel,index)=>set(panel.id,quadSlots[index]));
-    return frames;
-  }
-  if (visible.length>=3){
-    visible.forEach(panel=>set(panel.id,quad[panel.id] || {x:0,y:0,w:halfW,h:halfH}));
     return frames;
   }
   if (visible.length===1) set(visible[0].id,{x:0,y:0,w:1,h:1});
@@ -2170,11 +1830,11 @@ function defaultThreeLowerPanelId(){
 function panelFramePairForResize(axis){
   const pairs={
     'columns-top':['panel-bubbles','panel-table'],
-    'columns-bottom':panelVisibility['panel-tradingview'] ? ['panel-trenches','panel-tradingview'] : ['panel-trenches','panel-dexscreener'],
+    'columns-bottom':['panel-trenches','panel-tradingview'],
     'rows-left':['panel-bubbles','panel-trenches'],
     'rows-right':isDefaultThreePanelLayout()
       ? ['panel-table',defaultThreeLowerPanelId()]
-      : panelVisibility['panel-tradingview'] ? ['panel-table','panel-tradingview'] : ['panel-table','panel-dexscreener']
+      : ['panel-table','panel-tradingview']
   };
   if (axis==='columns-top' && isDefaultThreePanelLayout()){
     const first=activePanelFrames['panel-bubbles'];
@@ -2399,17 +2059,6 @@ function applyBalancedPanelFrames(columnsRatio,rowsRatio){
       {x:halfW+gapX,y:halfH+gapY,w:halfW,h:halfH}
     ];
     visible.forEach((panel,index)=>assign(panel.id,slots[index]));
-  } else if (visible.length>=5){
-    const halfW=(1-gapX)/2;
-    const rowH=(1-gapY*2)/3;
-    const slots=[
-      {x:0,y:0,w:halfW,h:rowH},
-      {x:halfW+gapX,y:0,w:halfW,h:rowH},
-      {x:0,y:rowH+gapY,w:halfW,h:rowH},
-      {x:halfW+gapX,y:rowH+gapY,w:halfW,h:rowH},
-      {x:0,y:(rowH+gapY)*2,w:1,h:rowH}
-    ];
-    visible.slice(0,5).forEach((panel,index)=>assign(panel.id,slots[index]));
   } else if (visible.length===3){
     const halfW=(1-gapX)/2;
     const halfH=(1-gapY)/2;
@@ -2419,11 +2068,6 @@ function applyBalancedPanelFrames(columnsRatio,rowsRatio){
       {x:0,y:halfH+gapY,w:halfW,h:halfH}
     ];
     visible.forEach((panel,index)=>assign(panel.id,slots[index]));
-  } else if (visible.length>=3){
-    assign('panel-bubbles',{x:0,y:0,w:columns,h:rows});
-    assign('panel-table',{x:rightX,y:0,w:rightW,h:rows});
-    assign('panel-trenches',{x:0,y:lowerY,w:columns,h:lowerH});
-    assign('panel-tradingview',{x:rightX,y:lowerY,w:rightW,h:lowerH});
   } else if (visible.length===1){
     assign(visible[0].id,{x:0,y:0,w:1,h:1});
   }
@@ -2452,8 +2096,8 @@ function updatePanelLayout(){
   const defaultThree=isDefaultThreePanelLayout();
   grid.classList.remove('panel-layout-default','panel-layout-quad','panel-layout-standard','panel-layout-single');
   grid.classList.add(defaultThree ? 'panel-layout-default' : visible.length===1 ? 'panel-layout-single' : visible.length===4 ? 'panel-layout-quad' : 'panel-layout-standard');
-  grid.classList.remove('panel-count-1','panel-count-2','panel-count-3','panel-count-4','panel-count-5');
-  grid.classList.add(`panel-count-${visible.length}`);
+  grid.classList.remove('panel-count-1','panel-count-2','panel-count-3','panel-count-4');
+  grid.classList.add(`panel-count-${Math.min(4,visible.length)}`);
   PANEL_DEFS.forEach(panel => {
     grid.classList.toggle(`has-${panel.id.replace(/^panel-/,'')}`,ids.has(panel.id));
   });
@@ -2477,9 +2121,6 @@ function updatePanelLayout(){
       renderTradingViewPanel();
     });
   } else clearTradingViewPanel();
-  if (panelVisibility['panel-dexscreener']===true){
-    requestAnimationFrame(()=>renderTokenInspector());
-  } else clearTokenInspector();
 }
 
 function renderPanelManager(){
@@ -3394,7 +3035,6 @@ let assetChartGeneration = 0;
 let tradingViewPanelGeneration = 0;
 let tradingViewPanelFrame = 0;
 const TRADINGVIEW_PANEL_SYMBOL_KEY = 'mus_tradingview_panel_symbol_v1';
-const TOKEN_INSPECT_ADDRESS_KEY = 'mus_token_inspect_address_v1';
 
 function customAssetSnapshot(c){
   const common = {
@@ -3626,165 +3266,6 @@ function renderTradingViewPanel(){
   },{once:true});
   container.append(widget,attribution,script);
   host.append(loading,container);
-}
-
-function tokenInspectMoney(value){
-  const number=Number(value);
-  if (!Number.isFinite(number) || number<=0) return '—';
-  if (number>=1e9) return '$'+(number/1e9).toFixed(1)+'B';
-  if (number>=1e6) return '$'+(number/1e6).toFixed(1)+'M';
-  if (number>=1e3) return '$'+(number/1e3).toFixed(number>=1e5?0:1)+'K';
-  return '$'+number.toFixed(number>=100?0:2);
-}
-
-function tokenInspectPrice(value){
-  const number=Number(value);
-  if (!Number.isFinite(number)) return '—';
-  if (number>=1000) return '$'+number.toLocaleString('en-US',{maximumFractionDigits:2});
-  if (number>=1) return '$'+number.toLocaleString('en-US',{maximumFractionDigits:4});
-  if (number>=.01) return '$'+number.toLocaleString('en-US',{maximumFractionDigits:6});
-  return '$'+number.toLocaleString('en-US',{maximumFractionDigits:10});
-}
-
-function normalizeTokenInspectAddress(rawInput){
-  const value=String(rawInput||'').trim().split(/\s+/)[0].replace(/[?#].*$/,'');
-  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(value) ? value : null;
-}
-
-function tokenInspectTrustedUrl(value,allowedHosts=[]){
-  try {
-    const url=new URL(String(value||''));
-    if (url.protocol!=='https:') return '';
-    if (allowedHosts.length && !allowedHosts.some(host=>url.hostname===host || url.hostname.endsWith(`.${host}`))) return '';
-    return url.href;
-  } catch(e){ return ''; }
-}
-
-function tokenInspectSourceStatus(meta){
-  const status=String(meta?.status||'Unverified').toLowerCase();
-  if (status==='active') return {label:'ACTIVE',className:'active'};
-  if (status==='not configured' || status==='api key missing') return {label:'NOT CONFIGURED',className:'inactive'};
-  return {label:'UNVERIFIED',className:'unverified'};
-}
-
-function tokenInspectSourceLink(label,url,meta){
-  const status=tokenInspectSourceStatus(meta);
-  const safeUrl=tokenInspectTrustedUrl(url);
-  const content=`${label} · ${status.label}`;
-  return safeUrl
-    ? `<a class="token-inspect-source ${status.className}" href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">${content}</a>`
-    : `<span class="token-inspect-source ${status.className}">${content}</span>`;
-}
-
-function clearTokenInspector(){
-  tokenInspectGeneration++;
-  const state=$('#tokenInspectState');
-  const result=$('#tokenInspectResult');
-  if (state){ state.hidden=false; state.className='token-inspect-state'; state.textContent='PASTE A SOLANA CA TO START'; }
-  if (result) result.hidden=true;
-}
-
-function renderTokenInspectorResult(payload){
-  const token=payload?.token;
-  const state=$('#tokenInspectState');
-  const result=$('#tokenInspectResult');
-  if (!token || !result) throw new Error('Token data is unavailable.');
-  if (state) state.hidden=true;
-  result.hidden=false;
-  const decision=String(token.decision||'yellow');
-  const score=Math.max(0,Math.min(100,Number(token.score)||0));
-  const name=$('#tokenInspectName');
-  const address=$('#tokenInspectAddressValue');
-  const scoreNode=$('#tokenInspectScore');
-  const decisionNode=$('#tokenInspectDecision');
-  if (name) name.textContent=`${token.name||token.symbol||'Unknown token'}${token.symbol?` (${token.symbol})`:''}`;
-  if (address) address.textContent=token.address||'—';
-  if (scoreNode){ scoreNode.textContent=`${score}/100`; scoreNode.className=`token-inspect-score ${decision}`; }
-  if (decisionNode){ decisionNode.textContent=token.decisionLabel||'🟡 Conditional watch'; decisionNode.className=`token-inspect-decision ${decision}`; }
-  $('#tokenInspectPrice').textContent=tokenInspectPrice(token.priceUsd);
-  $('#tokenInspectMarketCap').textContent=tokenInspectMoney(token.marketCap);
-  $('#tokenInspectLiquidity').textContent=tokenInspectMoney(token.liquidity);
-  $('#tokenInspectVolume').textContent=tokenInspectMoney(token.volume?.h24);
-  const security=token.security||{};
-  const lockPct=security.lpLockedPct!==null && security.lpLockedPct!==undefined
-    ? Number(security.lpLockedPct)
-    : Number(security.goplus?.lpLockedPct);
-  const top10=Number(security.effectiveTop10Pct);
-  const traders=Number(security.birdeye?.uniqueTraders);
-  const h1Buys=Number(token.txns?.h1?.buys)||0;
-  const h1Sells=Number(token.txns?.h1?.sells)||0;
-  const authorityMark=value=>value==='revoked'?'✅':value==='open'?'⚠️':'?';
-  const securityNode=$('#tokenInspectSecurity');
-  if (securityNode){
-    securityNode.innerHTML=`<strong>SECURITY</strong> · Mint ${authorityMark(security.mint)} Freeze ${authorityMark(security.freeze)} · LP ${Number.isFinite(lockPct)?`${lockPct.toFixed(0)}%`:'Unverified'} · Top 10 ${Number.isFinite(top10)?`${top10.toFixed(1)}%`:'Unverified'} · Traders ${Number.isFinite(traders)?Math.round(traders):'Unverified'} · 1H B/S ${h1Buys}/${h1Sells}`;
-  }
-  const updated=$('#tokenInspectUpdated');
-  if (updated){
-    const date=new Date(payload.generatedAt);
-    updated.textContent=`UPDATED ${Number.isNaN(date.getTime())?'—':date.toLocaleString('en-GB',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}`;
-  }
-  const reasons=$('#tokenInspectReasons');
-  const hard=Array.isArray(token.hardReasons)?token.hardReasons:[];
-  const caution=Array.isArray(token.cautionReasons)?token.cautionReasons:[];
-  const visibleReasons=[...hard,...caution].slice(0,5);
-  if (reasons){
-    reasons.innerHTML=`<strong>ASSESSMENT</strong> ${escapeHtml(token.reason||'No additional assessment available.')}`
-      + (visibleReasons.length?`<br><span>RISKS · ${escapeHtml(visibleReasons.join(' · '))}</span>`:'')
-      + (payload.warning?`<br><span>NOTICE · ${escapeHtml(payload.warning)}</span>`:'');
-  }
-  const sourceMeta=payload.sourceMeta||{};
-  const ca=normalizeTokenInspectAddress(token.address)||'';
-  const pairAddress=Array.isArray(token.pairAddresses)?token.pairAddresses[0]:'';
-  const dexUrl=tokenInspectTrustedUrl(token.dexUrl,['dexscreener.com']) || (ca?`https://dexscreener.com/solana/${encodeURIComponent(pairAddress||ca)}`:'');
-  const sources=$('#tokenInspectSources');
-  if (sources && ca){
-    sources.innerHTML=[
-      tokenInspectSourceLink('RUGCHECK',`https://rugcheck.xyz/tokens/${ca}`,sourceMeta.rugCheck),
-      tokenInspectSourceLink('DEXSCREENER',dexUrl,sourceMeta.dexScreener),
-      tokenInspectSourceLink('BIRDEYE',`https://birdeye.so/solana/token/${ca}`,sourceMeta.birdeye),
-      tokenInspectSourceLink('SOLSCAN',`https://solscan.io/token/${ca}`,{status:'Active'}),
-      tokenInspectSourceLink('BUBBLEMAPS',`https://app.bubblemaps.io/sol/token/${ca}`,sourceMeta.bubblemaps),
-      tokenInspectSourceLink('GECKOTERMINAL',`https://www.geckoterminal.com/solana/tokens/${ca}`,sourceMeta.geckoTerminal)
-    ].join('');
-  }
-}
-
-let tokenInspectGeneration=0;
-async function renderTokenInspector(force=false){
-  const panel=$('#panel-dexscreener');
-  const input=$('#tokenInspectAddress');
-  const state=$('#tokenInspectState');
-  if (!panel || panel.hidden || panelVisibility['panel-dexscreener']!==true || !input || !state) return;
-  const address=normalizeTokenInspectAddress(input.value || cacheGet(TOKEN_INSPECT_ADDRESS_KEY) || '');
-  if (!address){
-    clearTokenInspector();
-    if (String(input.value||'').trim()){
-      state.textContent='ENTER A VALID SOLANA CONTRACT ADDRESS';
-      state.classList.add('err');
-    }
-    return;
-  }
-  input.value=address;
-  cacheSet(TOKEN_INSPECT_ADDRESS_KEY,address);
-  const generation=++tokenInspectGeneration;
-  state.hidden=false;
-  state.className='token-inspect-state';
-  state.textContent='INSPECTING TOKEN DATA…';
-  $('#tokenInspectResult').hidden=true;
-  try {
-    const response=await fetchWithTimeout(`${TRENCH_API_BASE}?address=${encodeURIComponent(address)}`,{cache:force?'no-store':'default'},25000);
-    const payload=await response.json().catch(()=>({}));
-    if (!response.ok) throw new Error(payload?.error||`HTTP ${response.status}`);
-    if (generation!==tokenInspectGeneration) return;
-    renderTokenInspectorResult(payload);
-  } catch(error){
-    if (generation!==tokenInspectGeneration) return;
-    console.warn('token inspection failed',error);
-    state.hidden=false;
-    state.className='token-inspect-state err';
-    state.textContent=String(error?.message||'TOKEN INSPECTION FAILED');
-    $('#tokenInspectResult').hidden=true;
-  }
 }
 
 function renderAssetChart(asset){
@@ -4865,14 +4346,6 @@ tradingViewPanelForm?.addEventListener('submit', event => {
   cacheSet(TRADINGVIEW_PANEL_SYMBOL_KEY,symbol);
   if (tradingViewPanelInput) tradingViewPanelInput.value=symbol;
   renderTradingViewPanel();
-});
-const tokenInspectForm=$('#tokenInspectForm');
-const tokenInspectInput=$('#tokenInspectAddress');
-const initialTokenInspectAddress=normalizeTokenInspectAddress(cacheGet(TOKEN_INSPECT_ADDRESS_KEY) || '');
-if (tokenInspectInput && initialTokenInspectAddress) tokenInspectInput.value=initialTokenInspectAddress;
-tokenInspectForm?.addEventListener('submit', event => {
-  event.preventDefault();
-  renderTokenInspector(true);
 });
 setupIndependentPanelFrames();
 renderPanelManager();

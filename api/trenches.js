@@ -36,7 +36,6 @@ const ONCHAIN_RPC_URL = SOLANA_RPC_URL || (HELIUS_API_KEY
 
 let runtimeCache = { updatedAt: 0, payload: null };
 const sourceCache = new Map();
-const manualTokenCache = new Map();
 // Best-effort history for warm Vercel instances. It is deliberately bounded:
 // serverless memory is not a database, but keeping recent snapshots prevents
 // a single noisy snapshot from being promoted to green during the same run.
@@ -1521,89 +1520,6 @@ function sourceHealth(requested, values, verifiedSelector) {
   return "Unverified";
 }
 
-async function buildManualTokenScan(address) {
-  const cached = manualTokenCache.get(address);
-  if (cached && Date.now() - cached.updatedAt < 90 * 1000) {
-    return { ...cached.payload, cached: true };
-  }
-
-  const scanFetchedAt = new Date().toISOString();
-  const [dexResult, rugResult, gecko, birdeye, goplus, onchain, bubbleResult] = await Promise.all([
-    settleJson(`https://api.dexscreener.com/tokens/v1/solana/${encodeURIComponent(address)}`),
-    settleJson(`https://api.rugcheck.xyz/v1/tokens/${encodeURIComponent(address)}/report`),
-    fetchGecko(address),
-    fetchBirdeye(address),
-    fetchGoplus(address),
-    fetchOnchain(address),
-    BUBBLEMAPS_API_KEY
-      ? settleJson(`https://api.bubblemaps.io/v0/tokens/metrics/solana/${encodeURIComponent(address)}`, {
-          timeout: 7000,
-          headers: { "X-ApiKey": BUBBLEMAPS_API_KEY }
-        })
-      : Promise.resolve({ ok: false, data: null, error: "API key missing" })
-  ]);
-
-  if (!dexResult.ok) throw new Error("DexScreener token data could not be loaded.");
-  const pairMap = selectPairs(Array.isArray(dexResult.data) ? dexResult.data : []);
-  const pair = pairMap.get(address);
-  if (!pair) throw new Error("No active Solana pair found for this contract address.");
-
-  if (onchain?.helius?.creator) {
-    onchain.helius.activity = await fetchHeliusActivity(address, onchain.helius.creator);
-  }
-
-  const external = {
-    birdeye,
-    goplus,
-    onchain,
-    gecko
-  };
-  const bubbleMetrics = bubbleResult.ok ? bubbleResult.data : null;
-  const sourceMeta = {
-    dexScreener: { requested: true, verified: true, status: "Active", fetchedAt: scanFetchedAt, pairAddress: pair.pairAddress || null },
-    rugCheck: { requested: true, verified: Boolean(rugResult.ok), status: rugResult.ok ? "Active" : "Unverified", fetchedAt: rugResult.ok ? scanFetchedAt : null },
-    geckoTerminal: { requested: true, verified: Boolean(gecko?.verified), status: gecko?.verified ? "Active" : "Unverified", fetchedAt: gecko?.fetchedAt || null },
-    birdeye: { requested: Boolean(BIRDEYE_API_KEY), verified: Boolean(birdeye?.ok), status: BIRDEYE_API_KEY ? (birdeye?.ok ? "Active" : "Unverified") : "Not configured", fetchedAt: birdeye?.fetchedAt || null },
-    bubblemaps: { requested: Boolean(BUBBLEMAPS_API_KEY), verified: Boolean(bubbleMetrics), status: BUBBLEMAPS_API_KEY ? (bubbleMetrics ? "Active" : "Unverified") : "Not configured", fetchedAt: bubbleMetrics ? scanFetchedAt : null },
-    goPlus: { requested: Boolean(GOPLUS_API_TOKEN), verified: Boolean(goplus?.ok), status: GOPLUS_API_TOKEN ? (goplus?.ok ? "Active" : "Unverified") : "Not configured", fetchedAt: goplus?.fetchedAt || null },
-    onchain: { requested: Boolean(ONCHAIN_RPC_URL), verified: Boolean(onchain?.ok), status: ONCHAIN_RPC_URL ? (onchain?.ok ? "Active" : "Unverified") : "Not configured", fetchedAt: onchain?.fetchedAt || null },
-    helius: { requested: Boolean(HELIUS_API_KEY), verified: Boolean(onchain?.helius?.verified || onchain?.helius?.activity?.verified), status: HELIUS_API_KEY ? (onchain?.helius?.verified || onchain?.helius?.activity?.verified ? "Active" : "Unverified") : "Not configured", fetchedAt: onchain?.helius?.activity?.fetchedAt || onchain?.fetchedAt || null }
-  };
-  const token = classifyPair(
-    pair,
-    rugResult.ok ? rugResult.data : null,
-    { address, symbol: pair.baseToken?.symbol || "", sources: ["manual-ca"] },
-    bubbleMetrics,
-    Boolean(BUBBLEMAPS_API_KEY),
-    external,
-    { history: historyFor(address), fetchedAt: scanFetchedAt, sourceMeta }
-  );
-  rememberSnapshots([token], scanFetchedAt);
-
-  const payload = {
-    mode: "manual-ca",
-    generatedAt: scanFetchedAt,
-    cached: false,
-    token,
-    sourceMeta,
-    providers: {
-      dexScreener: true,
-      rugCheck: true,
-      geckoTerminal: true,
-      birdeye: Boolean(BIRDEYE_API_KEY),
-      bubblemaps: Boolean(BUBBLEMAPS_API_KEY),
-      goPlus: Boolean(GOPLUS_API_TOKEN),
-      onchainRpc: Boolean(ONCHAIN_RPC_URL),
-      helius: Boolean(HELIUS_API_KEY)
-    },
-    warning: Object.values(sourceMeta).some((source) => source.requested && !source.verified)
-      ? "Some data sources are unverified; the score is provisional."
-      : ""
-  };
-  manualTokenCache.set(address, { updatedAt: Date.now(), payload });
-  return payload;
-}
-
 async function buildScan() {
   const scanFetchedAt = new Date().toISOString();
   const { candidates, warnings } = await discover();
@@ -1769,20 +1685,6 @@ export default async function handler(request, response) {
   if (request.method !== "GET") {
     response.setHeader("Allow", "GET");
     return response.status(405).json({ error: "Only GET is supported." });
-  }
-
-  const requestedAddress = String(request.query?.address || "").trim();
-  if (requestedAddress) {
-    if (!addressPattern.test(requestedAddress)) {
-      return response.status(400).json({ error: "Enter a valid Solana contract address." });
-    }
-    try {
-      const payload = await buildManualTokenScan(requestedAddress);
-      response.setHeader("Cache-Control", payload.cached ? "s-maxage=60, stale-while-revalidate=120" : "no-store");
-      return response.status(200).json(payload);
-    } catch (error) {
-      return response.status(503).json({ error: error?.message || "Token inspection is currently unavailable." });
-    }
   }
 
   const force = request.query?.refresh === "1";
