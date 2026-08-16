@@ -336,7 +336,11 @@
     outline:1px solid rgba(120,230,255,.72);
     outline-offset:3px;
     box-shadow:0 24px 60px rgba(0,0,0,.48),0 0 0 1px rgba(120,230,255,.24),inset 0 1px 0 rgba(255,255,255,.24) !important;
-    transition:none !important;
+    will-change:transform;
+    transition:transform .11s cubic-bezier(.22,.75,.25,1),box-shadow .16s ease,opacity .16s ease;
+  }
+  .panel.panel-settling {
+    transition:left .18s cubic-bezier(.22,.75,.25,1),top .18s cubic-bezier(.22,.75,.25,1),width .18s cubic-bezier(.22,.75,.25,1),height .18s cubic-bezier(.22,.75,.25,1);
   }
   .panel.panel-drop-target {
     outline:2px dashed var(--focus);
@@ -2448,7 +2452,11 @@ function setupPanelDragging(){
     document.body.classList.remove('panel-moving');
     if (changed){
       savePanelFrames();
-      applyPanelFrames();
+      visible.forEach(panelDef=>$('#'+panelDef.id)?.classList.add('panel-settling'));
+      requestAnimationFrame(()=>{
+        applyPanelFrames();
+        setTimeout(()=>visible.forEach(panelDef=>$('#'+panelDef.id)?.classList.remove('panel-settling')),220);
+      });
     } else if (!cancel){
       applyPanelFrames();
     }
