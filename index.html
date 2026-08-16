@@ -191,19 +191,6 @@
     flex-direction:column;
     min-height:0;
   }
-  .forecast-panel-head {
-    display:flex;
-    align-items:center;
-    min-height:38px;
-    padding:7px 10px;
-    border-bottom:1px solid rgba(255,255,255,.12);
-  }
-  .forecast-panel-title {
-    color: var(--text-bright);
-    font: 700 9px 'Space Grotesk', sans-serif;
-    letter-spacing: .16em;
-    text-transform: uppercase;
-  }
   .forecast-grid {
     flex:1 1 auto;
     min-height:0;
@@ -1411,7 +1398,6 @@
   html[data-theme="white"] .perf-overlay { background:rgba(230,235,238,.76); backdrop-filter:none; }
   html[data-theme="white"] .forecast-asset { background:#f7f9fa; border-color:rgba(22,38,48,.14); }
   html[data-theme="white"] .forecast-range { color:#24333c; }
-  html[data-theme="white"] .forecast-panel-head { border-color:rgba(22,38,48,.14); }
 
   /* ===== PHONE LAYOUT ===== */
   @media (max-width:700px) {
@@ -1606,9 +1592,6 @@
     <section class="panel" id="panel-forecast" aria-label="Crypto Forecast">
       <button class="panel-drag-handle" type="button" data-panel-drag-handle aria-label="Move Crypto Forecast panel" title="Drag to move panel"></button>
       <div class="panel-body">
-        <div class="forecast-panel-head">
-          <div class="forecast-panel-title">CRYPTO FORECAST</div>
-        </div>
         <div id="forecastGrid" class="forecast-grid" aria-live="polite">
           <div class="forecast-state">—</div>
         </div>
@@ -3006,7 +2989,7 @@ function renderAll(){
    normalized ranges and direction markers so it stays cheap to repaint.
    ============================================================ */
 const FORECAST_API = `${APP_API_ORIGIN}/api/forecast`;
-const FORECAST_CACHE_KEY = 'cc_forecast_v3';
+const FORECAST_CACHE_KEY = 'cc_forecast_v4';
 const FORECAST_REFRESH_MS = 60 * 60 * 1000;
 let forecastInFlight = false;
 

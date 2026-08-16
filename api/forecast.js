@@ -192,6 +192,14 @@ function horizonPriceBounds(spot, horizon) {
   return { min: spot * factors[0], max: spot * factors[1] };
 }
 
+function forecastSettings(horizon) {
+  return {
+    '1D': { tradingDays: 1, minWidth: 0.018, maxWidth: 0.075, noDataWidth: 0.045, targetCap: 0.04, signalScale: 0.05 },
+    '1M': { tradingDays: 21, minWidth: 0.055, maxWidth: 0.18, noDataWidth: 0.13, targetCap: 0.11, signalScale: 0.12 },
+    YE: { tradingDays: 100, minWidth: 0.10, maxWidth: 0.22, noDataWidth: 0.20, targetCap: 0.20, signalScale: 0.24 }
+  }[horizon] || { tradingDays: 21, minWidth: 0.055, maxWidth: 0.18, noDataWidth: 0.13, targetCap: 0.11, signalScale: 0.12 };
+}
+
 function parseLevels(event, spot, horizon) {
   const markets = Array.isArray(event?.markets) ? event.markets : [];
   const bounds = horizonPriceBounds(spot, horizon);
@@ -230,20 +238,25 @@ function rangeFromLevels(levels, spot, horizon, marketData) {
   const bounds = horizonPriceBounds(spot, horizon);
   if (!normalized.length || !bounds) return null;
   const points = normalized.map(level => ({ value: level.threshold, weight: level.probability }));
-  const low = weightedQuantile(points, 0.18);
-  const high = weightedQuantile(points, 0.82);
+  const low = weightedQuantile(points, 0.30);
+  const high = weightedQuantile(points, 0.70);
   if (!Number.isFinite(low) || !Number.isFinite(high)) return null;
+  const settings = forecastSettings(horizon);
   const volatility = Number.isFinite(marketData?.dailyVolatility) ? marketData.dailyVolatility : 0.025;
-  const paddingRatio = horizon === '1D'
-    ? Math.min(0.12, Math.max(0.004, volatility * 0.35))
-    : horizon === '1M'
-      ? Math.min(0.18, Math.max(0.012, volatility * 1.2))
-      : Math.min(0.90, Math.max(0.025, volatility * 2.8));
-  const padding = spot * paddingRatio;
+  const volatilityWidth = volatility * Math.sqrt(settings.tradingDays);
+  const polymarketSpread = normalized.length > 1
+    ? Math.abs(high - low) / spot
+    : 0.025;
+  const widthRatio = clamp(
+    polymarketSpread * 0.72 + volatilityWidth * 0.28,
+    settings.minWidth,
+    settings.maxWidth
+  );
   const polyMid = normalized.reduce((sum, level) => sum + level.threshold * level.probability, 0);
   return {
-    low: clamp(Math.min(spot, low) - padding, bounds.min, spot),
-    high: clamp(Math.max(spot, high) + padding, spot, bounds.max),
+    low: clamp(spot * (1 - widthRatio), bounds.min, spot),
+    high: clamp(spot * (1 + widthRatio), spot, bounds.max),
+    widthRatio,
     normalizedCount: normalized.length,
     polyMid: clamp(polyMid, bounds.min, bounds.max),
     coverage: 0.64
@@ -251,11 +264,19 @@ function rangeFromLevels(levels, spot, horizon, marketData) {
 }
 
 function fallbackRange(spot, horizon, marketData) {
+  const settings = forecastSettings(horizon);
   const volatility = Number.isFinite(marketData?.dailyVolatility) ? marketData.dailyVolatility : 0.035;
   if (!Number.isFinite(spot) || spot <= 0) return null;
-  const factor = horizon === '1D' ? 2 : horizon === '1M' ? Math.sqrt(21) * 1.5 : Math.sqrt(120) * 2;
-  const band = clamp(volatility * factor, horizon === '1D' ? 0.02 : horizon === '1M' ? 0.08 : 0.18, horizon === '1D' ? 0.12 : horizon === '1M' ? 0.30 : 1.5);
-  return { low: Math.max(0, spot * (1 - band)), high: spot * (1 + band), normalizedCount: 0, polyMid: null, coverage: null };
+  const volatilityWidth = volatility * Math.sqrt(settings.tradingDays);
+  const band = clamp(Math.max(settings.noDataWidth, volatilityWidth * 0.9), settings.minWidth, settings.maxWidth);
+  return {
+    low: Math.max(0, spot * (1 - band)),
+    high: spot * (1 + band),
+    widthRatio: band,
+    normalizedCount: 0,
+    polyMid: null,
+    coverage: null
+  };
 }
 
 async function loadMarketData(asset) {
@@ -455,14 +476,35 @@ function directionForBias(value, hasPolymarket) {
   return 'neutral';
 }
 
+function compactForecastRange(range, spot, horizon, bias) {
+  const bounds = horizonPriceBounds(spot, horizon);
+  const settings = forecastSettings(horizon);
+  if (!range || !bounds || !Number.isFinite(spot) || spot <= 0) return range;
+  const widthRatio = clamp(Number(range.widthRatio) || settings.noDataWidth, settings.minWidth, settings.maxWidth);
+  const targetShift = clamp((Number(bias) || 0) * settings.targetCap, -settings.targetCap, settings.targetCap);
+  const center = spot * (1 + targetShift);
+  const halfWidth = spot * widthRatio;
+  return {
+    ...range,
+    low: clamp(Math.min(spot, center - halfWidth), bounds.min, spot),
+    high: clamp(Math.max(spot, center + halfWidth), spot, bounds.max),
+    center
+  };
+}
+
 function forecastForAsset(symbol, marketData, eventMap, cycle, macro) {
   const asset = ASSETS[symbol];
   const result = { symbol, price: marketData.price, horizons: {} };
   for (const horizon of ['1D', '1M', 'YE']) {
+    const settings = forecastSettings(horizon);
     const levels = parseLevels(eventMap?.[horizon], marketData.price || 0, horizon);
     const range = rangeFromLevels(levels, marketData.price, horizon, marketData) || fallbackRange(marketData.price, horizon, marketData);
-    const polyBias = range?.polyMid && marketData.price ? clamp((range.polyMid - marketData.price) / (marketData.price * 0.16), -1, 1) : 0;
-    const cycleWeight = symbol === 'BTC' ? (horizon === 'YE' ? 0.20 : horizon === '1M' ? 0.12 : 0.03) : 0.05;
+    const polyBias = range?.polyMid && marketData.price
+      ? clamp((range.polyMid - marketData.price) / (marketData.price * settings.signalScale), -1, 1)
+      : 0;
+    const cycleWeight = symbol === 'BTC'
+      ? (horizon === 'YE' ? 0.20 : horizon === '1M' ? 0.12 : 0.03)
+      : (horizon === 'YE' ? 0.08 : horizon === '1M' ? 0.06 : 0.03);
     const cycleBias = cycle?.available ? cycle.bias * (symbol === 'BTC' ? 1 : 0.5) : 0;
     const marketBias = clamp((marketData.marketBias || 0) * 0.85 + (macro?.available ? macro.bias * 0.15 : 0), -1, 1);
     const weights = [
@@ -473,11 +515,12 @@ function forecastForAsset(symbol, marketData, eventMap, cycle, macro) {
     ];
     const totalWeight = weights.reduce((sum, item) => sum + item.weight, 0) || 1;
     const bias = weights.reduce((sum, item) => sum + item.value * item.weight, 0) / totalWeight;
+    const finalRange = compactForecastRange(range, marketData.price, horizon, bias);
     result.horizons[horizon] = {
-      low: range?.low ?? null,
-      high: range?.high ?? null,
+      low: finalRange?.low ?? null,
+      high: finalRange?.high ?? null,
       direction: directionForBias(bias, levels.length > 0),
-      dataSufficient: levels.length > 0,
+      dataSufficient: levels.length >= 2,
       levelCount: levels.length,
       bias: clamp(bias, -1, 1)
     };
