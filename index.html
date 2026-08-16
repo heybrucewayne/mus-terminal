@@ -24,7 +24,7 @@
     ];
     const storageKey = 'mus_last_background_v1';
     const themeStorageKey = 'mus_theme_v1';
-    const themes = ['liquid-glass', 'black'];
+    const themes = ['liquid-glass', 'white'];
     let stored = '';
     try { stored = localStorage.getItem(storageKey) || ''; } catch (error) {}
     let selected = backgrounds.includes(stored)
@@ -32,6 +32,7 @@
       : backgrounds[Math.floor(Math.random() * backgrounds.length)] || backgrounds[0];
     let storedTheme = '';
     try { storedTheme = localStorage.getItem(themeStorageKey) || ''; } catch (error) {}
+    if (storedTheme === 'black') storedTheme = 'white';
     let selectedTheme = themes.includes(storedTheme) ? storedTheme : 'liquid-glass';
 
     const applyBackground = path => {
@@ -40,7 +41,8 @@
       try { localStorage.setItem(storageKey, path); } catch (error) {}
     };
     const applyTheme = theme => {
-      selectedTheme = themes.includes(theme) ? theme : 'liquid-glass';
+      const normalizedTheme = theme === 'black' ? 'white' : theme;
+      selectedTheme = themes.includes(normalizedTheme) ? normalizedTheme : 'liquid-glass';
       document.documentElement.dataset.theme = selectedTheme;
       try { localStorage.setItem(themeStorageKey, selectedTheme); } catch (error) {}
     };
@@ -1160,92 +1162,114 @@
     box-shadow:inset 0 1px 0 rgba(255,255,255,.20), inset 0 -1px 0 rgba(255,255,255,.045) !important;
   }
 
-  /* ===== BLACK THEME ===== */
-  html[data-theme="black"] {
-    --bg:#000;
-    --bg2:#000;
-    --panel:#050505;
-    --panel-flat:#080808;
-    --glass:rgba(255,255,255,.045);
-    --glass-strong:#0b0b0b;
-    --border:rgba(255,255,255,.14);
-    --border-soft:rgba(255,255,255,.08);
-    --border-strong:rgba(255,255,255,.22);
-    --glass-highlight:rgba(255,255,255,.08);
-    --text:rgba(245,245,245,.92);
-    --text-bright:#fff;
-    --muted:rgba(220,220,220,.68);
-    --muted2:rgba(190,190,190,.52);
+  /* ===== WHITE THEME ===== */
+  html[data-theme="white"] {
+    --bg:#f2f4f6;
+    --bg2:#e9edf0;
+    --panel:#fff;
+    --panel-flat:#fff;
+    --glass:rgba(255,255,255,.82);
+    --glass-strong:#fff;
+    --border:rgba(22,38,48,.18);
+    --border-soft:rgba(22,38,48,.10);
+    --border-strong:rgba(22,38,48,.28);
+    --glass-highlight:rgba(255,255,255,.9);
+    --focus:#1677b8;
+    --green:#008c58;
+    --green-dim:#087044;
+    --red:#d52f4f;
+    --red-dim:#a4253e;
+    --yellow:#9b6a00;
+    --orange:#b45f00;
+    --text:#24333c;
+    --text-bright:#13232c;
+    --muted:rgba(36,51,60,.70);
+    --muted2:rgba(36,51,60,.54);
   }
-  html[data-theme="black"],
-  html[data-theme="black"] body { background:#000; }
-  html[data-theme="black"] body::before {
-    background:#000;
+  html[data-theme="white"],
+  html[data-theme="white"] body { background:#f2f4f6; }
+  html[data-theme="white"] body::before {
+    background:#f2f4f6;
     filter:none;
     opacity:1;
     animation:none;
   }
-  html[data-theme="black"] .panel {
-    background:#050505;
-    border-color:rgba(255,255,255,.14);
+  html[data-theme="white"] .panel {
+    background:#fff;
+    border-color:rgba(22,38,48,.18);
     -webkit-backdrop-filter:none;
     backdrop-filter:none;
-    box-shadow:0 14px 34px rgba(0,0,0,.62),inset 0 1px 0 rgba(255,255,255,.07);
-  }
-  html[data-theme="black"] .panel::before,
-  html[data-theme="black"] #panel-bubbles .panel-body,
-  html[data-theme="black"] #panel-table .panel-body,
-  html[data-theme="black"] #panel-trenches .panel-body,
-  html[data-theme="black"] #panel-tradingview .panel-body {
-    background:transparent !important;
-  }
-  html[data-theme="black"] .asset-menu,
-  html[data-theme="black"] .perf-modal {
-    background:#050505;
-    -webkit-backdrop-filter:none;
-    backdrop-filter:none;
-    box-shadow:0 24px 60px rgba(0,0,0,.72),inset 0 1px 0 rgba(255,255,255,.08);
-  }
-  html[data-theme="black"] .asset-menu-action,
-  html[data-theme="black"] .panel-manager-toggle,
-  html[data-theme="black"] .background-thumb,
-  html[data-theme="black"] .theme-choice {
-    background:#0d0d0d;
-    border-color:rgba(255,255,255,.14);
-  }
-  html[data-theme="black"] .asset-menu-action:hover,
-  html[data-theme="black"] .panel-manager-toggle:hover,
-  html[data-theme="black"] .theme-choice:hover {
-    background:#181818;
-    border-color:rgba(255,255,255,.28);
-  }
-  html[data-theme="black"] .panel-manager-toggle[aria-pressed="true"],
-  html[data-theme="black"] .theme-choice[aria-pressed="true"] {
-    background:#101f18;
-    border-color:rgba(0,255,136,.42);
-  }
-  html[data-theme="black"] #panel-table .px-search input,
-  html[data-theme="black"] #tradingviewPanelSymbol {
-    color:var(--text-bright);
-    background:#0c0c0c;
-    border-color:rgba(255,255,255,.18);
-  }
-  html[data-theme="black"] #panel-table .px-search input::placeholder,
-  html[data-theme="black"] #tradingviewPanelSymbol::placeholder { color:var(--muted2); }
-  html[data-theme="black"] table.ticker thead th,
-  html[data-theme="black"] table.trenches th {
-    color:rgba(255,255,255,.86);
+    box-shadow:0 14px 34px rgba(22,38,48,.12),inset 0 1px 0 rgba(255,255,255,.95);
     text-shadow:none;
   }
-  html[data-theme="black"] .tradingview-panel-chart,
-  html[data-theme="black"] .asset-menu-chart { background:#030303; }
-  html[data-theme="black"] .mobile-background-trigger {
-    background:#090909;
+  html[data-theme="white"] .panel::before,
+  html[data-theme="white"] #panel-bubbles .panel-body,
+  html[data-theme="white"] #panel-table .panel-body,
+  html[data-theme="white"] #panel-trenches .panel-body,
+  html[data-theme="white"] #panel-tradingview .panel-body {
+    background:transparent !important;
+  }
+  html[data-theme="white"] .asset-menu,
+  html[data-theme="white"] .perf-modal {
+    background:#fff;
+    border-color:rgba(22,38,48,.20);
     -webkit-backdrop-filter:none;
     backdrop-filter:none;
-    box-shadow:0 8px 22px rgba(0,0,0,.62),inset 0 1px 0 rgba(255,255,255,.08);
+    box-shadow:0 24px 60px rgba(22,38,48,.20),inset 0 1px 0 rgba(255,255,255,.95);
+    text-shadow:none;
   }
-  html[data-theme="black"] .perf-overlay { background:rgba(0,0,0,.82); backdrop-filter:none; }
+  html[data-theme="white"] .asset-menu-action,
+  html[data-theme="white"] .panel-manager-toggle,
+  html[data-theme="white"] .background-thumb,
+  html[data-theme="white"] .theme-choice {
+    color:var(--text-bright);
+    background:#f7f9fa;
+    border-color:rgba(22,38,48,.16);
+  }
+  html[data-theme="white"] .asset-menu-action:hover,
+  html[data-theme="white"] .panel-manager-toggle:hover,
+  html[data-theme="white"] .theme-choice:hover {
+    background:#eaf0f3;
+    border-color:rgba(22,38,48,.28);
+    color:var(--text-bright);
+  }
+  html[data-theme="white"] .panel-manager-toggle[aria-pressed="true"],
+  html[data-theme="white"] .theme-choice[aria-pressed="true"] {
+    background:#e7f7ef;
+    border-color:rgba(0,140,88,.45);
+  }
+  html[data-theme="white"] #panel-table .px-search input,
+  html[data-theme="white"] #tradingviewPanelSymbol {
+    color:var(--text-bright);
+    background:#f7f9fa;
+    border-color:rgba(22,38,48,.20);
+  }
+  html[data-theme="white"] #panel-table .px-search input::placeholder,
+  html[data-theme="white"] #tradingviewPanelSymbol::placeholder { color:var(--muted2); }
+  html[data-theme="white"] #panel-table table.ticker thead th,
+  html[data-theme="white"] #panel-trenches table.trenches th {
+    color:#22333d !important;
+    text-shadow:none !important;
+  }
+  html[data-theme="white"] #panel-table table.ticker tbody td,
+  html[data-theme="white"] #panel-table .sym-cell .base,
+  html[data-theme="white"] #panel-table .pricecell,
+  html[data-theme="white"] #panel-trenches table.trenches td {
+    color:#24333c;
+    text-shadow:none;
+  }
+  html[data-theme="white"] #panel-table .sym-cell .quote,
+  html[data-theme="white"] #panel-table .rank { color:rgba(36,51,60,.60); }
+  html[data-theme="white"] .tradingview-panel-chart,
+  html[data-theme="white"] .asset-menu-chart { background:#f1f4f5; }
+  html[data-theme="white"] .mobile-background-trigger {
+    color:var(--text-bright);
+    background:#fff;
+    -webkit-backdrop-filter:none;
+    backdrop-filter:none;
+    box-shadow:0 8px 22px rgba(22,38,48,.18),inset 0 1px 0 rgba(255,255,255,.95);
+  }
+  html[data-theme="white"] .perf-overlay { background:rgba(230,235,238,.76); backdrop-filter:none; }
 
   /* ===== PHONE LAYOUT ===== */
   @media (max-width:700px) {
@@ -3559,7 +3583,7 @@ function renderBackgroundPicker(){
 renderBackgroundPicker();
 
 function themeLabel(theme){
-  return theme === 'black' ? 'BLACK' : 'LIQUID GLASS';
+  return theme === 'white' ? 'WHITE' : 'LIQUID GLASS';
 }
 
 function syncThemePicker(){
