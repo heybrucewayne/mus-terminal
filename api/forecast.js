@@ -101,27 +101,37 @@ function chooseEvent(events, asset, horizon, now) {
   const scored = candidates.map(event => {
     const text = eventText(event);
     const end = eventEnd(event);
+    const daysToEnd = end === null ? null : (end - now) / DAY_MS;
+    const hasExactDay = new RegExp(`\\b${currentMonth}\\s+${day}\\b`).test(text);
+    const isShortHorizon = /today|tomorrow|daily|24\\s*h|24-hour|next day/.test(text);
+    const isCurrentMonth = text.includes(currentMonth);
+    const isMonthly = /month|monthly/.test(text) || isCurrentMonth;
+    const isYearly = /year|year-end|year end|before/.test(text) || text.includes(String(nextYear));
     let score = 0;
-    if (event?.closed === true || event?.active === false) score -= 1000;
-    if (end !== null && end < now - 2 * 60 * 60 * 1000) score -= 500;
+    if (event?.closed === true || event?.active === false || (daysToEnd !== null && daysToEnd <= 0)) return { event, score: -Infinity, end };
     if (horizon === 'YE') {
-      if (text.includes(String(year)) || text.includes(String(nextYear))) score += 180;
-      if (end !== null && new Date(end).getUTCFullYear() === nextYear) score += 180;
-      if (text.includes('year') || text.includes('before')) score += 40;
+      if (isYearly) score += 260;
+      if (end !== null && daysToEnd >= 45 && daysToEnd <= 430) score += 260 - Math.abs(daysToEnd - 150) * 0.45;
+      if (end !== null && daysToEnd < 45) score -= 240;
+      if (isShortHorizon || hasExactDay) score -= 220;
     } else if (horizon === '1M') {
-      if (text.includes(currentMonth)) score += 220;
-      if (end !== null && new Date(end).getUTCMonth() === target.getUTCMonth()) score += 120;
-      if (text.includes('month')) score += 30;
+      if (isCurrentMonth) score += 360;
+      else if (isMonthly) score += 220;
+      if (end !== null && isCurrentMonth && daysToEnd >= 0 && daysToEnd <= 45) score += 220;
+      if (end !== null && daysToEnd >= 10 && daysToEnd <= 75) score += 260 - Math.abs(daysToEnd - 30) * 1.5;
+      if (end !== null && daysToEnd < 7 && !isCurrentMonth) score -= 260;
+      if (isShortHorizon || hasExactDay) score -= 180;
     } else {
-      if (text.includes(currentMonth)) score += 80;
-      if (new RegExp(`\\b${currentMonth}\\s+${day}\\b`).test(text)) score += 240;
-      if (text.includes('today')) score += 170;
-      if (end !== null) score -= Math.min(100, Math.abs(end - now) / DAY_MS * 8);
+      if (hasExactDay || isShortHorizon) score += 420;
+      if (end !== null && daysToEnd >= 0 && daysToEnd <= 4) score += 260 - daysToEnd * 45;
+      if (end !== null && daysToEnd > 10) score -= Math.min(260, (daysToEnd - 10) * 8);
+      if (isMonthly || isYearly) score -= 180;
     }
     if (text.includes('price')) score += 20;
     return { event, score, end };
   }).sort((a, b) => b.score - a.score || (a.end || Infinity) - (b.end || Infinity));
-  return scored[0]?.event || null;
+  const best = scored[0];
+  return best && Number.isFinite(best.score) && best.score > -180 ? best.event : null;
 }
 
 async function hydrateEvent(event) {
@@ -385,8 +395,7 @@ async function loadFallbackSpot() {
   }]));
 }
 
-function extrema(points, type) {
-  const window = 90;
+function extrema(points, type, window = 90, minimumSeparationDays = 180) {
   const candidates = [];
   for (let index = window; index < points.length - window; index += 1) {
     const current = points[index][1];
@@ -399,10 +408,17 @@ function extrema(points, type) {
   const selected = [];
   candidates.forEach(candidate => {
     const last = selected.at(-1);
-    if (!last || candidate[0] - last[0] > 180 * DAY_MS) selected.push(candidate);
+    if (!last || candidate[0] - last[0] > minimumSeparationDays * DAY_MS) selected.push(candidate);
     else if (type === 'high' ? candidate[1] > last[1] : candidate[1] < last[1]) selected[selected.length - 1] = candidate;
   });
   return selected;
+}
+
+function majorCycleExtrema(points, type) {
+  // A 180-day neighborhood plus a 650-day separation keeps minor rallies and
+  // pullbacks out of the cycle model while retaining the 2015/2017, 2018/2021
+  // and 2022/2025-style macro pivots.
+  return extrema(points, type, 180, 650);
 }
 
 function cycleTimingFromPoints(rawPoints, now) {
@@ -410,8 +426,8 @@ function cycleTimingFromPoints(rawPoints, now) {
     .filter(point => Number.isFinite(point[0]) && Number.isFinite(point[1]) && point[1] > 0)
     .sort((a, b) => a[0] - b[0]);
   if (points.length < 600) return { available: false, reason: 'insufficient verified history' };
-  const highs = extrema(points, 'high');
-  const lows = extrema(points, 'low');
+  const highs = majorCycleExtrema(points, 'high');
+  const lows = majorCycleExtrema(points, 'low');
   const riseIntervals = [];
   lows.forEach(low => {
     const high = highs.find(candidate => candidate[0] > low[0]);
@@ -508,7 +524,7 @@ function forecastForAsset(symbol, marketData, eventMap, cycle, macro) {
     const cycleBias = cycle?.available ? cycle.bias * (symbol === 'BTC' ? 1 : 0.5) : 0;
     const marketBias = clamp((marketData.marketBias || 0) * 0.85 + (macro?.available ? macro.bias * 0.15 : 0), -1, 1);
     const weights = [
-      { value: polyBias, weight: levels.length ? 0.50 : 0 },
+      { value: polyBias, weight: levels.length >= 2 ? 0.50 : levels.length === 1 ? 0.25 : 0 },
       { value: marketBias, weight: 0.25 },
       { value: marketData.technicalBias || 0, weight: 0.10 },
       { value: cycleBias, weight: cycle?.available ? cycleWeight : 0 }
@@ -519,7 +535,7 @@ function forecastForAsset(symbol, marketData, eventMap, cycle, macro) {
     result.horizons[horizon] = {
       low: finalRange?.low ?? null,
       high: finalRange?.high ?? null,
-      direction: directionForBias(bias, levels.length > 0),
+      direction: directionForBias(bias, levels.length >= 2),
       dataSufficient: levels.length >= 2,
       levelCount: levels.length,
       bias: clamp(bias, -1, 1)
