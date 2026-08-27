@@ -2,6 +2,8 @@ const CACHE_MS = 10 * 60 * 1000;
 const DISCOVERY_LIMIT = 60;
 const DEX_BATCH_LIMIT = 30;
 const REPORT_LIMIT = 32;
+const MARKET_CAP_COVERAGE_FLOOR = 5_000_000;
+const MARKET_CAP_COVERAGE_SEATS = 8;
 const BUBBLEMAPS_LIMIT = 16;
 const BIRDEYE_LIMIT = 12;
 const GOPLUS_LIMIT = 16;
@@ -150,7 +152,10 @@ function selectPairs(rawPairs) {
 function marketBandScore(marketCap) {
   if (!marketCap) return 2;
   const log = Math.log10(Math.max(marketCap, 1));
-  return clamp(19 - Math.abs(log - 6) * 5.5, 2, 19);
+  // Small caps remain a preference, not a gate. The previous curve was so
+  // steep around $1M that healthy $5M-$20M markets often never reached the
+  // full report/security pass when the candidate pool was busy.
+  return clamp(10.5 - Math.abs(log - 6.1) * 2.3, 3.5, 10.5);
 }
 
 function preScore(pair) {
@@ -169,6 +174,45 @@ function preScore(pair) {
     + clamp(lpRatio * 80, 0, 10)
     + clamp(turnover * 6, 0, 10)
     + clamp(tx1 / 20, 0, 8);
+}
+
+function hasLargeMarketActivity(pair) {
+  const marketCap = number(pair?.marketCap) || number(pair?.fdv);
+  if (marketCap < MARKET_CAP_COVERAGE_FLOOR) return false;
+
+  const liquidity = number(pair?.liquidity?.usd);
+  const volume1h = number(pair?.volume?.h1);
+  const volume24h = number(pair?.volume?.h24);
+  // This is only a coverage check for the expensive security pass. It does
+  // not approve a token and does not create a maximum market-cap boundary.
+  return liquidity >= Math.max(75_000, marketCap * 0.0025)
+    && volume24h >= Math.max(150_000, marketCap * 0.03)
+    && volume1h >= Math.max(20_000, marketCap * 0.003);
+}
+
+function selectReportCandidates(items) {
+  const ranked = items
+    .slice()
+    .sort((a, b) => preScore(b.pair) - preScore(a.pair));
+  const coverage = ranked.filter((item) => hasLargeMarketActivity(item.pair));
+  const generalLimit = Math.max(0, REPORT_LIMIT - Math.min(MARKET_CAP_COVERAGE_SEATS, coverage.length));
+  const selected = [
+    ...coverage.slice(0, MARKET_CAP_COVERAGE_SEATS),
+    ...ranked.filter((item) => !hasLargeMarketActivity(item.pair)).slice(0, generalLimit)
+  ];
+
+  // If the general pool is smaller than its target, fill the remaining slots
+  // from the complete ranking without duplicating an address.
+  const seen = new Set(selected.map((item) => item.discovery?.address || item.pair?.baseToken?.address));
+  for (const item of ranked) {
+    if (selected.length >= REPORT_LIMIT) break;
+    const key = item.discovery?.address || item.pair?.baseToken?.address;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    selected.push(item);
+  }
+
+  return selected.sort((a, b) => preScore(b.pair) - preScore(a.pair));
 }
 
 async function mapLimit(items, limit, worker) {
@@ -1534,11 +1578,9 @@ async function buildScan() {
   if (successfulDexResults.length !== dexResults.length) warnings.push("One DexScreener batch request failed.");
 
   const pairMap = selectPairs(successfulDexResults.flatMap((result) => Array.isArray(result.data) ? result.data : []));
-  const ranked = candidates
+  const ranked = selectReportCandidates(candidates
     .map((discovery) => ({ discovery, pair: pairMap.get(discovery.address) }))
-    .filter((item) => item.pair)
-    .sort((a, b) => preScore(b.pair) - preScore(a.pair))
-    .slice(0, REPORT_LIMIT);
+    .filter((item) => item.pair));
 
   if (!ranked.length) throw new Error("No active Solana pair was found among the scanned tokens.");
 
@@ -1643,13 +1685,20 @@ async function buildScan() {
     .filter((token) => token.decision !== "red")
     .sort((a, b) => b.score - a.score);
   const eliminated = classified.filter((token) => token.decision === "red");
+  const marketCapBands = {
+    under1m: classified.filter((token) => token.marketCap > 0 && token.marketCap < 1_000_000).length,
+    oneTo5m: classified.filter((token) => token.marketCap >= 1_000_000 && token.marketCap < MARKET_CAP_COVERAGE_FLOOR).length,
+    fiveTo10m: classified.filter((token) => token.marketCap >= MARKET_CAP_COVERAGE_FLOOR && token.marketCap < 10_000_000).length,
+    over10m: classified.filter((token) => token.marketCap >= 10_000_000).length
+  };
 
   return {
-    modelVersion: 6,
+    modelVersion: 7,
     generatedAt,
     autoRefreshMs: 16 * 60 * 1000,
     candidateCount: candidates.length,
     scannedCount: classified.length,
+    marketCapBands,
     tokens: visible,
     history: {
       trackedTokens: tokenHistory.size,
@@ -1708,4 +1757,15 @@ export default async function handler(request, response) {
   }
 }
 
-export { classifyPair, preScore, qualityScore, securitySnapshot, volumeSnapshot, historyAssessment, deriveReasonCodes };
+export {
+  classifyPair,
+  preScore,
+  qualityScore,
+  securitySnapshot,
+  volumeSnapshot,
+  historyAssessment,
+  deriveReasonCodes,
+  marketBandScore,
+  hasLargeMarketActivity,
+  selectReportCandidates
+};
