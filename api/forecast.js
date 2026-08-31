@@ -187,27 +187,52 @@ function parseThreshold(market) {
 
 function parseDirection(market, threshold, spot) {
   const text = `${market?.groupItemTitle || ''} ${market?.question || ''}`.toLowerCase();
-  if (text.includes('↑') || /reach|above|over|hit/.test(text)) return 'up';
-  if (text.includes('↓') || /below|under|dip|drop|fall/.test(text)) return 'down';
+  if (text.includes('↓') || /below|under|dip|drop|fall|lower/.test(text)) return 'down';
+  if (text.includes('↑') || /above|over|rise|higher|exceed/.test(text)) return 'up';
   return threshold >= spot ? 'up' : 'down';
 }
 
 function horizonPriceBounds(spot, horizon) {
   if (!Number.isFinite(spot) || spot <= 0) return null;
   const factors = {
-    '1D': [0.65, 1.45],
-    '1M': [0.70, 1.35],
-    YE: [0.08, 8]
-  }[horizon] || [0.08, 8];
+    '1D': [0.88, 1.16],
+    '1M': [0.62, 1.55],
+    YE: [0.35, 2.25]
+  }[horizon] || [0.35, 2.25];
   return { min: spot * factors[0], max: spot * factors[1] };
 }
 
-function forecastSettings(horizon) {
+function calendarDaysToEnd(horizon, now = Date.now()) {
+  const date = new Date(now);
+  let end;
+  if (horizon === '1D') return 1;
+  if (horizon === '1M') {
+    end = Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1);
+  } else if (horizon === 'YE') {
+    end = Date.UTC(date.getUTCFullYear() + 1, 0, 1);
+  } else {
+    return 21;
+  }
+  return Math.max(1, Math.ceil((end - now) / DAY_MS));
+}
+
+function forecastSettings(horizon, now = Date.now()) {
+  const profiles = {
+    '1D': { referenceDays: 1, minWidth: 0.012, maxWidth: 0.045, noDataWidth: 0.028, targetCap: 0.025, signalScale: 0.035 },
+    '1M': { referenceDays: 21, minWidth: 0.025, maxWidth: 0.10, noDataWidth: 0.065, targetCap: 0.06, signalScale: 0.08 },
+    YE: { referenceDays: 100, minWidth: 0.04, maxWidth: 0.15, noDataWidth: 0.10, targetCap: 0.09, signalScale: 0.16 }
+  };
+  const profile = profiles[horizon] || profiles['1M'];
+  const tradingDays = calendarDaysToEnd(horizon, now);
+  const scale = Math.sqrt(tradingDays / profile.referenceDays);
   return {
-    '1D': { tradingDays: 1, minWidth: 0.018, maxWidth: 0.075, noDataWidth: 0.045, targetCap: 0.04, signalScale: 0.05 },
-    '1M': { tradingDays: 21, minWidth: 0.055, maxWidth: 0.18, noDataWidth: 0.13, targetCap: 0.11, signalScale: 0.12 },
-    YE: { tradingDays: 100, minWidth: 0.10, maxWidth: 0.22, noDataWidth: 0.20, targetCap: 0.20, signalScale: 0.24 }
-  }[horizon] || { tradingDays: 21, minWidth: 0.055, maxWidth: 0.18, noDataWidth: 0.13, targetCap: 0.11, signalScale: 0.12 };
+    tradingDays,
+    minWidth: clamp(profile.minWidth * scale, profile.minWidth * 0.60, profile.maxWidth * 0.65),
+    maxWidth: clamp(profile.maxWidth * scale, profile.maxWidth * 0.65, profile.maxWidth * 1.15),
+    noDataWidth: clamp(profile.noDataWidth * scale, profile.minWidth, profile.maxWidth),
+    targetCap: clamp(profile.targetCap * scale, 0.015, profile.targetCap * 1.25),
+    signalScale: profile.signalScale
+  };
 }
 
 function parseLevels(event, spot, horizon) {
@@ -221,7 +246,14 @@ function parseLevels(event, spot, horizon) {
     const threshold = parseThreshold(market);
     if (yes === null || threshold === null || yes <= 0 || threshold <= 0) return null;
     if (bounds && (threshold < bounds.min || threshold > bounds.max)) return null;
-    return { threshold, yes: clamp(yes, 0, 1), direction: parseDirection(market, threshold, spot) };
+    const text = `${market?.groupItemTitle || ''} ${market?.question || ''}`.toLowerCase();
+    const cumulativeHint = /\b(above|below|over|under|at least|at most|more than|less than|higher than|lower than|exceed)\b/.test(text);
+    return {
+      threshold,
+      yes: clamp(yes, 0, 1),
+      direction: parseDirection(market, threshold, spot),
+      cumulativeHint
+    };
   }).filter(Boolean);
 }
 
@@ -237,48 +269,118 @@ function weightedQuantile(points, quantile) {
   return points[points.length - 1].value;
 }
 
-function normalizeLevels(levels) {
-  const total = levels.reduce((sum, level) => sum + level.yes, 0);
-  if (!total) return [];
-  return levels.map(level => ({ ...level, probability: level.yes / total }));
+function isotonicProbabilities(levels, direction) {
+  const sorted = levels
+    .slice()
+    .sort((a, b) => a.threshold - b.threshold);
+  const blocks = sorted.map(level => ({ sum: clamp(level.yes, 0, 1), count: 1 }));
+  const increasing = direction === 'down';
+  for (let index = 1; index < blocks.length; index += 1) {
+    const previous = blocks[index - 1];
+    const current = blocks[index];
+    const violates = increasing
+      ? previous.sum / previous.count > current.sum / current.count
+      : previous.sum / previous.count < current.sum / current.count;
+    if (!violates) continue;
+    blocks.splice(index - 1, 2, {
+      sum: previous.sum + current.sum,
+      count: previous.count + current.count
+    });
+    index = Math.max(0, index - 2);
+  }
+  const probabilities = [];
+  blocks.forEach(block => {
+    probabilities.push(...Array(block.count).fill(clamp(block.sum / block.count, 0, 1)));
+  });
+  return sorted.map((level, index) => ({ ...level, probability: probabilities[index] }));
 }
 
-function rangeFromLevels(levels, spot, horizon, marketData) {
-  const normalized = normalizeLevels(levels);
+function cumulativeDistribution(levels, spot, direction) {
+  const sorted = isotonicProbabilities(levels, direction);
+  if (!sorted.length) return [];
+  const points = [];
+  if (direction === 'up') {
+    const first = sorted[0].probability;
+    if (first < 1) points.push({ value: spot, weight: 1 - first });
+    for (let index = 0; index < sorted.length - 1; index += 1) {
+      const weight = sorted[index].probability - sorted[index + 1].probability;
+      if (weight > 0) points.push({ value: sorted[index].threshold, weight });
+    }
+    points.push({ value: sorted.at(-1).threshold, weight: sorted.at(-1).probability });
+  } else {
+    points.push({ value: sorted[0].threshold, weight: sorted[0].probability });
+    for (let index = 1; index < sorted.length; index += 1) {
+      const weight = sorted[index].probability - sorted[index - 1].probability;
+      if (weight > 0) points.push({ value: sorted[index].threshold, weight });
+    }
+    const spotWeight = 1 - sorted.at(-1).probability;
+    if (spotWeight > 0) points.push({ value: spot, weight: spotWeight });
+  }
+  return points.filter(point => Number.isFinite(point.value) && point.weight > 0);
+}
+
+function impliedDistribution(levels, spot) {
+  const valid = levels.filter(level => Number.isFinite(level.threshold) && level.threshold > 0 && Number.isFinite(level.yes));
+  if (!valid.length) return [];
+  const cumulative = valid.some(level => level.cumulativeHint);
+  if (!cumulative) {
+    const total = valid.reduce((sum, level) => sum + level.yes, 0);
+    return total > 0
+      ? valid.map(level => ({ value: level.threshold, weight: level.yes / total }))
+      : [];
+  }
+
+  const up = valid.filter(level => level.direction === 'up' && level.threshold >= spot);
+  const down = valid.filter(level => level.direction === 'down' && level.threshold < spot);
+  const upPoints = cumulativeDistribution(up, spot, 'up');
+  const downPoints = cumulativeDistribution(down, spot, 'down');
+  if (!upPoints.length) return downPoints;
+  if (!downPoints.length) return upPoints;
+  // Upward and downward threshold books are two views of the same future
+  // distribution. Blend them equally, then normalize the combined masses.
+  const blended = [
+    ...upPoints.map(point => ({ ...point, weight: point.weight * 0.5 })),
+    ...downPoints.map(point => ({ ...point, weight: point.weight * 0.5 }))
+  ];
+  const total = blended.reduce((sum, point) => sum + point.weight, 0);
+  return total > 0 ? blended.map(point => ({ ...point, weight: point.weight / total })) : [];
+}
+
+function rangeFromLevels(levels, spot, horizon, marketData, now = Date.now()) {
+  const distribution = impliedDistribution(levels, spot);
   const bounds = horizonPriceBounds(spot, horizon);
-  if (!normalized.length || !bounds) return null;
-  const points = normalized.map(level => ({ value: level.threshold, weight: level.probability }));
-  const low = weightedQuantile(points, 0.30);
-  const high = weightedQuantile(points, 0.70);
+  if (!distribution.length || !bounds) return null;
+  const low = weightedQuantile(distribution, 0.25);
+  const high = weightedQuantile(distribution, 0.75);
+  const medianPrice = weightedQuantile(distribution, 0.50);
   if (!Number.isFinite(low) || !Number.isFinite(high)) return null;
-  const settings = forecastSettings(horizon);
+  const settings = forecastSettings(horizon, now);
   const volatility = Number.isFinite(marketData?.dailyVolatility) ? marketData.dailyVolatility : 0.025;
-  const volatilityWidth = volatility * Math.sqrt(settings.tradingDays);
-  const polymarketSpread = normalized.length > 1
-    ? Math.abs(high - low) / spot
-    : 0.025;
-  const widthRatio = clamp(
-    polymarketSpread * 0.72 + volatilityWidth * 0.28,
-    settings.minWidth,
-    settings.maxWidth
+  const volatilityHalfLogWidth = volatility * Math.sqrt(settings.tradingDays) * 0.67;
+  const polymarketHalfLogWidth = Math.abs(Math.log(Math.max(high, 1) / Math.max(low, 1))) * 0.5;
+  const halfLogWidth = clamp(
+    polymarketHalfLogWidth * 0.65 + volatilityHalfLogWidth * 0.35,
+    Math.log1p(settings.minWidth),
+    Math.log1p(settings.maxWidth)
   );
-  const polyMid = normalized.reduce((sum, level) => sum + level.threshold * level.probability, 0);
+  const widthRatio = Math.expm1(halfLogWidth);
+  const polyMid = Number.isFinite(medianPrice) ? medianPrice : spot;
   return {
-    low: clamp(spot * (1 - widthRatio), bounds.min, spot),
-    high: clamp(spot * (1 + widthRatio), spot, bounds.max),
+    low: clamp(spot * Math.exp(-halfLogWidth), bounds.min, bounds.max),
+    high: clamp(spot * Math.exp(halfLogWidth), bounds.min, bounds.max),
     widthRatio,
-    normalizedCount: normalized.length,
+    normalizedCount: distribution.length,
     polyMid: clamp(polyMid, bounds.min, bounds.max),
-    coverage: 0.64
+    coverage: 0.50
   };
 }
 
-function fallbackRange(spot, horizon, marketData) {
-  const settings = forecastSettings(horizon);
+function fallbackRange(spot, horizon, marketData, now = Date.now()) {
+  const settings = forecastSettings(horizon, now);
   const volatility = Number.isFinite(marketData?.dailyVolatility) ? marketData.dailyVolatility : 0.035;
   if (!Number.isFinite(spot) || spot <= 0) return null;
-  const volatilityWidth = volatility * Math.sqrt(settings.tradingDays);
-  const band = clamp(Math.max(settings.noDataWidth, volatilityWidth * 0.9), settings.minWidth, settings.maxWidth);
+  const volatilityWidth = volatility * Math.sqrt(settings.tradingDays) * 0.67;
+  const band = clamp(Math.max(settings.noDataWidth, Math.expm1(volatilityWidth)), settings.minWidth, settings.maxWidth);
   return {
     low: Math.max(0, spot * (1 - band)),
     high: spot * (1 + band),
@@ -289,16 +391,37 @@ function fallbackRange(spot, horizon, marketData) {
   };
 }
 
+function ewmaVolatility(returns, lambda = 0.94) {
+  const values = returns.filter(Number.isFinite);
+  if (!values.length) return null;
+  let variance = values.slice(0, Math.min(10, values.length)).reduce((sum, value) => sum + value ** 2, 0)
+    / Math.min(10, values.length);
+  for (const value of values) variance = lambda * variance + (1 - lambda) * value ** 2;
+  return Math.sqrt(Math.max(variance, 0));
+}
+
+function blendedVolatility(returns) {
+  const values = returns.filter(Number.isFinite);
+  if (!values.length) return null;
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  const sample = values.length > 1
+    ? Math.sqrt(values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (values.length - 1))
+    : null;
+  const ewma = ewmaVolatility(values);
+  const available = [sample, ewma].filter(Number.isFinite);
+  if (!available.length) return null;
+  // EWMA reacts to the current volatility regime while the sample estimate
+  // prevents a single recent shock from making the interval unstable.
+  return clamp((Number.isFinite(ewma) ? ewma * 0.65 : 0) + (Number.isFinite(sample) ? sample * 0.35 : 0), 0.008, 0.12);
+}
+
 async function loadMarketData(asset) {
   const tickerResult = await safeJson(`${BINANCE_BASE}/api/v3/ticker/24hr?symbol=${asset.symbol}`);
   const ticker = tickerResult.ok ? tickerResult.value : null;
   const klinesResult = await safeJson(`${BINANCE_BASE}/api/v3/klines?symbol=${asset.symbol}&interval=1d&limit=90`, 10000);
   const closes = Array.isArray(klinesResult.value) ? klinesResult.value.map(row => number(row?.[4])).filter(value => value > 0) : [];
   const returns = closes.slice(1).map((close, index) => Math.log(close / closes[index])).filter(Number.isFinite);
-  const meanReturn = returns.length ? returns.reduce((sum, value) => sum + value, 0) / returns.length : 0;
-  const dailyVolatility = returns.length > 1
-    ? Math.sqrt(returns.reduce((sum, value) => sum + (value - meanReturn) ** 2, 0) / (returns.length - 1))
-    : null;
+  const dailyVolatility = blendedVolatility(returns);
   const recentAverage = closes.length ? closes.slice(-20).reduce((sum, value) => sum + value, 0) / Math.min(20, closes.length) : null;
   const price = number(ticker?.lastPrice) || closes.at(-1) || null;
   const momentum = number(ticker?.priceChangePercent) || 0;
@@ -492,18 +615,18 @@ function directionForBias(value, hasPolymarket) {
   return 'neutral';
 }
 
-function compactForecastRange(range, spot, horizon, bias) {
+function compactForecastRange(range, spot, horizon, bias, now = Date.now()) {
   const bounds = horizonPriceBounds(spot, horizon);
-  const settings = forecastSettings(horizon);
+  const settings = forecastSettings(horizon, now);
   if (!range || !bounds || !Number.isFinite(spot) || spot <= 0) return range;
   const widthRatio = clamp(Number(range.widthRatio) || settings.noDataWidth, settings.minWidth, settings.maxWidth);
   const targetShift = clamp((Number(bias) || 0) * settings.targetCap, -settings.targetCap, settings.targetCap);
-  const center = spot * (1 + targetShift);
-  const halfWidth = spot * widthRatio;
+  const center = spot * Math.exp(targetShift);
+  const halfLogWidth = Math.log1p(widthRatio);
   return {
     ...range,
-    low: clamp(Math.min(spot, center - halfWidth), bounds.min, spot),
-    high: clamp(Math.max(spot, center + halfWidth), spot, bounds.max),
+    low: clamp(center * Math.exp(-halfLogWidth), bounds.min, bounds.max),
+    high: clamp(center * Math.exp(halfLogWidth), bounds.min, bounds.max),
     center
   };
 }
@@ -511,12 +634,14 @@ function compactForecastRange(range, spot, horizon, bias) {
 function forecastForAsset(symbol, marketData, eventMap, cycle, macro) {
   const asset = ASSETS[symbol];
   const result = { symbol, price: marketData.price, horizons: {} };
+  const now = Date.now();
   for (const horizon of ['1D', '1M', 'YE']) {
-    const settings = forecastSettings(horizon);
+    const settings = forecastSettings(horizon, now);
     const levels = parseLevels(eventMap?.[horizon], marketData.price || 0, horizon);
-    const range = rangeFromLevels(levels, marketData.price, horizon, marketData) || fallbackRange(marketData.price, horizon, marketData);
+    const range = rangeFromLevels(levels, marketData.price, horizon, marketData, now)
+      || fallbackRange(marketData.price, horizon, marketData, now);
     const polyBias = range?.polyMid && marketData.price
-      ? clamp((range.polyMid - marketData.price) / (marketData.price * settings.signalScale), -1, 1)
+      ? clamp(Math.log(range.polyMid / marketData.price) / settings.signalScale, -1, 1)
       : 0;
     const cycleWeight = symbol === 'BTC'
       ? (horizon === 'YE' ? 0.20 : horizon === '1M' ? 0.12 : 0.03)
@@ -531,7 +656,7 @@ function forecastForAsset(symbol, marketData, eventMap, cycle, macro) {
     ];
     const totalWeight = weights.reduce((sum, item) => sum + item.weight, 0) || 1;
     const bias = weights.reduce((sum, item) => sum + item.value * item.weight, 0) / totalWeight;
-    const finalRange = compactForecastRange(range, marketData.price, horizon, bias);
+    const finalRange = compactForecastRange(range, marketData.price, horizon, bias, now);
     result.horizons[horizon] = {
       low: finalRange?.low ?? null,
       high: finalRange?.high ?? null,
@@ -596,3 +721,16 @@ export default async function handler(request, response) {
     return response.status(503).json({ error: 'Crypto forecast is temporarily unavailable' });
   }
 }
+
+export {
+  horizonPriceBounds,
+  forecastSettings,
+  parseLevels,
+  impliedDistribution,
+  rangeFromLevels,
+  fallbackRange,
+  ewmaVolatility,
+  blendedVolatility,
+  compactForecastRange,
+  forecastForAsset
+};
