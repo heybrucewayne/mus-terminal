@@ -1,0 +1,3420 @@
+/* ============================================================
+   MUS TERMINAL — vanilla JS
+   ============================================================ */
+const $ = (s, r=document) => r.querySelector(s);
+window.MusSessionStarted = Date.now();
+const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[char]));
+const finiteValue = (value, fallback=null) => { if (value===null || value===undefined || value==='') return fallback; const number=Number(value); return Number.isFinite(number) ? number : fallback; };
+const fmtNum = (n, d=2) => Number(n).toLocaleString('en-US',{minimumFractionDigits:d, maximumFractionDigits:d});
+function smartPrice(p){
+  p = +p;
+  if (p >= 1000) return fmtNum(p, 2);
+  if (p >= 1)    return fmtNum(p, 3);
+  if (p >= 0.01) return fmtNum(p, 4);
+  return fmtNum(p, 8);
+}
+function compact(n){
+  n = +n;
+  if (n >= 1e9) return (n/1e9).toFixed(2)+'B';
+  if (n >= 1e6) return (n/1e6).toFixed(2)+'M';
+  if (n >= 1e3) return (n/1e3).toFixed(2)+'K';
+  return n.toFixed(0);
+}
+const cacheGet = k => { try { return JSON.parse(localStorage.getItem(k)); } catch(e){ return null; } };
+const cacheSet = (k,v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} };
+const APP_API_ORIGIN = location.protocol === 'file:' ? 'https://mus-terminal.vercel.app' : '';
+async function fetchWithTimeout(url,options={},timeoutMs=12000){
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),timeoutMs);
+  try { return await fetch(url,{...options,signal:controller.signal}); }
+  finally { clearTimeout(timer); }
+}
+
+/* ============================================================
+   RESIZABLE PANEL LAYOUT
+   ============================================================ */
+const PANEL_LAYOUT_KEY = 'mus_panel_layout_v1';
+function setupPanelResizers(){
+  const grid=$('.grid');
+  const handles={
+    'columns-top':$('#resize-columns-top'),
+    'columns-bottom':$('#resize-columns-bottom'),
+    'rows-left':$('#resize-rows-left'),
+    'rows-right':$('#resize-rows-right')
+  };
+  if (!grid || Object.values(handles).some(handle=>!handle)) return;
+
+  const GAP=12;
+  const stored=cacheGet(PANEL_LAYOUT_KEY);
+  const state={
+    columns:Number(stored?.columns),
+    rows:Number(stored?.rows),
+    dragAxis:null,
+    pointerId:null,
+    activeHandle:null,
+    resizeFrame:0
+  };
+  const clamp=(value,min,max)=>Math.min(max,Math.max(min,value));
+  const desktop=()=>matchMedia('(min-width:901px)').matches;
+  const defaults=()=>({ columns:grid.clientWidth<=1380?.53:.61, rows:.54 });
+  const validRatio=value=>isFinite(value) && value>0 && value<1;
+  if (!validRatio(state.columns)) state.columns=defaults().columns;
+  if (!validRatio(state.rows)) state.rows=defaults().rows;
+
+  function bounds(rect){
+    const compact=rect.width<=1380;
+    const minFrameWidth=280;
+    const minFrameHeight=190;
+    const preferredLeft=compact?320:340;
+    const preferredRight=compact?500:360;
+    const minLeft=Math.min(preferredLeft,Math.max(minFrameWidth,rect.width-GAP-minFrameWidth));
+    const minRight=Math.min(preferredRight,Math.max(minFrameWidth,rect.width-GAP-minLeft));
+    const minTop=Math.min(220,Math.max(minFrameHeight,rect.height-GAP-minFrameHeight));
+    const minBottom=Math.min(220,Math.max(minFrameHeight,rect.height-GAP-minTop));
+    return {
+      minLeft,
+      minRight,
+      minTop,
+      minBottom
+    };
+  }
+  function applyLayout(){
+    if (!desktop()) return;
+    const rect=grid.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const limit=bounds(rect);
+    const maxLeft=Math.max(limit.minLeft,rect.width-GAP-limit.minRight);
+    const maxTop=Math.max(limit.minTop,rect.height-GAP-limit.minBottom);
+    const left=clamp(rect.width*state.columns,limit.minLeft,maxLeft);
+    const top=clamp(rect.height*state.rows,limit.minTop,maxTop);
+    state.columns=left/rect.width;
+    state.rows=top/rect.height;
+    grid.style.setProperty('--bubble-width',`${left.toFixed(2)}px`);
+    grid.style.setProperty('--prices-height',`${top.toFixed(2)}px`);
+  }
+  function saveLayout(){ cacheSet(PANEL_LAYOUT_KEY,{columns:state.columns,rows:state.rows}); }
+  function resetLayout(){
+    const next=defaults();
+    state.columns=next.columns;
+    state.rows=next.rows;
+    applyLayout();
+    applyBalancedPanelFrames(state.columns,state.rows);
+    saveLayout();
+  }
+
+  function panelPair(axis){
+    if (axis==='columns-top' && isDefaultThreePanelLayout()){
+      const first=activePanelFrames['panel-bubbles'];
+      const second=activePanelFrames['panel-table'];
+      const lowerPanel=visiblePanelDefs().find(panel=>panel.id!=='panel-bubbles' && panel.id!=='panel-table');
+      const secondFrames=['panel-table',lowerPanel?.id].map(id=>activePanelFrames[id]).filter(Boolean);
+      if (first && second && secondFrames.length===2){
+        return {mode:'right-column',firstId:'panel-bubbles',secondId:'panel-table',first,second,secondIds:['panel-table',lowerPanel.id],secondFrames};
+      }
+    }
+    const pairs={
+      'columns-top':['panel-bubbles','panel-table'],
+      'columns-bottom':visiblePanelDefs().length===4
+        ? visiblePanelDefs().slice(2,4).map(panel=>panel.id)
+        : ['panel-trenches','panel-tradingview'],
+      'rows-left':visiblePanelDefs().length===4
+        ? [visiblePanelDefs()[0]?.id,visiblePanelDefs()[2]?.id]
+        : ['panel-bubbles','panel-trenches'],
+      'rows-right':visiblePanelDefs().length===4
+        ? [visiblePanelDefs()[1]?.id,visiblePanelDefs()[3]?.id]
+        : isDefaultThreePanelLayout()
+        ? ['panel-table',defaultThreeLowerPanelId()]
+        : ['panel-table','panel-tradingview']
+    };
+    const ids=pairs[axis];
+    if (!ids || !panelVisibility[ids[0]] || !panelVisibility[ids[1]]) return null;
+    const first=activePanelFrames[ids[0]];
+    const second=activePanelFrames[ids[1]];
+    if (!first || !second) return null;
+    const horizontal=axis.startsWith('columns');
+    const overlap=horizontal
+      ? Math.min(first.y+first.h,second.y+second.h)-Math.max(first.y,second.y)
+      : Math.min(first.x+first.w,second.x+second.w)-Math.max(first.x,second.x);
+    if (overlap<.08) return null;
+    const visible=visiblePanelDefs();
+    const linkedPairs=axis.startsWith('columns') && visible.length===4
+      ? [[visible[0]?.id,visible[1]?.id],[visible[2]?.id,visible[3]?.id]]
+        .map(([firstId,secondId])=>({
+          firstId,
+          secondId,
+          first:activePanelFrames[firstId],
+          second:activePanelFrames[secondId]
+        }))
+        .filter(pair=>pair.first && pair.second)
+      : null;
+    return {firstId:ids[0],secondId:ids[1],first,second,linkedPairs};
+  }
+
+  function resizePairAt(axis,point,rect){
+    const pair=panelPair(axis);
+    if (!pair || !rect?.width || !rect?.height) return false;
+    const previousFrames=Object.fromEntries(Object.entries(activePanelFrames).map(([id,frame])=>[id,{...frame}]));
+    const horizontal=axis.startsWith('columns');
+    const scale=horizontal?rect.width:rect.height;
+    const minSize=horizontal?280:190;
+    const gap=12/scale;
+    if (pair.mode==='right-column'){
+      const firstStart=pair.first.x*rect.width;
+      const rightEdge=Math.min(...pair.secondFrames.map(frame=>frame.x+frame.w))*rect.width;
+      const low=firstStart+minSize+6;
+      const high=rightEdge-minSize-6;
+      const boundary=clamp(point,Math.min(low,high),Math.max(low,high));
+      const ratio=boundary/rect.width;
+      const firstNext={...pair.first,w:Math.max(.1,ratio-gap/2-pair.first.x)};
+      activePanelFrames[pair.firstId]=firstNext;
+      pair.secondIds.forEach(id=>{
+        const frame=activePanelFrames[id];
+        const nextStart=ratio+gap/2;
+        activePanelFrames[id]={...frame,x:nextStart,w:Math.max(.1,(frame.x+frame.w)-nextStart)};
+      });
+      if (panelFramesOverlap(visiblePanelDefs())){
+        activePanelFrames=previousFrames;
+        return false;
+      }
+      applyPanelFrames();
+      return true;
+    }
+    if (horizontal && pair.linkedPairs?.length){
+      const low=Math.max(...pair.linkedPairs.map(linkedPair=>linkedPair.first.x*scale+minSize+6));
+      const high=Math.min(...pair.linkedPairs.map(linkedPair=>(linkedPair.second.x+linkedPair.second.w)*scale-minSize-6));
+      if (low>high) return false;
+      const boundary=clamp(point,low,high);
+      const ratio=boundary/scale;
+      const firstEdge=ratio-gap/2;
+      const secondEdge=ratio+gap/2;
+      pair.linkedPairs.forEach(linkedPair=>{
+        const firstNext={...linkedPair.first,w:Math.max(.1,firstEdge-linkedPair.first.x)};
+        const secondNext={...linkedPair.second,x:secondEdge,w:Math.max(.1,(linkedPair.second.x+linkedPair.second.w)-secondEdge)};
+        activePanelFrames[linkedPair.firstId]=firstNext;
+        activePanelFrames[linkedPair.secondId]=secondNext;
+      });
+      if (panelFramesOverlap(visiblePanelDefs())){
+        activePanelFrames=previousFrames;
+        return false;
+      }
+      applyPanelFrames();
+      return true;
+    }
+    const firstStart=(horizontal?pair.first.x:pair.first.y)*scale;
+    const secondEnd=(horizontal
+      ? pair.second.x+pair.second.w
+      : pair.second.y+pair.second.h)*scale;
+    const low=firstStart+minSize+6;
+    const high=secondEnd-minSize-6;
+    const boundary=clamp(point,Math.min(low,high),Math.max(low,high));
+    const ratio=boundary/scale;
+    const firstEdge=ratio-gap/2;
+    const secondEdge=ratio+gap/2;
+    const firstNext={...pair.first};
+    const secondNext={...pair.second};
+    if (horizontal){
+      firstNext.w=Math.max(.1,firstEdge-firstNext.x);
+      secondNext.x=secondEdge;
+      secondNext.w=Math.max(.1,(pair.second.x+pair.second.w)-secondEdge);
+    } else {
+      firstNext.h=Math.max(.1,firstEdge-firstNext.y);
+      secondNext.y=secondEdge;
+      secondNext.h=Math.max(.1,(pair.second.y+pair.second.h)-secondEdge);
+    }
+    activePanelFrames[pair.firstId]=firstNext;
+    activePanelFrames[pair.secondId]=secondNext;
+    if (panelFramesOverlap(visiblePanelDefs())){
+      activePanelFrames=previousFrames;
+      return false;
+    }
+    applyPanelFrames();
+    return true;
+  }
+
+  function beginDrag(axis,event){
+    if (!desktop() || event.button!==0 || !panelPair(axis)) return;
+    event.preventDefault();
+    state.dragAxis=axis;
+    state.pointerId=event.pointerId;
+    const handle=handles[axis];
+    state.activeHandle=handle;
+    handle.classList.add('active');
+    handle.setPointerCapture?.(event.pointerId);
+    document.body.classList.add('panel-resizing');
+  }
+  function moveDrag(event){
+    if (!state.dragAxis || event.pointerId!==state.pointerId) return;
+    const rect=grid.getBoundingClientRect();
+    const horizontal=state.dragAxis.startsWith('columns');
+    resizePairAt(state.dragAxis,horizontal?event.clientX-rect.left:event.clientY-rect.top,rect);
+  }
+  function endDrag(event){
+    if (!state.dragAxis || event.pointerId!==state.pointerId) return;
+    const handle=state.activeHandle;
+    handle.classList.remove('active');
+    if (handle.hasPointerCapture?.(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+    state.dragAxis=null;
+    state.pointerId=null;
+    state.activeHandle=null;
+    document.body.classList.remove('panel-resizing');
+    savePanelFrames();
+    saveLayout();
+  }
+  function keyboardResize(axis,event){
+    const horizontal=axis.startsWith('columns');
+    const relevant=horizontal ? ['ArrowLeft','ArrowRight'] : ['ArrowUp','ArrowDown'];
+    if (!relevant.includes(event.key)){
+      if (event.key==='Home' || event.key==='Enter'){
+        event.preventDefault();
+        resetLayout();
+      }
+      return;
+    }
+    event.preventDefault();
+    const pair=panelPair(axis);
+    if (!pair) return;
+    const rect=grid.getBoundingClientRect();
+    const step=event.shiftKey?60:24;
+    const positive=event.key==='ArrowRight' || event.key==='ArrowDown';
+    const boundary=(horizontal
+      ? ((pair.first.x+pair.first.w+pair.second.x)/2)*rect.width
+      : ((pair.first.y+pair.first.h+pair.second.y)/2)*rect.height) + (positive?step:-step);
+    resizePairAt(axis,boundary,rect);
+    savePanelFrames();
+    saveLayout();
+  }
+
+  Object.entries(handles).forEach(([axis,handle])=>{
+    handle.title='Drag to resize this side · double-click to reset';
+    handle.addEventListener('pointerdown',event=>beginDrag(axis,event));
+    handle.addEventListener('pointermove',moveDrag);
+    handle.addEventListener('pointerup',endDrag);
+    handle.addEventListener('pointercancel',endDrag);
+    handle.addEventListener('dblclick',resetLayout);
+    handle.addEventListener('keydown',event=>keyboardResize(axis,event));
+  });
+  window.addEventListener('resize',()=>{
+    cancelAnimationFrame(state.resizeFrame);
+    state.resizeFrame=requestAnimationFrame(applyLayout);
+  });
+  requestAnimationFrame(applyLayout);
+}
+
+/* ============================================================
+   PANEL VISIBILITY + LAYOUT
+   ============================================================ */
+const PANEL_VISIBILITY_KEY = 'mus_panel_visibility_v1';
+const MAX_VISIBLE_PANELS = 4;
+const PANEL_DEFS = [
+  { id:'panel-bubbles', label:'BUBBLES', defaultVisible:true },
+  { id:'panel-table', label:'MARKET', defaultVisible:true },
+  { id:'panel-trenches', label:'SOL MEME TRENCHES', defaultVisible:true },
+  { id:'panel-forecast', label:'CRYPTO FORECAST', defaultVisible:true },
+  { id:'panel-tradingview', label:'TRADINGVIEW', defaultVisible:false }
+];
+const storedPanelVisibility = cacheGet(PANEL_VISIBILITY_KEY);
+let panelVisibility = Object.fromEntries(PANEL_DEFS.map(panel => [
+  panel.id,
+  typeof storedPanelVisibility?.[panel.id] === 'boolean' ? storedPanelVisibility[panel.id] : panel.defaultVisible
+]));
+if (Object.values(panelVisibility).filter(Boolean).length>MAX_VISIBLE_PANELS){
+  [...PANEL_DEFS].reverse().forEach(panel=>{
+    if (Object.values(panelVisibility).filter(Boolean).length<=MAX_VISIBLE_PANELS) return;
+    if (panel.id==='panel-bubbles' || panel.id==='panel-table' || panel.id==='panel-trenches') return;
+    panelVisibility[panel.id]=false;
+  });
+}
+cacheSet(PANEL_VISIBILITY_KEY,panelVisibility);
+
+const PANEL_FRAMES_KEY = 'mus_panel_frames_v1';
+const storedPanelFrames = cacheGet(PANEL_FRAMES_KEY);
+let panelFrameStore = storedPanelFrames && typeof storedPanelFrames === 'object' && !Array.isArray(storedPanelFrames)
+  ? storedPanelFrames
+  : {};
+const validPanelIds = new Set(PANEL_DEFS.map(panel=>panel.id));
+panelFrameStore = Object.fromEntries(Object.entries(panelFrameStore).filter(([signature,frames])=>{
+  const ids=String(signature).split('|').filter(Boolean);
+  return ids.length>0
+    && ids.length<=PANEL_DEFS.length
+    && ids.every(id=>validPanelIds.has(id))
+    && frames && typeof frames==='object' && !Array.isArray(frames);
+}));
+cacheSet(PANEL_FRAMES_KEY,panelFrameStore);
+let activePanelFrameSignature = '';
+let activePanelFrames = {};
+let panelFrameApplying = false;
+let panelFrameObserver = null;
+let panelFrameResizeFrame = 0;
+let panelMoveState = null;
+
+function panelFrameSignature(visible){
+  return visible.map(panel => panel.id).join('|');
+}
+
+function clampPanelFrame(frame, fallback={x:0,y:0,w:1,h:1}, minimum={w:.18,h:.18}){
+  const number=(value,backup)=>Number.isFinite(Number(value)) ? Number(value) : backup;
+  const minW=Math.max(.1,Math.min(.8,number(minimum?.w,.18)));
+  const minH=Math.max(.1,Math.min(.8,number(minimum?.h,.18)));
+  const w=Math.max(minW,Math.min(1,number(frame?.w,fallback.w)));
+  const h=Math.max(minH,Math.min(1,number(frame?.h,fallback.h)));
+  return {
+    x:Math.max(0,Math.min(1-w,number(frame?.x,fallback.x))),
+    y:Math.max(0,Math.min(1-h,number(frame?.y,fallback.y))),
+    w,
+    h
+  };
+}
+
+function defaultPanelFrames(visible){
+  const grid=$('.grid');
+  const rect=grid?.getBoundingClientRect?.() || {width:1,height:1};
+  const gapX=Math.min(.08,12/Math.max(rect.width,1));
+  const gapY=Math.min(.08,12/Math.max(rect.height,1));
+  const layout=cacheGet(PANEL_LAYOUT_KEY);
+  const columns=Number.isFinite(Number(layout?.columns)) ? Math.max(.36,Math.min(.72,Number(layout.columns))) : .61;
+  const rows=Number.isFinite(Number(layout?.rows)) ? Math.max(.34,Math.min(.72,Number(layout.rows))) : .54;
+  const frames={};
+  const ids=new Set(visible.map(panel => panel.id));
+  const set=(id,frame)=>{ if (ids.has(id)) frames[id]=clampPanelFrame(frame); };
+
+  const lowerPanel=visible.find(panel=>panel.id!=='panel-bubbles' && panel.id!=='panel-table');
+  if (visible.length===3 && ids.has('panel-bubbles') && ids.has('panel-table') && lowerPanel){
+    const rightX=Math.min(.74,columns+gapX);
+    const rightY=Math.min(.74,rows+gapY);
+    set('panel-bubbles',{x:0,y:0,w:columns,h:1});
+    set('panel-table',{x:rightX,y:0,w:1-rightX,h:rows});
+    set(lowerPanel.id,{x:rightX,y:rightY,w:1-rightX,h:1-rightY});
+    return frames;
+  }
+
+  const halfW=(1-gapX)/2;
+  const halfH=(1-gapY)/2;
+  const quadSlots=[
+    {x:0,y:0,w:halfW,h:halfH},
+    {x:halfW+gapX,y:0,w:halfW,h:halfH},
+    {x:0,y:halfH+gapY,w:halfW,h:halfH},
+    {x:halfW+gapX,y:halfH+gapY,w:halfW,h:halfH}
+  ];
+  if (visible.length===2){
+    visible.forEach((panel,index)=>set(panel.id,{x:index ? halfW+gapX : 0,y:0,w:halfW,h:1}));
+    return frames;
+  }
+  if (visible.length===4){
+    visible.forEach((panel,index)=>set(panel.id,quadSlots[index]));
+    return frames;
+  }
+  if (visible.length===3){
+    visible.forEach((panel,index)=>set(panel.id,quadSlots[index]));
+    return frames;
+  }
+  if (visible.length===1) set(visible[0].id,{x:0,y:0,w:1,h:1});
+  return frames;
+}
+
+function normalizeAnchoredPanelFrames(visible){
+  const ids=new Set(visible.map(panel=>panel.id));
+  let changed=false;
+  const anchorBottom=id=>{
+    const frame=activePanelFrames[id];
+    if (!frame) return;
+    const nextHeight=Math.max(.1,1-frame.y);
+    if (Math.abs(frame.h-nextHeight)>.001){
+      frame.h=nextHeight;
+      changed=true;
+    }
+  };
+  if (isDefaultThreePanelLayout()){
+    const bubbles=activePanelFrames['panel-bubbles'];
+    const lowerPanel=visible.find(panel=>panel.id!=='panel-bubbles' && panel.id!=='panel-table');
+    if (bubbles && (Math.abs(bubbles.y)>.001 || Math.abs(bubbles.h-1)>.001)){
+      bubbles.y=0;
+      bubbles.h=1;
+      changed=true;
+    }
+    if (lowerPanel) anchorBottom(lowerPanel.id);
+  }
+  if (ids.has('panel-trenches') && ids.has('panel-tradingview')){
+    anchorBottom('panel-trenches');
+    anchorBottom('panel-tradingview');
+  }
+  return changed;
+}
+
+function panelFramesOverlap(visible){
+  for (let i=0;i<visible.length;i++){
+    const a=activePanelFrames[visible[i].id];
+    if (!a) continue;
+    for (let j=i+1;j<visible.length;j++){
+      const b=activePanelFrames[visible[j].id];
+      if (!b) continue;
+      const overlapX=Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x);
+      const overlapY=Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y);
+      if (overlapX>.001 && overlapY>.001) return true;
+    }
+  }
+  return false;
+}
+
+function panelFramesHaveSafeSpacing(visible){
+  const grid=$('.grid');
+  const rect=grid?.getBoundingClientRect?.();
+  if (!rect?.width || !rect?.height) return true;
+  const gapX=Math.min(.08,12/rect.width);
+  const gapY=Math.min(.08,12/rect.height);
+  for (let i=0;i<visible.length;i++){
+    const first=activePanelFrames[visible[i].id];
+    if (!first) continue;
+    for (let j=i+1;j<visible.length;j++){
+      const second=activePanelFrames[visible[j].id];
+      if (!second) continue;
+      const verticalOverlap=Math.min(first.y+first.h,second.y+second.h)-Math.max(first.y,second.y);
+      const horizontalOverlap=Math.min(first.x+first.w,second.x+second.w)-Math.max(first.x,second.x);
+      const horizontalGap=second.x>=first.x
+        ? second.x-(first.x+first.w)
+        : first.x-(second.x+second.w);
+      const verticalGap=second.y>=first.y
+        ? second.y-(first.y+first.h)
+        : first.y-(second.y+second.h);
+      if (verticalOverlap>0 && horizontalGap<gapX-.001) return false;
+      if (horizontalOverlap>0 && verticalGap<gapY-.001) return false;
+    }
+  }
+  return true;
+}
+
+function panelFrameCoverage(visible){
+  const frames=visible.map(panel=>activePanelFrames[panel.id]).filter(Boolean);
+  if (frames.length!==visible.length) return 0;
+  const xs=[0,1],ys=[0,1];
+  frames.forEach(frame=>{
+    xs.push(frame.x,frame.x+frame.w);
+    ys.push(frame.y,frame.y+frame.h);
+  });
+  xs.sort((a,b)=>a-b); ys.sort((a,b)=>a-b);
+  let covered=0;
+  for (let x=0;x<xs.length-1;x++){
+    for (let y=0;y<ys.length-1;y++){
+      const midX=(xs[x]+xs[x+1])/2;
+      const midY=(ys[y]+ys[y+1])/2;
+      if (frames.some(frame=>midX>=frame.x && midX<=frame.x+frame.w && midY>=frame.y && midY<=frame.y+frame.h)){
+        covered+=(xs[x+1]-xs[x])*(ys[y+1]-ys[y]);
+      }
+    }
+  }
+  return covered;
+}
+
+function panelFramesNeedRepair(visible){
+  return panelFramesOverlap(visible)
+    || !panelFramesHaveSafeSpacing(visible)
+    || panelFrameCoverage(visible)<.92;
+}
+
+function restoreDefaultPanelFrames(visible){
+  const defaults=defaultPanelFrames(visible);
+  visible.forEach(panel=>{
+    if (defaults[panel.id]) activePanelFrames[panel.id]=defaults[panel.id];
+  });
+  normalizeAnchoredPanelFrames(visible);
+}
+
+function savePanelFrames(){
+  if (!activePanelFrameSignature) return;
+  panelFrameStore[activePanelFrameSignature]=activePanelFrames;
+  cacheSet(PANEL_FRAMES_KEY,panelFrameStore);
+}
+
+function clearPanelFrameStyles(){
+  PANEL_DEFS.forEach(panel=>{
+    const element=$('#'+panel.id);
+    if (!element) return;
+    ['position','left','top','width','height','margin'].forEach(property=>element.style.removeProperty(property));
+  });
+}
+
+function isDefaultThreePanelLayout(){
+  const visible=new Set(visiblePanelDefs().map(panel=>panel.id));
+  return visible.size===3
+    && visible.has('panel-bubbles')
+    && visible.has('panel-table');
+}
+
+function defaultThreeLowerPanelId(){
+  return visiblePanelDefs().find(panel=>panel.id!=='panel-bubbles' && panel.id!=='panel-table')?.id || null;
+}
+
+function panelFramePairForResize(axis){
+  const visible=visiblePanelDefs();
+  const pairs={
+    'columns-top':['panel-bubbles','panel-table'],
+    'columns-bottom':visible.length===4
+      ? visible.slice(2,4).map(panel=>panel.id)
+      : ['panel-trenches','panel-tradingview'],
+    'rows-left':visible.length===4
+      ? [visible[0]?.id,visible[2]?.id]
+      : ['panel-bubbles','panel-trenches'],
+    'rows-right':visible.length===4
+      ? [visible[1]?.id,visible[3]?.id]
+      : isDefaultThreePanelLayout()
+      ? ['panel-table',defaultThreeLowerPanelId()]
+      : ['panel-table','panel-tradingview']
+  };
+  if (axis==='columns-top' && isDefaultThreePanelLayout()){
+    const first=activePanelFrames['panel-bubbles'];
+    const second=activePanelFrames['panel-table'];
+    const lowerPanel=visiblePanelDefs().find(panel=>panel.id!=='panel-bubbles' && panel.id!=='panel-table');
+    const secondFrames=['panel-table',lowerPanel?.id].map(id=>activePanelFrames[id]).filter(Boolean);
+    if (first && second && secondFrames.length===2){
+      return {mode:'right-column',first,second,group:secondFrames};
+    }
+  }
+  const ids=pairs[axis];
+  if (!ids || !panelVisibility[ids[0]] || !panelVisibility[ids[1]]) return null;
+  const first=activePanelFrames[ids[0]];
+  const second=activePanelFrames[ids[1]];
+  if (!first || !second) return null;
+  const horizontal=axis.startsWith('columns');
+  const overlap=horizontal
+    ? Math.min(first.y+first.h,second.y+second.h)-Math.max(first.y,second.y)
+    : Math.min(first.x+first.w,second.x+second.w)-Math.max(first.x,second.x);
+  if (overlap<.08) return null;
+  return {first,second};
+}
+
+function positionPanelResizers(){
+  const grid=$('.grid');
+  const rect=grid?.getBoundingClientRect?.();
+  const specs=[
+    ['columns-top','resize-columns-top'],
+    ['columns-bottom','resize-columns-bottom'],
+    ['rows-left','resize-rows-left'],
+    ['rows-right','resize-rows-right']
+  ];
+  specs.forEach(([axis,id])=>{
+    const handle=$('#'+id);
+    const pair=panelFramePairForResize(axis);
+    if (!handle || !rect?.width || !rect?.height || !matchMedia('(min-width:901px)').matches || !pair){
+      if (handle){
+        handle.hidden=true;
+        handle.style.display='none';
+        ['left','right','top','bottom','width','height'].forEach(property=>handle.style.removeProperty(property));
+      }
+      return;
+    }
+    const horizontal=axis.startsWith('columns');
+    if (horizontal){
+      const group=pair.group || [pair.second];
+      const groupStart=Math.min(...group.map(frame=>frame.x));
+      const boundary=(pair.first.x+pair.first.w+groupStart)/2;
+      const top=pair.mode==='right-column'
+        ? Math.min(pair.first.y,...group.map(frame=>frame.y))
+        : Math.max(pair.first.y,pair.second.y);
+      const bottom=pair.mode==='right-column'
+        ? Math.max(pair.first.y+pair.first.h,...group.map(frame=>frame.y+frame.h))
+        : Math.min(pair.first.y+pair.first.h,pair.second.y+pair.second.h);
+      handle.style.left=`${boundary*100}%`;
+      handle.style.right='auto';
+      handle.style.top=`${top*100}%`;
+      handle.style.bottom='auto';
+      handle.style.width='12px';
+      handle.style.height=`${Math.max(8,(bottom-top)*100)}%`;
+      handle.setAttribute('aria-valuenow',String(Math.round(boundary*100)));
+    } else {
+      const boundary=(pair.first.y+pair.first.h+pair.second.y)/2;
+      const left=Math.max(pair.first.x,pair.second.x);
+      const right=Math.min(pair.first.x+pair.first.w,pair.second.x+pair.second.w);
+      handle.style.left=`${left*100}%`;
+      handle.style.right='auto';
+      handle.style.top=`${boundary*100}%`;
+      handle.style.bottom='auto';
+      handle.style.width=`${Math.max(8,(right-left)*100)}%`;
+      handle.style.height='12px';
+      handle.setAttribute('aria-valuenow',String(Math.round(boundary*100)));
+    }
+    handle.hidden=false;
+    handle.style.display='block';
+  });
+}
+
+function applyPanelFrames(){
+  const grid=$('.grid');
+  if (!grid) return;
+  if (!matchMedia('(min-width:901px)').matches){
+    grid.classList.remove('panel-freeform');
+    clearPanelFrameStyles();
+    positionPanelResizers();
+    return;
+  }
+  const rect=grid.getBoundingClientRect();
+  if (!rect.width || !rect.height){
+    requestAnimationFrame(applyPanelFrames);
+    return;
+  }
+  grid.classList.add('panel-freeform');
+  panelFrameApplying=true;
+  const minFrameW=Math.min(.46,280/rect.width);
+  const minFrameH=Math.min(.46,190/rect.height);
+  let changed=false;
+  PANEL_DEFS.forEach(panel=>{
+    const element=$('#'+panel.id);
+    const frame=activePanelFrames[panel.id];
+    if (!element || element.hidden || !frame) return;
+    const safeFrame=clampPanelFrame(frame,{x:0,y:0,w:1,h:1},{w:minFrameW,h:minFrameH});
+    if (['x','y','w','h'].some(key=>Math.abs((frame[key]||0)-safeFrame[key])>.001)){
+      activePanelFrames[panel.id]=safeFrame;
+      changed=true;
+    }
+    element.style.position='absolute';
+    element.style.left=`${safeFrame.x*100}%`;
+    element.style.top=`${safeFrame.y*100}%`;
+    element.style.width=`${safeFrame.w*100}%`;
+    element.style.height=`${safeFrame.h*100}%`;
+    element.style.margin='0';
+  });
+  positionPanelResizers();
+  panelFrameApplying=false;
+  if (changed) savePanelFrames();
+}
+
+function syncPanelFramesForLayout(visible){
+  const signature=panelFrameSignature(visible);
+  if (signature!==activePanelFrameSignature){
+    activePanelFrameSignature=signature;
+    const defaults=defaultPanelFrames(visible);
+    const saved=panelFrameStore[signature] && typeof panelFrameStore[signature]==='object' ? panelFrameStore[signature] : {};
+    activePanelFrames={};
+    visible.forEach(panel=>{
+      activePanelFrames[panel.id]=clampPanelFrame(saved[panel.id],defaults[panel.id] || {x:0,y:0,w:1,h:1});
+    });
+    normalizeAnchoredPanelFrames(visible);
+    if (panelFramesNeedRepair(visible)) restoreDefaultPanelFrames(visible);
+    savePanelFrames();
+  }
+  applyPanelFrames();
+}
+
+function setupIndependentPanelFrames(){
+  const grid=$('.grid');
+  if (!grid) return;
+  if (typeof ResizeObserver==='function'){
+    panelFrameObserver=new ResizeObserver(entries=>{
+      if (panelFrameApplying || panelMoveState || !activePanelFrameSignature || !matchMedia('(min-width:901px)').matches || !grid.classList.contains('panel-freeform')) return;
+      const gridRect=grid.getBoundingClientRect();
+      if (!gridRect.width || !gridRect.height) return;
+      let changed=false;
+      entries.forEach(entry=>{
+        const id=entry.target.id;
+        if (!panelVisibility[id] || entry.target.hidden) return;
+        const rect=entry.target.getBoundingClientRect();
+        const next=clampPanelFrame({
+          x:(rect.left-gridRect.left)/gridRect.width,
+          y:(rect.top-gridRect.top)/gridRect.height,
+          w:rect.width/gridRect.width,
+          h:rect.height/gridRect.height
+        },activePanelFrames[id]);
+        const previous=activePanelFrames[id];
+        if (!previous || ['x','y','w','h'].some(key=>Math.abs(previous[key]-next[key])>.001)){
+          activePanelFrames[id]=next;
+          changed=true;
+        }
+      });
+      if (changed){
+        const visible=visiblePanelDefs();
+        if (visible.length>1 && panelFramesNeedRepair(visible)) restoreDefaultPanelFrames(visible);
+        savePanelFrames();
+        applyPanelFrames();
+      }
+    });
+    PANEL_DEFS.forEach(panel=>{
+      const element=$('#'+panel.id);
+      if (element) panelFrameObserver.observe(element);
+    });
+  }
+  window.addEventListener('resize',()=>{
+    cancelAnimationFrame(panelFrameResizeFrame);
+    panelFrameResizeFrame=requestAnimationFrame(()=>{
+      panelFrameResizeFrame=0;
+      applyPanelFrames();
+    });
+  });
+}
+
+function setupPanelDragging(){
+  const grid=$('.grid');
+  const handles=[...document.querySelectorAll('[data-panel-drag-handle]')];
+  if (!grid || !handles.length) return;
+
+  const copyFrames=()=>Object.fromEntries(Object.entries(activePanelFrames).map(([id,frame])=>[id,{...frame}]));
+  const panelAtPoint=(x,y,currentId)=>{
+    const element=document.elementFromPoint(x,y)?.closest?.('.panel');
+    return element && element.id!==currentId && panelVisibility[element.id]===true ? element : null;
+  };
+  const setDropTarget=(state,target)=>{
+    if (state.targetPanel===target) return;
+    state.targetPanel?.classList.remove('panel-drop-target');
+    state.targetPanel=target || null;
+    state.targetPanel?.classList.add('panel-drop-target');
+  };
+  const animateMove=state=>{
+    if (panelMoveState!==state) return;
+    state.currentX+=(state.targetX-state.currentX)*.24;
+    state.currentY+=(state.targetY-state.currentY)*.24;
+    state.panel.style.left=`${(state.frame.x+state.currentX/state.gridRect.width)*100}%`;
+    state.panel.style.top=`${(state.frame.y+state.currentY/state.gridRect.height)*100}%`;
+    if (Math.abs(state.targetX-state.currentX)>.25 || Math.abs(state.targetY-state.currentY)>.25){
+      state.dragFrame=requestAnimationFrame(()=>animateMove(state));
+    } else {
+      state.currentX=state.targetX;
+      state.currentY=state.targetY;
+      state.panel.style.left=`${(state.frame.x+state.currentX/state.gridRect.width)*100}%`;
+      state.panel.style.top=`${(state.frame.y+state.currentY/state.gridRect.height)*100}%`;
+      state.dragFrame=0;
+    }
+  };
+  const clearMoveStyles=state=>{
+    const panel=state?.panel;
+    if (!panel) return;
+    if (state.dragFrame) cancelAnimationFrame(state.dragFrame);
+    state.dragFrame=0;
+    state.targetPanel?.classList.remove('panel-drop-target');
+    state.placeholder?.remove();
+    panel.classList.remove('panel-dragging');
+    panel.style.removeProperty('transform');
+    panel.style.removeProperty('left');
+    panel.style.removeProperty('top');
+    panel.style.removeProperty('pointer-events');
+    panel.style.removeProperty('z-index');
+  };
+  const finishMove=(event,cancel=false)=>{
+    const state=panelMoveState;
+    if (!state || (event?.pointerId!=null && event.pointerId!==state.pointerId)) return;
+    const panel=state.panel;
+    const visible=visiblePanelDefs();
+    let changed=false;
+    if (!cancel && matchMedia('(min-width:901px)').matches){
+      setDropTarget(state,panelAtPoint(event.clientX,event.clientY,panel.id));
+      const target=state.targetPanel;
+      if (target && activePanelFrames[target.id]){
+        const targetFrame={...activePanelFrames[target.id]};
+        activePanelFrames[target.id]={...state.frame};
+        activePanelFrames[panel.id]=targetFrame;
+        changed=true;
+      } else {
+        activePanelFrames[panel.id]={
+          ...state.frame,
+          x:state.previewX,
+          y:state.previewY
+        };
+        changed=Math.abs(state.previewX-state.frame.x)>.001 || Math.abs(state.previewY-state.frame.y)>.001;
+      }
+      if (panelFramesOverlap(visible) || !panelFramesHaveSafeSpacing(visible)){
+        activePanelFrames=state.framesBefore;
+        changed=false;
+      }
+    }
+    clearMoveStyles(state);
+    panelMoveState=null;
+    document.body.classList.remove('panel-moving');
+    if (changed){
+      savePanelFrames();
+      visible.forEach(panelDef=>$('#'+panelDef.id)?.classList.add('panel-settling'));
+      requestAnimationFrame(()=>{
+        applyPanelFrames();
+        setTimeout(()=>visible.forEach(panelDef=>$('#'+panelDef.id)?.classList.remove('panel-settling')),220);
+      });
+    } else if (!cancel){
+      applyPanelFrames();
+    }
+  };
+  const move=(event)=>{
+    const state=panelMoveState;
+    if (!state || event.pointerId!==state.pointerId) return;
+    event.preventDefault();
+    const dx=(event.clientX-state.startX)/state.gridRect.width;
+    const dy=(event.clientY-state.startY)/state.gridRect.height;
+    state.previewX=clamp(state.frame.x+dx,0,1-state.frame.w);
+    state.previewY=clamp(state.frame.y+dy,0,1-state.frame.h);
+    state.targetX=(state.previewX-state.frame.x)*state.gridRect.width;
+    state.targetY=(state.previewY-state.frame.y)*state.gridRect.height;
+    if (!state.dragFrame) state.dragFrame=requestAnimationFrame(()=>animateMove(state));
+    setDropTarget(state,panelAtPoint(event.clientX,event.clientY,state.panel.id));
+  };
+  handles.forEach(handle=>{
+    handle.addEventListener('pointerdown',event=>{
+      if (panelMoveState || !matchMedia('(min-width:901px)').matches || event.button!==0 || !grid.classList.contains('panel-freeform')) return;
+      const panel=handle.closest('.panel');
+      const frame=panel && activePanelFrames[panel.id];
+      const gridRect=grid.getBoundingClientRect();
+      if (!panel || panel.hidden || !frame || !gridRect.width || !gridRect.height) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const placeholder=document.createElement('div');
+      placeholder.className='panel-drop-placeholder';
+      placeholder.setAttribute('aria-hidden','true');
+      placeholder.style.left=`${frame.x*100}%`;
+      placeholder.style.top=`${frame.y*100}%`;
+      placeholder.style.width=`${frame.w*100}%`;
+      placeholder.style.height=`${frame.h*100}%`;
+      grid.appendChild(placeholder);
+      panelMoveState={
+        panel,
+        pointerId:event.pointerId,
+        startX:event.clientX,
+        startY:event.clientY,
+        gridRect,
+        frame:{...frame},
+        framesBefore:copyFrames(),
+        previewX:frame.x,
+        previewY:frame.y,
+        currentX:0,
+        currentY:0,
+        targetX:0,
+        targetY:0,
+        dragFrame:0,
+        placeholder,
+        targetPanel:null
+      };
+      panel.classList.add('panel-dragging');
+      panel.style.zIndex='10';
+      panel.style.pointerEvents='none';
+      handle.setPointerCapture?.(event.pointerId);
+      document.body.classList.add('panel-moving');
+      panelMoveState.dragFrame=requestAnimationFrame(()=>animateMove(panelMoveState));
+    });
+  });
+  document.addEventListener('pointermove',move,{passive:false});
+  document.addEventListener('pointerup',finishMove);
+  document.addEventListener('pointercancel',event=>finishMove(event,true));
+}
+
+function applyBalancedPanelFrames(columnsRatio,rowsRatio){
+  if (!matchMedia('(min-width:901px)').matches || !activePanelFrameSignature) return;
+  const grid=$('.grid');
+  const visible=visiblePanelDefs();
+  const rect=grid?.getBoundingClientRect?.();
+  if (!grid || !rect?.width || !rect?.height || !visible.length) return;
+  const gapX=Math.min(.08,12/Math.max(rect.width,1));
+  const gapY=Math.min(.08,12/Math.max(rect.height,1));
+  const minColumnRatio=Math.min(.46,280/rect.width);
+  const maxColumnRatio=Math.max(minColumnRatio,1-gapX-minColumnRatio);
+  const minRowRatio=Math.min(.46,190/rect.height);
+  const maxRowRatio=Math.max(minRowRatio,1-gapY-minRowRatio);
+  const columns=Math.max(minColumnRatio,Math.min(maxColumnRatio,Number(columnsRatio)||.61));
+  const rows=Math.max(minRowRatio,Math.min(maxRowRatio,Number(rowsRatio)||.54));
+  grid.style.setProperty('--bubble-width',`${(columns*rect.width).toFixed(2)}px`);
+  grid.style.setProperty('--prices-height',`${(rows*rect.height).toFixed(2)}px`);
+  const ids=new Set(visible.map(panel=>panel.id));
+  const assign=(id,frame)=>{
+    if (ids.has(id)) activePanelFrames[id]=clampPanelFrame(frame,activePanelFrames[id] || frame);
+  };
+  const rightX=columns+gapX;
+  const rightW=1-rightX;
+  const lowerY=rows+gapY;
+  const lowerH=1-lowerY;
+
+  const lowerPanel=visible.find(panel=>panel.id!=='panel-bubbles' && panel.id!=='panel-table');
+  if (visible.length===3 && ids.has('panel-bubbles') && ids.has('panel-table') && lowerPanel){
+    assign('panel-bubbles',{x:0,y:0,w:columns,h:1});
+    assign('panel-table',{x:rightX,y:0,w:rightW,h:rows});
+    assign(lowerPanel.id,{x:rightX,y:lowerY,w:rightW,h:lowerH});
+  } else if (visible.length===2){
+    assign(visible[0].id,{x:0,y:0,w:columns,h:1});
+    assign(visible[1].id,{x:rightX,y:0,w:rightW,h:1});
+  } else if (visible.length===4){
+    const halfW=(1-gapX)/2;
+    const halfH=(1-gapY)/2;
+    const slots=[
+      {x:0,y:0,w:halfW,h:halfH},
+      {x:halfW+gapX,y:0,w:halfW,h:halfH},
+      {x:0,y:halfH+gapY,w:halfW,h:halfH},
+      {x:halfW+gapX,y:halfH+gapY,w:halfW,h:halfH}
+    ];
+    visible.forEach((panel,index)=>assign(panel.id,slots[index]));
+  } else if (visible.length===3){
+    const halfW=(1-gapX)/2;
+    const halfH=(1-gapY)/2;
+    const slots=[
+      {x:0,y:0,w:halfW,h:halfH},
+      {x:halfW+gapX,y:0,w:halfW,h:halfH},
+      {x:0,y:halfH+gapY,w:halfW,h:halfH}
+    ];
+    visible.forEach((panel,index)=>assign(panel.id,slots[index]));
+  } else if (visible.length===1){
+    assign(visible[0].id,{x:0,y:0,w:1,h:1});
+  }
+  savePanelFrames();
+  applyPanelFrames();
+}
+
+function visiblePanelDefs(){
+  return PANEL_DEFS.filter(panel => panelVisibility[panel.id]);
+}
+
+function savePanelVisibility(){
+  cacheSet(PANEL_VISIBILITY_KEY,panelVisibility);
+}
+
+function updatePanelLayout(){
+  const grid=$('.grid');
+  if (!grid) return;
+  let visible=visiblePanelDefs();
+  if (!visible.length){
+    panelVisibility['panel-bubbles']=true;
+    visible=visiblePanelDefs();
+    savePanelVisibility();
+  }
+  const ids=new Set(visible.map(panel => panel.id));
+  const defaultThree=isDefaultThreePanelLayout();
+  grid.classList.remove('panel-layout-default','panel-layout-quad','panel-layout-standard','panel-layout-single');
+  grid.classList.add(defaultThree ? 'panel-layout-default' : visible.length===1 ? 'panel-layout-single' : visible.length===4 ? 'panel-layout-quad' : 'panel-layout-standard');
+  grid.classList.remove('panel-count-1','panel-count-2','panel-count-3','panel-count-4');
+  grid.classList.add(`panel-count-${Math.min(4,visible.length)}`);
+  PANEL_DEFS.forEach(panel => {
+    grid.classList.toggle(`has-${panel.id.replace(/^panel-/,'')}`,ids.has(panel.id));
+  });
+  PANEL_DEFS.forEach(panel => {
+    const element=$('#'+panel.id);
+    if (element){
+      const visible=panelVisibility[panel.id]===true;
+      element.hidden=!visible;
+      element.setAttribute('aria-hidden',visible?'false':'true');
+      if (visible) element.style.removeProperty('display');
+      else element.style.display='none';
+    }
+  });
+  syncPanelFramesForLayout(visible);
+  positionPanelResizers();
+  if (tradingViewPanelFrame) cancelAnimationFrame(tradingViewPanelFrame);
+  tradingViewPanelFrame=0;
+  if (panelVisibility['panel-tradingview']===true){
+    tradingViewPanelFrame=requestAnimationFrame(()=>{
+      tradingViewPanelFrame=0;
+      renderTradingViewPanel();
+    });
+  } else clearTradingViewPanel();
+}
+
+function renderPanelManager(){
+  const manager=$('#panelManager');
+  if (!manager) return;
+  const cannotHideLast=visiblePanelDefs().length<=1;
+  manager.innerHTML = `<div class="panel-manager-title">VISIBLE PANELS</div>` + PANEL_DEFS.map(panel => {
+    const visible=Boolean(panelVisibility[panel.id]);
+    const disabled=visible && cannotHideLast;
+    return `<button class="panel-manager-toggle" type="button" role="menuitemcheckbox" data-panel-toggle="${panel.id}" aria-pressed="${visible}" aria-disabled="${disabled}">
+      <span>${panel.label}</span>
+      <span class="panel-manager-state">${visible?'ON':'OFF'}</span>
+    </button>`;
+  }).join('');
+}
+
+function togglePanel(panelId){
+  if (!Object.prototype.hasOwnProperty.call(panelVisibility,panelId)) return;
+  const willShow=!panelVisibility[panelId];
+  if (!willShow && visiblePanelDefs().length<=1) return;
+  if (willShow && visiblePanelDefs().length>=MAX_VISIBLE_PANELS) return;
+  panelVisibility[panelId]=willShow;
+  savePanelVisibility();
+  updatePanelLayout();
+  renderPanelManager();
+  if (willShow && panelId==='panel-trenches') loadTrenches(false);
+  if (willShow && panelId==='panel-forecast') loadForecast(false);
+}
+
+/* ============================================================
+   SOL MEME TRENCHES
+   ============================================================ */
+const TRENCH_CACHE_KEY = 'mus_trenches_cache_v3';
+const TRENCH_PREVIOUS_KEY = 'mus_trenches_previous_v2';
+const TRENCH_AUTO_MS = 16 * 60 * 1000;
+const TRENCH_API_BASE = `${APP_API_ORIGIN}/api/trenches`;
+let trenchesLoading = false;
+
+function trenchEscape(value){
+  return String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+}
+function trenchEnglish(value){
+  const replacements=[
+    ['İzlemeye değer','Worth watching'],['Şartlı izleme','Conditional watch'],['Elendi','Eliminated'],
+    ['Doğrulanmadı','Unverified'],['Doğrulanmadi','Unverified'],['YENİ','NEW'],['HACİM+','VOLUME+'],
+    ['İVME','MOMENTUM'],['GÜVENLİK Δ','SECURITY Δ'],['KARAR Δ','DECISION Δ'],
+    ['hacim kademeli ivmeleniyor','volume is gradually accelerating'],
+    ['kısa vadeli hacim zayıflıyor','short-term volume is weakening'],
+    ['hacim geçmişi henüz yetersiz','volume history is still insufficient'],
+    ['hacim dengeli seyrediyor','volume is balanced'],
+    ['Fiyat hareketi hacimle desteklenmiyor','Price movement is not supported by volume'],
+    ['LP kilidi yetersiz','LP lock is insufficient'],
+    ['bağımsız güvenlik verisi Unverified','independent security data Unverified'],
+    ['bağımsız güvenlik verisi Doğrulanmadı','independent security data Unverified'],
+    ['Uygun 🟢 veya 🟡 sonuç bulunamadı.','No qualifying 🟢 or 🟡 results found.'],
+    ['Solana tokenleri taranıyor…','Scanning Solana tokens…'],
+    ['Tarama yanıtı geçersiz','Invalid scan response'],
+    ['Canlı tarama başarısız; son sonuç gösteriliyor.','Live scan failed; showing the last results.'],
+    ['Tarama şu anda kullanılamıyor.','Scan is currently unavailable.'],
+    ['Karar','Decision'],['Hacim','Volume'],['Fiyat','Price'],['elendi','eliminated'],
+    ['Tarama','Scan'],['başarısız','failed'],['şu anda kullanılamıyor','is currently unavailable']
+  ];
+  return replacements.reduce((text,[from,to])=>text.split(from).join(to),String(value ?? ''));
+}
+function trenchMoney(value){
+  const n=Number(value);
+  if (!isFinite(n) || n<=0) return '—';
+  if (n>=1e9) return '$'+(n/1e9).toFixed(1)+'B';
+  if (n>=1e6) return '$'+(n/1e6).toFixed(1)+'M';
+  if (n>=1e3) return '$'+(n/1e3).toFixed(n>=1e5?0:1)+'K';
+  return '$'+n.toFixed(0);
+}
+function trenchPercent(value){
+  const n=Number(value);
+  if (!isFinite(n)) return '—';
+  return `${n>=0?'+':''}${n.toFixed(Math.abs(n)>=100?0:1)}%`;
+}
+function trenchDexUrl(value){
+  try {
+    const url=new URL(String(value||''));
+    const trusted=url.protocol==='https:' && (url.hostname==='dexscreener.com' || url.hostname.endsWith('.dexscreener.com'));
+    return trusted ? url.href : '';
+  } catch(e){
+    return '';
+  }
+}
+function trenchTokenAddress(token){
+  const address=String(token?.address||'').trim();
+  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address) ? address : '';
+}
+function trenchExternalLinks(token){
+  const address=trenchTokenAddress(token);
+  if (!address) return '<span>RugCheck</span> · <span>DexScreener</span>';
+  const links=[
+    ['RugCheck',`https://rugcheck.xyz/tokens/${address}`,'RugCheck security report'],
+    ['Dex',trenchDexUrl(token?.dexUrl),'DexScreener market page'],
+    ['Bird',`https://birdeye.so/solana/token/${address}`,'Birdeye token analytics'],
+    ['Scan',`https://solscan.io/token/${address}`,'Solscan token explorer'],
+    ['Map',`https://app.bubblemaps.io/sol/token/${address}`,'Bubblemaps holder clusters'],
+    ['Gecko',`https://www.geckoterminal.com/solana/tokens/${address}`,'GeckoTerminal pool data']
+  ].filter(([,url])=>url);
+  return links.map(([label,url,title]) => `<a href="${trenchEscape(url)}" target="_blank" rel="noopener noreferrer" title="${trenchEscape(title)}">${label}</a>`).join(' · ');
+}
+function trenchSymbolLink(token,className='trench-symbol'){
+  const symbol=trenchEscape(token?.symbol);
+  const dexUrl=trenchDexUrl(token?.dexUrl);
+  if (!dexUrl) return `<span class="${className}">${symbol}</span>`;
+  return `<a class="${className}" href="${trenchEscape(dexUrl)}" target="_blank" rel="noopener noreferrer" aria-label="Open ${symbol} on DexScreener">${symbol}</a>`;
+}
+function trenchChanges(token, previous){
+  if (!previous) return ['NEW'];
+  const changes=[];
+  const currentH1=Number(token?.volume?.h1)||0;
+  const previousH1=Number(previous?.volume?.h1)||0;
+  if (currentH1>Math.max(1000,previousH1*1.4)) changes.push('VOLUME+');
+  if (token?.volume?.trend==='rising' && previous?.volume?.trend!=='rising') changes.push('MOMENTUM');
+  if (token?.priceVolumeDivergence && !previous?.priceVolumeDivergence) changes.push('F/H!');
+  if (Number(previous?.liquidity)>0 && Number(token?.liquidity)<Number(previous.liquidity)*.8) changes.push('LP↓');
+  const securityFields=['mint','freeze','lpLockedPct','riskScore'];
+  const rugcheckChanged=securityFields.some(key => String(token?.security?.[key])!==String(previous?.security?.[key]));
+  const bubblemapsChanged=String(token?.bubblemaps?.score)!==String(previous?.bubblemaps?.score)
+    || String(token?.bubblemaps?.nakamotoCoefficient)!==String(previous?.bubblemaps?.nakamotoCoefficient);
+  if (rugcheckChanged || bubblemapsChanged) changes.push('SECURITY Δ');
+  if (token.decision!==previous.decision) changes.push('DECISION Δ');
+  return changes;
+}
+function isTrenchesPayload(payload){
+  return Boolean(payload && typeof payload==='object'
+    && Array.isArray(payload.tokens)
+    && typeof payload.generatedAt==='string'
+    && Number.isFinite(Date.parse(payload.generatedAt)));
+}
+function trenchTokenKey(token){
+  return String(token?.address||token?.symbol||'').trim();
+}
+function renderTrenches(payload,{persist=true}={}){
+  const content=$('#trench-content');
+  const time=$('#trench-time');
+  if (!content || !time || !isTrenchesPayload(payload)) return false;
+  const previousPayload=cacheGet(TRENCH_PREVIOUS_KEY);
+  const previousTokens=Array.isArray(previousPayload?.tokens)?previousPayload.tokens:[];
+  const previousMap=new Map(previousTokens.filter(token=>token && typeof token==='object').map(token=>[trenchTokenKey(token),token]));
+  const tokens=payload.tokens.filter(token=>token && typeof token==='object');
+  const changesByAddress=new Map();
+  const rows=tokens.map(token=>{
+    const tokenKey=trenchTokenKey(token);
+    const changes=trenchChanges(token,previousMap.get(tokenKey));
+    changesByAddress.set(tokenKey,changes);
+    const decisionIcon=token.decision==='green'?'🟢':'🟡';
+    return `<tr title="${trenchEscape(trenchEnglish(token.decisionLabel))}">
+      <td>${trenchSymbolLink(token)}<span class="trench-score">${Number(token.score)||0}/100</span></td>
+      <td>${trenchMoney(token.marketCap)}</td>
+      <td>${trenchMoney(token.liquidity)}</td>
+      <td>${trenchMoney(token.volume?.h1)} / ${trenchMoney(token.volume?.h6)} / ${trenchMoney(token.volume?.h24)}</td>
+      <td><span class="${Number(token.price?.h6)>=0?'pos':'neg'}">${trenchPercent(token.price?.h6)}</span> / <span class="${Number(token.price?.h24)>=0?'pos':'neg'}">${trenchPercent(token.price?.h24)}</span></td>
+      <td class="trench-decision"><button class="trench-decision-toggle" type="button" data-trench-info="${trenchEscape(tokenKey)}" aria-expanded="false" title="Show details" aria-label="${trenchEscape(token.symbol||'Token')} show details">${decisionIcon}</button></td>
+    </tr>`;
+  }).join('');
+  const details=tokens.map(token=>{
+    const tokenKey=trenchTokenKey(token);
+    const detailId=`trench-detail-${tokenKey}`;
+    const changes=changesByAddress.get(tokenKey) || [];
+    const badges=changes.length?`<span class="trench-change">${changes.map(trenchEscape).join(' · ')}</span>`:'';
+    const bubbleStatus=token?.bubblemaps?.verified
+      ? ` · Bubblemaps ${trenchEscape(Math.round(Number(token.bubblemaps.score)))} / 100`
+      : token?.bubblemaps?.requested ? ' · Bubblemaps Unverified' : '';
+    const externalLinks=trenchExternalLinks(token);
+    return `<tr class="trench-detail-row" id="${trenchEscape(detailId)}" data-trench-detail="${trenchEscape(tokenKey)}" hidden>
+      <td colspan="6"><div class="trench-popover">
+        <div class="trench-popover-head"><strong>${trenchSymbolLink(token,'trench-symbol')}</strong><span class="trench-popover-score">${trenchEscape(trenchEnglish(token.decisionLabel||'Decision'))} · ${Number(token.score)||0}/100</span></div>
+        <div class="trench-popover-reason">${trenchEscape(trenchEnglish(token.reason))}${bubbleStatus}${badges}</div>
+        <div class="trench-popover-links">${externalLinks}</div>
+      </div></td>
+    </tr>`;
+  }).join('');
+  const empty=!tokens.length?'<div class="trench-state">No qualifying 🟢 or 🟡 results found.</div>':'';
+  content.outerHTML=`<div id="trench-content">
+    <table class="trenches" aria-label="SOL Meme Trenches results"><thead><tr><th>Token</th><th>MC</th><th>LP</th><th>Volume 1h / 6h / 24h</th><th>Price 6h / 24h</th><th>Decision</th></tr></thead><tbody>${rows}${details}</tbody></table>
+    ${empty}
+    ${payload.warning?`<div class="data-warning" role="status">${trenchEscape(payload.warning)}</div>`:''}
+  </div>`;
+  const date=new Date(payload.generatedAt);
+  time.textContent=isNaN(date)?'—':date.toLocaleString('en-GB',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+  if (persist){
+    cacheSet(TRENCH_CACHE_KEY,payload);
+    if (previousPayload?.generatedAt!==payload.generatedAt) cacheSet(TRENCH_PREVIOUS_KEY,payload);
+  }
+  return true;
+}
+const trenchScroll=$('#trench-scroll');
+function closeTrenchDetails(){
+  trenchScroll?.querySelectorAll('.trench-detail-row').forEach(row=>{ row.hidden=true; });
+  trenchScroll?.querySelectorAll('.trench-decision-toggle').forEach(button=>button.setAttribute('aria-expanded','false'));
+}
+trenchScroll?.addEventListener('click',event=>{
+  const toggle=event.target.closest?.('.trench-decision-toggle');
+  if (!toggle) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const key=toggle.dataset.trenchInfo||'';
+  const detail=[...trenchScroll.querySelectorAll('.trench-detail-row')]
+    .find(row=>row.dataset.trenchDetail===key);
+  if (!detail) return;
+  const willOpen=detail.hidden;
+  closeTrenchDetails();
+  if (willOpen){
+    detail.hidden=false;
+    toggle.setAttribute('aria-expanded','true');
+    detail.scrollIntoView({behavior:'smooth',block:'nearest'});
+  }
+});
+document.addEventListener('click',event=>{
+  if (trenchScroll && !trenchScroll.contains(event.target)) closeTrenchDetails();
+});
+document.addEventListener('keydown',event=>{
+  if (event.key==='Escape') closeTrenchDetails();
+});
+function trenchState(message,isError=false){
+  const content=$('#trench-content');
+  if (content) content.outerHTML=`<div id="trench-content" class="trench-state${isError?' err':''}">${trenchEscape(message)}</div>`;
+}
+async function loadTrenches(force=false){
+  if (trenchesLoading) return;
+  trenchesLoading=true;
+  const button=$('#trench-refresh');
+  if (button) button.disabled=true;
+  const cached=cacheGet(TRENCH_CACHE_KEY);
+  if (isTrenchesPayload(cached)) renderTrenches(cached);
+  else trenchState('Scanning Solana tokens…');
+  try {
+    const response=await fetchWithTimeout(`${TRENCH_API_BASE}${force?'?refresh=1':''}`,{cache:force?'no-store':'default'},25000);
+    const payload=await response.json().catch(()=>({}));
+    if (!response.ok) throw new Error(payload?.error||`HTTP ${response.status}`);
+    if (!isTrenchesPayload(payload)) throw new Error('Invalid scan response');
+    renderTrenches(payload);
+  } catch(error){
+    console.warn('trenches scan failed',error);
+    if (isTrenchesPayload(cached)){
+      renderTrenches({...cached,warning:'Live scan failed; showing the last results.'},{persist:false});
+    } else {
+      trenchState('Scan is currently unavailable.',true);
+    }
+  } finally {
+    trenchesLoading=false;
+    if (button) button.disabled=false;
+  }
+}
+function focusTrenches(force=false){
+  const panel=$('#panel-trenches');
+  if (!panel) return;
+  panel.classList.remove('command-focus');
+  void panel.offsetWidth;
+  panel.classList.add('command-focus');
+  setTimeout(()=>panel.classList.remove('command-focus'),900);
+  if (matchMedia('(max-width:700px)').matches) panel.scrollIntoView({behavior:'smooth',block:'start'});
+  loadTrenches(force);
+}
+
+/* ---------- Global state ---------- */
+let tickerMap = {};        // BASE -> ticker obj (USDT quoted assets)
+let tickerSymbolMap = {};  // exact Binance symbol -> ticker obj
+let tickerFetchInFlight = false;
+let renderFrame=0;
+const EXCLUDE = /(UPUSDT|DOWNUSDT|BULLUSDT|BEARUSDT)$/;
+
+function rebuildTickerMaps(rows){
+  tickerMap={};
+  tickerSymbolMap={};
+  (Array.isArray(rows)?rows:[]).forEach(t => {
+    const symbol=String(t?.symbol||'').toUpperCase();
+    if (!symbol) return;
+    tickerSymbolMap[symbol]=t;
+    if (symbol.endsWith('USDT') && !EXCLUDE.test(symbol)){
+      tickerMap[symbol.replace(/USDT$/,'')]=t;
+    }
+  });
+}
+
+/* ============================================================
+   BINANCE TICKER FETCH (shared by bubbles and table)
+   ============================================================ */
+async function fetchTickers(){
+  if (tickerFetchInFlight) return false;
+  tickerFetchInFlight = true;
+  try {
+    const res = await fetchWithTimeout(`${APP_API_ORIGIN}/api/market`,{},12000);
+    if (!res.ok) throw new Error('HTTP '+res.status);
+    const marketPayload = await res.json();
+    const all = marketPayload.tickers;
+    window.MusMarketFeed = { at:Date.parse(marketPayload.updatedAt)||0, stale:marketPayload.stale===true, state:marketPayload.stale?'stale':'live' };
+    window.dispatchEvent(new CustomEvent('mus:feed'));
+    if (!Array.isArray(all)) throw new Error('Invalid Binance ticker payload');
+    const usdt = all.filter(t => {
+      const symbol=String(t?.symbol||'').toUpperCase();
+      return symbol.endsWith('USDT') && !EXCLUDE.test(symbol)
+        && Number.isFinite(Number(t?.lastPrice))
+        && Number.isFinite(Number(t?.priceChangePercent))
+        && Number(t?.quoteVolume) > 0;
+    });
+    const reservedPairs=all.filter(t => String(t?.symbol||'').toUpperCase()==='USDTTRY'
+      && Number.isFinite(Number(t?.lastPrice)));
+    const cachedTickers=[...usdt,...reservedPairs];
+    cachedTickers.forEach(t => { t.quotedAt = window.MusMarketFeed.stale ? 0 : window.MusMarketFeed.at; });
+    rebuildTickerMaps(cachedTickers);
+    cacheSet('cc_tickers',cachedTickers);
+    renderAll();
+    return true;
+  } catch (e) {
+    console.warn('ticker fetch failed', e);
+    window.MusMarketFeed = { ...window.MusMarketFeed, state:'error' };
+    window.dispatchEvent(new CustomEvent('mus:feed'));
+    const cached = cacheGet('cc_tickers');
+    if (Array.isArray(cached) && Object.keys(tickerMap).length === 0){
+      rebuildTickerMaps(cached);
+      renderAll();
+    }
+    return false;
+  } finally {
+    tickerFetchInFlight = false;
+  }
+}
+
+function renderAll(){
+  // Several quote sources can resolve in the same frame. Batch their UI work
+  // so the canvas and table are rebuilt once instead of repeatedly.
+  if (renderFrame) return;
+  renderFrame=requestAnimationFrame(()=>{
+    renderFrame=0;
+    refreshBubbles();
+    renderMarketTable();
+  });
+}
+
+/* ============================================================
+   CRYPTO FORECAST PANEL
+   Polymarket is aggregated server-side; this panel only renders the
+   normalized ranges and direction markers so it stays cheap to repaint.
+   ============================================================ */
+const FORECAST_API = `${APP_API_ORIGIN}/api/forecast`;
+const FORECAST_CACHE_KEY = 'cc_forecast_v6';
+const FORECAST_REFRESH_MS = 60 * 60 * 1000;
+let forecastInFlight = false;
+
+function forecastPrice(value){
+  const price=Number(value);
+  if (!Number.isFinite(price) || price<=0) return '—';
+  if (price>=1e9) return `$${(price/1e9).toFixed(2)}B`;
+  if (price>=1e6) return `$${(price/1e6).toFixed(2)}M`;
+  if (price>=1000) return `$${(price/1000).toFixed(price>=10000?1:2)}K`;
+  if (price>=1) return `$${price.toFixed(price>=100?1:2)}`;
+  return `$${price.toFixed(4)}`;
+}
+
+function forecastRange(horizon){
+  const low=Number(horizon?.low), high=Number(horizon?.high);
+  if (!Number.isFinite(low) || !Number.isFinite(high) || low<=0 || high<=0) return '—';
+  return `${forecastPrice(low)}–${forecastPrice(high)}`;
+}
+
+function forecastEmoji(direction){
+  return direction==='bullish' ? '🟢' : direction==='bearish' ? '🔴' : '🟡';
+}
+
+function renderForecast(payload){
+  const grid=$('#forecastGrid');
+  const assets=Array.isArray(payload?.assets) ? payload.assets : [];
+  if (!grid || !assets.length){
+    if (grid) grid.innerHTML='<div class="forecast-state">Scenarios are currently unavailable. Try refreshing later.</div>';
+    return;
+  }
+  grid.innerHTML=assets.map(asset => {
+    const symbol=escapeHtml(String(asset?.symbol||'').toUpperCase());
+    const title=`Based on Polymarket probabilities, market data, and BTC cycle timing.`;
+    return `<article class="forecast-asset">
+      <div class="forecast-current"><strong>${symbol}</strong><span>${forecastPrice(asset?.price)}</span></div>
+      ${['1D','1M','YE'].map(label => {
+        const horizon=asset?.horizons?.[label] || {};
+        const direction=['bullish','bearish','neutral'].includes(horizon.direction) ? horizon.direction : 'neutral';
+        return `<div class="forecast-row" title="${title}" aria-label="${symbol} ${label} forecast">
+          <span class="forecast-period">${label}</span><span class="forecast-direction ${direction}">${forecastEmoji(direction)}</span><span class="forecast-range">${forecastRange(horizon)}</span>
+        </div>`;
+      }).join('')}
+    </article>`;
+  }).join('');
+}
+
+function validForecastPayload(payload){
+  return Array.isArray(payload?.assets) && payload.assets.length===3
+    && payload.assets.every(asset => ['BTC','SOL','ETH'].includes(String(asset?.symbol||'').toUpperCase()));
+}
+
+async function loadForecast(force=false){
+  if (forecastInFlight) return;
+  const cached=cacheGet(FORECAST_CACHE_KEY);
+  if (!force && validForecastPayload(cached)) renderForecast(cached);
+  forecastInFlight=true;
+  try {
+    const query=force ? `?t=${Date.now()}` : '';
+    const response=await fetchWithTimeout(`${FORECAST_API}${query}`,{ cache:force?'no-store':'default' },20000);
+    if (!response.ok) throw new Error(`forecast HTTP ${response.status}`);
+    const payload=await response.json();
+    if (!validForecastPayload(payload)) throw new Error('invalid forecast payload');
+    cacheSet(FORECAST_CACHE_KEY,payload);
+    renderForecast(payload);
+  } catch(error){
+    if (!validForecastPayload(cached)) renderForecast(null);
+    console.warn('forecast refresh failed',error);
+  } finally {
+    forecastInFlight=false;
+  }
+}
+
+// bubble dataset = everything in the Prices table (crypto + TradFi),
+// sized by |24h % change| → biggest movers (up OR down) get the biggest bubbles.
+const TRADFI_BUBBLE = { SPX:'S&P', NDX:'NASDAQ', GOLD:'GOLD', OIL:'OIL' };
+function refreshBubbles(){
+  const items = [];
+  CRYPTO_LIST.forEach(c => {
+    if (isAssetHidden(c.base)) return;
+    const t = tickerMap[c.base];
+    if (!t) return;
+    const pct = +t.priceChangePercent;
+    items.push({ id:c.base, base:c.base, name:c.base, pair:'/USDT', kind:'crypto', cls:'COIN', usd:true, pct,
+      price:+t.lastPrice, vol:+t.quoteVolume, high:+t.highPrice, low:+t.lowPrice, size:Math.abs(pct) });
+  });
+  if (hypeRow && !isAssetHidden('HYPE')){
+    const pct = finiteValue(hypeRow.chg,0);
+    items.push({ id:'HYPE', base:'HYPE', name:'HYPE', pair:'/USD', kind:'crypto', cls:'COIN', usd:true, pct,
+      price:finiteValue(hypeRow.price), vol:finiteValue(hypeRow.vol), high:finiteValue(hypeRow.high), low:finiteValue(hypeRow.low), size:Math.abs(pct) });
+  }
+  TRADFI.forEach(f => {
+    if (isAssetHidden(f.key)) return;
+    const d = tradfiRows[f.key];
+    if (!d) return;
+    const price=finiteValue(d.price);
+    const previous=finiteValue(d.prev);
+    const sourcePct=finiteValue(d.chgPct);
+    const pct = sourcePct !== null ? sourcePct : (previous ? (price-previous)/previous*100 : 0);
+    items.push({ id:f.key, base:TRADFI_BUBBLE[f.key]||f.name, name:f.name, full:f.name, kind:'tradfi', cls:f.cls, usd:f.usd, pct,
+      price, vol:finiteValue(d.vol), high:finiteValue(d.high), low:finiteValue(d.low), size:Math.abs(pct) });
+  });
+  customItems.forEach(c => {
+    // Keep economic indicators in the Market table only; they do not belong
+    // in the price-mover bubble map.
+    if (String(c?.sym || '').toUpperCase() === 'USIRYY') return;
+    const d = customAssetSnapshot(c);
+    if (!d || !isFinite(+d.price)) return;
+    const pct = finiteValue(d.chg,0);
+    items.push({
+      ...d,
+      base:d.name,
+      pair:d.sub,
+      pct,
+      size:Math.abs(pct)
+    });
+  });
+  bubbles.setData(items);
+}
+
+/* ============================================================
+   1. CRYPTO BUBBLES (canvas physics)
+   ============================================================ */
+const bubbles = (function(){
+  const canvas = $('#bubbleCanvas');
+  const ctx = canvas.getContext('2d');
+  const tip = $('#bubbleTip');
+  // Retina displays otherwise make the canvas 4x more expensive while the
+  // bubbles are small enough that a capped backing resolution looks identical.
+  let W=0, H=0, dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+  let nodes = [];
+  let mouse = { x:-999, y:-999, over:false };
+  let drag = null;   // { node, dx, dy, lastX, lastY } while a bubble is being dragged
+  let animationFrame=0, lastFrameAt=0, pageVisible=!document.hidden;
+  let tooltipKey='', tooltipSize={ width:0, height:0 }, canvasCursor='default';
+  const EDGE = 12, EDGE_TOP = 12;   // keep bubbles inside the canvas
+
+  function setCanvasCursor(value){
+    if (canvasCursor === value) return;
+    canvasCursor = value;
+    canvas.style.cursor = value;
+  }
+
+  function confine(n, bounce=false){
+    const minX = n.r + EDGE;
+    const maxX = Math.max(minX, W - n.r - EDGE);
+    const minY = n.r + EDGE_TOP;
+    const maxY = Math.max(minY, H - n.r - EDGE);
+    if (n.x < minX){ n.x=minX; if (bounce) n.vx=Math.abs(n.vx)*0.55; }
+    if (n.x > maxX){ n.x=maxX; if (bounce) n.vx=-Math.abs(n.vx)*0.55; }
+    if (n.y < minY){ n.y=minY; if (bounce) n.vy=Math.abs(n.vy)*0.55; }
+    if (n.y > maxY){ n.y=maxY; if (bounce) n.vy=-Math.abs(n.vy)*0.55; }
+  }
+
+  function resize(){
+    const r = canvas.parentElement.getBoundingClientRect();
+    const oldW=W, oldH=H;
+    W = r.width; H = r.height;
+    if (oldW > 0 && oldH > 0){
+      nodes.forEach(n => { n.x = n.x / oldW * W; n.y = n.y / oldH * H; });
+    }
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    canvas.style.width = W+'px'; canvas.style.height = H+'px';
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    layoutRadii();
+    nodes.forEach(n => confine(n));
+  }
+
+  let raw = [];
+  // setData accepts normalized items: { base, pair?, pct, price, vol, high, low, size }
+  // `size` (= |24h % change|) drives the radius; `vol` is shown in the tooltip only.
+  function setData(items){
+    raw = items;
+    if (!raw.length){ nodes=[]; return; }
+    layoutRadii();
+  }
+  function layoutRadii(){
+    if (!raw.length || !W) return;
+    const sizes = raw.map(c => c.size);
+    const maxV = Math.max(...sizes), minV = Math.min(...sizes);
+    const area = W * H;
+    // scale radii so total bubble area leaves enough room for stable collision resolution
+    const target = area * 0.28;
+    let rawAreas = raw.map(c => {
+      const t = (Math.sqrt(c.size) - Math.sqrt(minV)) / (Math.sqrt(maxV) - Math.sqrt(minV) || 1);
+      return 0.3 + t; // weight (floor so a flat coin is still visible)
+    });
+    const sumW = rawAreas.reduce((a,b)=>a+b,0);
+    const k = target / (sumW * Math.PI);
+    const existing = {};
+    nodes.forEach(n => existing[n.base] = n);
+    nodes = raw.map((c, i) => {
+      const base = c.base;
+      let r = Math.sqrt(rawAreas[i] * k);
+      r = Math.max(15, Math.min(r, Math.min(W,H)*0.30));
+      const prev = existing[base];
+      const angle = i * 2.399963229728653;
+      const spread = Math.sqrt((i+0.5)/raw.length) * Math.min(W, H) * 0.28;
+      return {
+        id:c.id||base, base, name:c.name||c.full||base, cls:c.cls,
+        pair:c.pair, pct:c.pct, kind:c.kind, usd:c.usd, full:c.full, decimals:c.decimals, suffix:c.suffix,
+        custom:Boolean(c.custom), rmsym:c.rmsym, source:c.source, cgId:c.cgId,
+        tvSymbol:c.tvSymbol, tvExchange:c.tvExchange,
+        price: c.price, vol: c.vol,
+        high: c.high, low: c.low,
+        r,
+        x: prev ? prev.x : W/2 + Math.cos(angle)*spread,
+        y: prev ? prev.y : (EDGE_TOP+H-EDGE)/2 + Math.sin(angle)*spread,
+        vx: prev ? prev.vx : (Math.random()-0.5)*0.4,
+        vy: prev ? prev.vy : (Math.random()-0.5)*0.4
+      };
+    });
+    nodes.forEach(n => confine(n));
+  }
+
+  function step(){
+    for (let i=0;i<nodes.length;i++){
+      const a = nodes[i];
+      if (drag && a === drag.node) continue;   // pinned to the cursor while dragging
+      // gentle drift
+      a.vx += (Math.random()-0.5)*0.03;
+      a.vy += (Math.random()-0.5)*0.03;
+      a.vx *= 0.985; a.vy *= 0.985;
+      a.vx = Math.max(-1.2, Math.min(1.2, a.vx));
+      a.vy = Math.max(-1.2, Math.min(1.2, a.vy));
+      // mild centering pull
+      a.vx += ((W/2 - a.x)) * 0.00012;
+      a.vy += ((((EDGE_TOP+H-EDGE)/2) - a.y)) * 0.00012;
+      a.x += a.vx; a.y += a.vy;
+      confine(a, true);
+    }
+    // Two relaxation passes prevent persistent overlap after resize or rapid data updates.
+    for (let pass=0; pass<2; pass++){
+      for (let i=0;i<nodes.length;i++){
+        for (let j=i+1;j<nodes.length;j++){
+          const a=nodes[i], b=nodes[j];
+          let dx=b.x-a.x, dy=b.y-a.y;
+          let dist=Math.hypot(dx,dy);
+          if (dist < 0.001){
+            const angle = ((i+1)*31 + (j+1)*17) % 360 * Math.PI / 180;
+            dx=Math.cos(angle)*0.01; dy=Math.sin(angle)*0.01; dist=0.01;
+          }
+          const min=a.r+b.r+9;
+          if (dist < min){
+            const ov=(min-dist)/2;
+            const nx=dx/dist, ny=dy/dist;
+            const aDrag = drag && a === drag.node, bDrag = drag && b === drag.node;
+            if (aDrag){
+              b.x += nx*ov*2; b.y += ny*ov*2;
+            } else if (bDrag){
+              a.x -= nx*ov*2; a.y -= ny*ov*2;
+            } else {
+              a.x-=nx*ov; a.y-=ny*ov;
+              b.x+=nx*ov; b.y+=ny*ov;
+              if (pass === 0){
+                const p = (a.vx*nx + a.vy*ny) - (b.vx*nx + b.vy*ny);
+                a.vx -= p*nx*0.5; a.vy -= p*ny*0.5;
+                b.vx += p*nx*0.5; b.vy += p*ny*0.5;
+              }
+            }
+          }
+        }
+      }
+      nodes.forEach(n => confine(n));
+    }
+  }
+
+  function colorFor(pct){
+    const mag = Math.min(Math.abs(pct)/10, 1);
+    if (pct >= 0){
+      const mid = 48 + mag*7;
+      return {
+        core:`hsla(145,100%,${78+mag*5}%,.82)`,
+        body:`hsla(150,96%,${mid}%,.68)`,
+        edge:`hsla(154,96%,${39+mag*5}%,.58)`,
+        glow:'rgba(0,255,140,.48)',
+        text:'#02160c'
+      };
+    } else {
+      const mid = 54 + mag*6;
+      return {
+        core:`hsla(351,100%,${80+mag*4}%,1)`,
+        body:`hsla(348,96%,${mid}%,1)`,
+        edge:`hsla(350,96%,${42+mag*4}%,1)`,
+        glow:'rgba(255,55,95,.46)',
+        text:'#2a0006'
+      };
+    }
+  }
+
+  function setFittedBubbleFont(text,weight,preferred,minSize,maxWidth,family){
+    let size=preferred;
+    ctx.font=`${weight} ${size}px ${family}`;
+    const measured=ctx.measureText(text).width;
+    if (measured>maxWidth && measured>0) size=Math.max(minSize,size*(maxWidth/measured));
+    ctx.font=`${weight} ${size}px ${family}`;
+    return { size, width:ctx.measureText(text).width };
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,W,H);
+    const hover = mouse.over ? bubbleAt(mouse.x, mouse.y) : null;
+    for (const n of nodes){
+      const c = colorFor(n.pct);
+      // Keep the bubble surface simple and translucent so the background remains visible.
+      const grad = ctx.createRadialGradient(
+        n.x-n.r*0.34, n.y-n.r*0.38, n.r*0.04,
+        n.x+n.r*0.10, n.y+n.r*0.12, n.r*1.06
+      );
+      grad.addColorStop(0, c.core);
+      grad.addColorStop(0.58, c.body);
+      grad.addColorStop(1, c.edge);
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, n.r, 0, Math.PI*2);
+      ctx.fillStyle=grad;
+      ctx.fill();
+
+      ctx.lineWidth=0.8;
+      ctx.strokeStyle='rgba(255,255,255,.18)';
+      ctx.beginPath();
+      ctx.arc(n.x,n.y,n.r-0.65,0,Math.PI*2);
+      ctx.stroke();
+
+      // labels
+      if (n.r >= 13){
+        const compact=n.r < 20;
+        const fs = Math.max(8.2, Math.min(n.r*0.36,16));
+        const maxTextWidth=n.r*1.72;
+        const nameText=compact ? n.base.slice(0,Math.max(2,Math.floor(n.r/5))) : n.base;
+        const pctText=(n.pct>=0?'+':'')+(compact ? Math.round(n.pct) : n.pct.toFixed(1))+'%';
+        const nameFontFamily="'Avenir Next', 'Segoe UI', Arial, sans-serif";
+        const valueFontFamily="'SFMono-Regular', 'Menlo', 'Consolas', monospace";
+        ctx.save();
+        ctx.fillStyle = c.text;
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.shadowColor='transparent'; ctx.shadowBlur=0;
+
+        const nameFont=setFittedBubbleFont(nameText,750,compact ? Math.max(7.3,fs*.92) : Math.max(10.5,fs*1.08),compact ? 6.2 : 8.5,maxTextWidth,nameFontFamily);
+        ctx.fillText(nameText,n.x,n.y-nameFont.size*0.38);
+
+        const valueFont=setFittedBubbleFont(pctText,800,compact ? Math.max(7.2,fs*.82) : Math.max(9.5,Math.min(fs*.92,14)),compact ? 6.2 : 8.5,maxTextWidth,valueFontFamily);
+        ctx.fillText(pctText,n.x,n.y+valueFont.size*0.55);
+        ctx.restore();
+      }
+    }
+    // tooltip + cursor
+    if (drag){
+      tip.style.display='none';
+      setCanvasCursor('grabbing');
+    } else if (hover && mouse.over){
+      tip.style.display='block';
+      const isT = hover.kind === 'tradfi' || hover.kind === 'stock';
+      const cur = hover.usd===false ? '' : '$';
+      const suffix = hover.suffix || '';
+      const fixedDigits=Number.isInteger(hover.decimals) ? hover.decimals : (isT ? 2 : null);
+      const priceTxt = cur+(fixedDigits==null ? smartPrice(hover.price) : fmtNum(hover.price,fixedDigits))+suffix;
+      const formatHilo = value => value==null || !isFinite(Number(value))
+        ? '—'
+        : cur+(fixedDigits==null ? smartPrice(value) : fmtNum(value,fixedDigits))+suffix;
+      const hiloTxt = `${formatHilo(hover.high)} / ${formatHilo(hover.low)}`;
+      const symLabel = isT ? escapeHtml(hover.full||hover.base)
+        : `${escapeHtml(hover.base)}<span style="color:var(--muted2);font-weight:500">${escapeHtml(hover.pair||'')}</span>`;
+      let html =
+        `<div class="t-sym">${symLabel}</div>`+
+        `<div class="t-row"><span class="k">Price</span><span class="num">${priceTxt}</span></div>`+
+        `<div class="t-row"><span class="k">24h Chg</span><span class="num ${hover.pct>=0?'pos':'neg'}">${hover.pct>=0?'+':''}${hover.pct.toFixed(2)}%</span></div>`;
+      if (hover.vol) html += `<div class="t-row"><span class="k">${isT?'Volume':'24h Vol'}</span><span class="num">${isT || hover.usd===false?'':'$'}${compact(hover.vol)}</span></div>`;
+      html += `<div class="t-row"><span class="k">${isT?'Day H/L':'H / L'}</span><span class="num">${hiloTxt}</span></div>`;
+      const nextTooltipKey = [hover.id, hover.pct, hover.price, hover.high, hover.low, hover.vol, hover.kind, hover.pair, hover.suffix].join('|');
+      if (nextTooltipKey !== tooltipKey){
+        tip.innerHTML = html;
+        tooltipKey = nextTooltipKey;
+        tooltipSize = { width:tip.offsetWidth, height:tip.offsetHeight };
+      }
+      const pad=14;
+      let tx = mouse.clientX + pad, ty = mouse.clientY + pad;
+      const tw = tooltipSize.width, th = tooltipSize.height;
+      if (tx + tw > window.innerWidth) tx = mouse.clientX - tw - pad;
+      if (ty + th > window.innerHeight) ty = mouse.clientY - th - pad;
+      tip.style.left = tx+'px'; tip.style.top = ty+'px';
+      setCanvasCursor('grab');
+    } else {
+      tip.style.display='none';
+      setCanvasCursor('default');
+    }
+  }
+
+  function loop(timestamp){
+    animationFrame=0;
+    if (!pageVisible) return;
+    // Keep the bubbles smooth at 60fps, including on high-refresh displays.
+    if (timestamp-lastFrameAt < 1000/60){
+      animationFrame=requestAnimationFrame(loop);
+      return;
+    }
+    lastFrameAt=timestamp;
+    step(); draw();
+    animationFrame=requestAnimationFrame(loop);
+  }
+  function startLoop(){
+    if (pageVisible && !animationFrame) animationFrame=requestAnimationFrame(loop);
+  }
+
+  canvas.addEventListener('mousemove', e=>{
+    const r = canvas.getBoundingClientRect();
+    mouse.x = e.clientX - r.left; mouse.y = e.clientY - r.top;
+    mouse.clientX = e.clientX; mouse.clientY = e.clientY; mouse.over = true;
+  });
+  canvas.addEventListener('mouseleave', ()=>{ mouse.over=false; tip.style.display='none'; tooltipKey=''; });
+  document.addEventListener('visibilitychange', ()=>{
+    pageVisible=!document.hidden;
+    if (pageVisible){ lastFrameAt=0; startLoop(); }
+  });
+
+  // --- drag & drop: grab a bubble and move it anywhere ---
+  function bubbleAt(mx, my){
+    let hit = null;
+    for (const n of nodes){
+      const d = Math.hypot(mx - n.x, my - n.y);
+      if (d <= n.r && (!hit || n.r < hit.r)) hit = n;   // topmost (smallest) under cursor
+    }
+    return hit;
+  }
+  canvas.addEventListener('mousedown', e=>{
+    if (e.button !== 0) return;
+    const r = canvas.getBoundingClientRect();
+    const mx = e.clientX - r.left, my = e.clientY - r.top;
+    const hit = bubbleAt(mx, my);
+    if (hit){
+      drag = { node:hit, dx:mx-hit.x, dy:my-hit.y, lastX:mx, lastY:my,
+        startClientX:e.clientX, startClientY:e.clientY, moved:false };
+      e.preventDefault();
+    }
+  });
+  window.addEventListener('mousemove', e=>{
+    if (!drag) return;
+    const r = canvas.getBoundingClientRect();
+    const mx = e.clientX - r.left, my = e.clientY - r.top;
+    const n = drag.node;
+    if (Math.hypot(e.clientX-drag.startClientX, e.clientY-drag.startClientY) > 4) drag.moved=true;
+    n.x = Math.max(n.r+EDGE, Math.min(W-n.r-EDGE, mx - drag.dx));
+    n.y = Math.max(n.r+EDGE_TOP, Math.min(H-n.r-EDGE, my - drag.dy));
+    n.vx = mx - drag.lastX; n.vy = my - drag.lastY;   // carry momentum when released
+    drag.lastX = mx; drag.lastY = my;
+  });
+  window.addEventListener('mouseup', e=>{
+    const released=drag;
+    drag=null;
+    if (released && !released.moved){
+      const n=released.node;
+      openAssetMenu({
+        id:n.id, name:n.name, kind:n.kind, cls:n.cls,
+        custom:n.custom, rmsym:n.rmsym, source:n.source, cgId:n.cgId,
+        tvSymbol:n.tvSymbol, tvExchange:n.tvExchange
+      },
+        { clientX:e.clientX, clientY:e.clientY });
+    }
+  });
+  window.addEventListener('blur', ()=>{
+    if (!drag) return;
+    drag=null;
+    setCanvasCursor('default');
+  });
+
+  new ResizeObserver(resize).observe(canvas.parentElement);
+  setTimeout(resize, 50);
+  startLoop();
+
+  return { setData };
+})();
+
+/* ============================================================
+   2. LIVE MARKET TABLE  (curated crypto + TradFi, ranked by mcap)
+   ============================================================ */
+// curated crypto + approx circulating supply (used only to rank by market cap)
+const CRYPTO_LIST = [
+  { base:'BTC',  supply:19.8e6  },
+  { base:'ETH',  supply:120.5e6 },
+  { base:'SOL',  supply:540e6   },
+];
+// traditional markets via CNBC (mcap = static rank weight, USD)
+const TRADFI = [
+  { key:'OIL',  name:'OIL WTI', sub:'CRUDE · BBL', cls:'COMMODITY', ysym:'CL=F',  mcap:12e12, usd:true  },
+  { key:'GOLD', name:'GOLD',    sub:'XAU · OZ',    cls:'COMMODITY', ysym:'GC=F',  mcap:22e12, usd:true  },
+  { key:'SPX',  name:'S&P 500', sub:'',            cls:'INDEX',     ysym:'^GSPC', mcap:50e12, usd:false },
+  { key:'NDX',  name:'NASDAQ',  sub:'',            cls:'INDEX',     ysym:'^IXIC', mcap:35e12, usd:false },
+];
+
+// Reserve familiar commodity names before crypto lookup. This prevents a
+// search such as "silver" from resolving to an unrelated crypto token.
+const CUSTOM_TRADFI_ALIASES = {
+  SILVER: {
+    sym:'SILVER', type:'commodity', name:'SILVER', sub:'XAG · OZ', cls:'COMMODITY',
+    cnbcSymbol:'@SI.1', ysym:'SI=F', tvSymbol:'XAGUSD', tvExchange:'OANDA', usd:true
+  }
+};
+const CUSTOM_TRADFI_INPUTS = {
+  SILVER:'SILVER', XAG:'SILVER', XAGUSD:'SILVER', GUMUS:'SILVER', 'GÜMÜŞ':'SILVER'
+};
+
+const CUSTOM_PAIR_ALIASES = {
+  XAUTRYG: {
+    sym:'XAUTRYG', type:'forex', source:'derived', name:'GRAM GOLD/TRY', sub:'XAUTRYG', cls:'COMMODITY',
+    ysym:'TRY=X', tvSymbol:'XAUTRYG', tvExchange:'FX_IDC', usd:false, decimals:2
+  },
+  USDTTRY: {
+    sym:'USDTTRY', type:'crypto_pair', source:'binance', name:'USDT/TRY', sub:'BINANCE', cls:'FOREX',
+    binanceSymbol:'USDTTRY', tvSymbol:'USDTTRY', tvExchange:'BINANCE', usd:false, decimals:3
+  },
+  USDTRY: {
+    sym:'USDTRY', type:'forex', source:'yahoo', name:'USD/TRY', sub:'FX', cls:'FOREX',
+    ysym:'TRY=X', tvSymbol:'USDTRY', tvExchange:'FX_IDC', usd:false, decimals:4
+  }
+};
+const CUSTOM_PAIR_INPUTS = {
+  XAUTRYG:'XAUTRYG', GRAMALTIN:'XAUTRYG', GRAMGOLD:'XAUTRYG',
+  USDTTRY:'USDTTRY', USDTRY:'USDTRY', USDTRYY:'USDTRY'
+};
+
+const CUSTOM_ECONOMIC_ALIASES = {
+  USIRYY: {
+    sym:'USIRYY', type:'economic', source:'bls', name:'US INFLATION RATE YOY', sub:'BLS', cls:'ECONOMIC',
+    tvSymbol:'USIRYY', tvExchange:'ECONOMICS', usd:false, decimals:1, suffix:'%'
+  }
+};
+const CUSTOM_ECONOMIC_INPUTS = {
+  USIRYY:'USIRYY', USINFLATION:'USIRYY', USINFLATIONRATE:'USIRYY'
+};
+
+const DEFAULT_CUSTOM_ITEMS = [
+  { ...CUSTOM_TRADFI_ALIASES.SILVER },
+  { ...CUSTOM_PAIR_ALIASES.XAUTRYG },
+  { ...CUSTOM_ECONOMIC_ALIASES.USIRYY },
+  { ...CUSTOM_PAIR_ALIASES.USDTTRY }
+];
+const DEFAULT_MARKET_ORDER = [
+  'OIL', 'GOLD', 'c:SILVER', 'c:XAUTRYG', 'SPX', 'NDX',
+  'c:USIRYY', 'c:USDTTRY', 'BTC', 'ETH', 'SOL'
+];
+
+function customTradFiAlias(rawInput){
+  const key=String(rawInput||'').trim().toUpperCase().replace(/[^A-Z0-9ÇĞİÖŞÜ]/g,'');
+  const aliasKey=CUSTOM_TRADFI_INPUTS[key];
+  return aliasKey ? { ...CUSTOM_TRADFI_ALIASES[aliasKey] } : null;
+}
+
+function customPairAlias(rawInput){
+  const key=String(rawInput||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const aliasKey=CUSTOM_PAIR_INPUTS[key];
+  return aliasKey ? { ...CUSTOM_PAIR_ALIASES[aliasKey] } : null;
+}
+
+function customEconomicAlias(rawInput){
+  const key=String(rawInput||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const aliasKey=CUSTOM_ECONOMIC_INPUTS[key];
+  return aliasKey ? { ...CUSTOM_ECONOMIC_ALIASES[aliasKey] } : null;
+}
+
+let hypeRow      = cacheGet('cc_hype')    || null;  // HYPE via CoinGecko (not on Binance)
+let tradfiRows   = cacheGet('cc_tradfi')  || {};    // key -> CNBC row
+const cachedCustomItems = cacheGet('cc_custom');
+const cachedCustomQuotes = cacheGet('cc_customq');
+const cachedCustomCoinQuotes = cacheGet('cc_custom_cgq');
+const cachedHiddenAssets = cacheGet('cc_hidden_assets');
+const cachedMarketOrder = cacheGet('cc_market_order_v1');
+const CUSTOM_ITEM_TYPES = new Set(['crypto','crypto_pair','stock','commodity','forex','economic']);
+const persistedText = (value, max=80) => typeof value === 'string' ? value.trim().slice(0,max) : '';
+function normalizeCustomItem(item){
+  if (!item || typeof item !== 'object') return null;
+  const sym=persistedText(item.sym,24).toUpperCase();
+  const type=persistedText(item.type,20).toLowerCase();
+  if (!/^[A-Z0-9._-]{1,24}$/.test(sym) || !CUSTOM_ITEM_TYPES.has(type)) return null;
+  return {
+    sym,
+    type,
+    name:persistedText(item.name,80) || sym,
+    sub:persistedText(item.sub,24),
+    cls:persistedText(item.cls,20).toUpperCase(),
+    source:persistedText(item.source,24),
+    cgId:persistedText(item.cgId,80),
+    cnbcSymbol:persistedText(item.cnbcSymbol,32),
+    ysym:persistedText(item.ysym,32),
+    binanceSymbol:persistedText(item.binanceSymbol,32).toUpperCase(),
+    tvSymbol:persistedText(item.tvSymbol,40),
+    tvExchange:persistedText(item.tvExchange,32),
+    usd:item.usd !== false,
+    decimals:Number.isInteger(item.decimals) && item.decimals >= 0 && item.decimals <= 12 ? item.decimals : undefined,
+    suffix:persistedText(item.suffix,8)
+  };
+}
+const normalizedCustomItems = Array.isArray(cachedCustomItems)
+  ? cachedCustomItems.map(normalizeCustomItem).filter(Boolean)
+  : DEFAULT_CUSTOM_ITEMS.map(normalizeCustomItem).filter(Boolean);
+let customItems  = normalizedCustomItems;
+let customQuotes = cachedCustomQuotes && typeof cachedCustomQuotes === 'object' ? cachedCustomQuotes : {};
+let customCoinQuotes = cachedCustomCoinQuotes && typeof cachedCustomCoinQuotes === 'object' ? cachedCustomCoinQuotes : {};
+if (Array.isArray(cachedCustomItems) && normalizedCustomItems.length !== cachedCustomItems.length){
+  cacheSet('cc_custom', normalizedCustomItems);
+}
+if (!Array.isArray(cachedCustomItems)) cacheSet('cc_custom', normalizedCustomItems);
+
+// Repair SILVER entries saved by older versions that classified it as crypto.
+let repairedLegacySilver=false;
+customItems=customItems.map(item => {
+  if (String(item?.sym||'').toUpperCase()!=='SILVER' || item.type==='commodity') return item;
+  repairedLegacySilver=true;
+  return { ...CUSTOM_TRADFI_ALIASES.SILVER };
+});
+if (repairedLegacySilver){
+  delete customCoinQuotes.SILVER;
+  cacheSet('cc_custom', customItems);
+  cacheSet('cc_custom_cgq', customCoinQuotes);
+}
+
+let repairedLegacyPairs=false;
+customItems=customItems.map(item => {
+  const symbol=String(item?.sym||'').toUpperCase();
+  if (symbol==='USIRYY' && item.type!=='economic'){
+    repairedLegacyPairs=true;
+    return { ...CUSTOM_ECONOMIC_ALIASES.USIRYY };
+  }
+  if (symbol==='XAUTRYG' && (item.type!=='forex' || item.ysym!=='TRY=X' || item.tvSymbol!=='XAUTRYG')){
+    repairedLegacyPairs=true;
+    return { ...CUSTOM_PAIR_ALIASES.XAUTRYG };
+  }
+  if ((symbol==='USDTRY' || symbol==='USDTRYY') && (symbol!=='USDTRY' || item.type!=='forex')){
+    repairedLegacyPairs=true;
+    return { ...CUSTOM_PAIR_ALIASES.USDTRY };
+  }
+  if (symbol==='USDTTRY' && item.type!=='crypto_pair'){
+    repairedLegacyPairs=true;
+    return { ...CUSTOM_PAIR_ALIASES.USDTTRY };
+  }
+  return item;
+});
+if (repairedLegacyPairs){
+  customItems=[...new Map(customItems.map(item=>[item.sym,item])).values()];
+  delete customQuotes.USIRYY;
+  delete customQuotes.XAUTRYG;
+  delete customQuotes.USDTRYY;
+  delete customCoinQuotes.USDTTRY;
+  delete customCoinQuotes.USDTRY;
+  cacheSet('cc_custom',customItems);
+  cacheSet('cc_customq',customQuotes);
+  cacheSet('cc_custom_cgq',customCoinQuotes);
+}
+let hiddenAssets = Array.isArray(cachedHiddenAssets)
+  ? [...new Set(cachedHiddenAssets.filter(id => typeof id === 'string'))]
+  : [];
+let marketOrder = Array.isArray(cachedMarketOrder)
+  ? [...new Set(cachedMarketOrder.filter(id => typeof id === 'string' && id))]
+  : [...DEFAULT_MARKET_ORDER];
+let prevPrices = {};
+let tableSort  = marketOrder.length ? { key:'manual', dir:1 } : { key:'mcap', dir:-1 };
+let draggedMarketId = null;
+let marketDragActive = false;
+let pendingMarketRender = false;
+let suppressAssetClick = false;
+const saveCustom = () => {
+  cacheSet('cc_custom', customItems);
+  cacheSet('cc_customq', customQuotes);
+  cacheSet('cc_custom_cgq', customCoinQuotes);
+};
+const saveHiddenAssets = () => cacheSet('cc_hidden_assets', hiddenAssets);
+const saveMarketOrder = () => cacheSet('cc_market_order_v1', marketOrder);
+let activeAssetMenu = null;
+let assetChartGeneration = 0;
+let tradingViewPanelGeneration = 0;
+let tradingViewPanelFrame = 0;
+const TRADINGVIEW_PANEL_SYMBOL_KEY = 'mus_tradingview_panel_symbol_v1';
+
+function customAssetSnapshot(c){
+  const common = {
+    id:'c:'+c.sym,
+    rmsym:c.sym,
+    custom:true,
+    name:c.name || c.sym,
+    source:c.source,
+    cgId:c.cgId,
+    tvSymbol:c.tvSymbol,
+    tvExchange:c.tvExchange,
+    usd:c.usd !== false,
+    decimals:c.decimals,
+    suffix:c.suffix || ''
+  };
+  if (c.type==='crypto_pair'){
+    const t=tickerSymbolMap[c.binanceSymbol || c.sym];
+    if (!t) return null;
+    return { ...common, sub:c.sub||'', kind:'crypto', cls:'FOREX',
+      quotedAt:finiteValue(t.quotedAt,0), historyProvider:'binance', historySymbol:c.binanceSymbol || c.sym,
+      price:finiteValue(t.lastPrice), chg:finiteValue(t.priceChangePercent,0),
+      high:finiteValue(t.highPrice), low:finiteValue(t.lowPrice), vol:finiteValue(t.quoteVolume), mcap:0 };
+  }
+  if (c.type === 'crypto'){
+    if (c.source === 'coingecko'){
+      const d = customCoinQuotes[c.sym];
+      return { ...common, sub:'/USD', kind:'crypto', cls:'COIN',
+        quotedAt:finiteValue(d?.quotedAt,0), historyProvider:'coingecko', historySymbol:c.cgId,
+        price:d ? finiteValue(d.price) : null, chg:d ? finiteValue(d.chg,0) : 0,
+        high:d ? finiteValue(d.high) : null, low:d ? finiteValue(d.low) : null,
+        vol:d ? finiteValue(d.vol) : null, mcap:d ? finiteValue(d.mcap,0) : 0 };
+    }
+    const t = tickerMap[c.sym];
+    if (!t) return null;
+    return { ...common, sub:'/USDT', kind:'crypto', cls:'COIN',
+      quotedAt:finiteValue(t.quotedAt,0), historyProvider:'binance', historySymbol:c.sym+'USDT',
+      price:finiteValue(t.lastPrice), chg:finiteValue(t.priceChangePercent,0),
+      high:finiteValue(t.highPrice), low:finiteValue(t.lowPrice), vol:finiteValue(t.quoteVolume), mcap:0 };
+  }
+  const d = customQuotes[c.sym];
+  const isCommodity=c.type==='commodity';
+  const isForex=c.type==='forex';
+  const isEconomic=c.type==='economic';
+  const isXautTryg=c.sym==='XAUTRYG';
+  const isTradFi=isCommodity || isForex || isEconomic;
+  return { ...common, sub:isTradFi ? (c.sub||'') : '', kind:isTradFi ? 'tradfi' : 'stock', cls:isCommodity ? (c.cls||'COMMODITY') : isForex ? (c.cls||'FOREX') : isEconomic ? (c.cls||'ECONOMIC') : 'STOCK',
+    quotedAt:finiteValue(d?.quotedAt,0), historyProvider:isEconomic ? 'economic' : isXautTryg ? 'derived_xautryg' : 'yahoo', historySymbol:isEconomic ? c.sym : isXautTryg ? 'XAUTRYG' : (c.ysym || c.sym.replace(/\./g,'-')),
+    price:d ? finiteValue(d.price) : null, chg:d ? finiteValue(d.chgPct,0) : 0,
+    high:d ? finiteValue(d.high) : null, low:d ? finiteValue(d.low) : null,
+    vol:d ? finiteValue(d.vol) : null, mcap:0 };
+}
+
+function isAssetHidden(id){ return hiddenAssets.includes(String(id)); }
+function defaultAssetIdForSymbol(sym){
+  const symbol=String(sym||'').toUpperCase();
+  if (CRYPTO_LIST.some(c=>c.base===symbol) || symbol==='HYPE') return symbol;
+  return TRADFI.some(f=>f.key===symbol) ? symbol : null;
+}
+
+function tradingViewSymbol(asset){
+  const id = asset.id || '';
+  if (asset.kind === 'crypto'){
+    if (asset.tvSymbol) return `${asset.tvExchange || 'BINANCE'}:${asset.tvSymbol}`;
+    if (asset.source === 'coingecko'){
+      if (asset.tvSymbol && asset.tvExchange){
+        return `${asset.tvExchange}:${asset.tvSymbol}`;
+      }
+      return null;
+    }
+    const symbol = id === 'HYPE' ? 'HYPEUSDT' : `${asset.name}USDT`;
+    const exchange = id === 'HYPE' ? 'BYBIT' : 'BINANCE';
+    return `${exchange}:${symbol}`;
+  }
+  const map = {
+    // TradingView's own widget examples use the FOREX.com S&P 500 feed,
+    // which is available in embedded Advanced Charts.
+    SPX:  'FOREXCOM:SPXUSD',
+    // The table is sourced from CNBC's IXIC (Nasdaq Composite) quote, so
+    // keep the embedded chart on the same TradingView instrument.
+    NDX:  'NASDAQ:IXIC',
+    GOLD: 'OANDA:XAUUSD',
+    OIL:  'TVC:USOIL'
+  };
+  return map[id] || `${asset.tvExchange || 'NASDAQ'}:${asset.tvSymbol || asset.name}`;
+}
+
+function tradingViewUrl(asset){
+  const widgetSymbol = tradingViewSymbol(asset);
+  if (!widgetSymbol) return `https://www.tradingview.com/search/?query=${encodeURIComponent(asset.name)}`;
+  const separator = widgetSymbol.indexOf(':');
+  const exchange = widgetSymbol.slice(0, separator);
+  const symbol = widgetSymbol.slice(separator + 1);
+  return `https://www.tradingview.com/symbols/${encodeURIComponent(symbol)}/?exchange=${encodeURIComponent(exchange)}`;
+}
+
+function clearAssetChart(){
+  assetChartGeneration++;
+  const host = $('#assetMenuChart');
+  if (host){
+    host.removeAttribute('aria-busy');
+    host.replaceChildren();
+  }
+}
+
+function assetChartState(message){
+  const state = document.createElement('div');
+  state.className = 'asset-chart-state';
+  state.textContent = message;
+  return state;
+}
+
+function tradingViewUrlForSymbol(symbol){
+  const value=String(symbol||'');
+  const separator=value.indexOf(':');
+  if (separator<1) return `https://www.tradingview.com/search/?query=${encodeURIComponent(value)}`;
+  const exchange=value.slice(0,separator);
+  const ticker=value.slice(separator+1);
+  return `https://www.tradingview.com/symbols/${encodeURIComponent(ticker)}/?exchange=${encodeURIComponent(exchange)}`;
+}
+
+function normalizeTradingViewPanelSymbol(rawInput){
+  const raw=String(rawInput||'').trim().toUpperCase();
+  if (!raw) return null;
+  const compact=raw.replace(/\s+/g,'').replace(/\//g,'');
+  const aliases={
+    'SPX':'FOREXCOM:SPXUSD',
+    'SP500':'FOREXCOM:SPXUSD',
+    'S&P500':'FOREXCOM:SPXUSD',
+    'NASDAQ':'NASDAQ:IXIC',
+    'IXIC':'NASDAQ:IXIC',
+    'NDX':'NASDAQ:IXIC',
+    'GOLD':'OANDA:XAUUSD',
+    'XAUUSD':'OANDA:XAUUSD',
+    'SILVER':'OANDA:XAGUSD',
+    'XAGUSD':'OANDA:XAGUSD',
+    'OIL':'TVC:USOIL',
+    'WTI':'TVC:USOIL',
+    'USDTRY':'FX_IDC:USDTRY',
+    'EURUSD':'FX_IDC:EURUSD',
+    'GBPUSD':'FX_IDC:GBPUSD',
+    'XAUTRYG':'FX_IDC:XAUTRYG',
+    'USDTTRY':'BINANCE:USDTTRY'
+  };
+  if (aliases[compact]) return aliases[compact];
+  if (compact.includes(':')){
+    const parts=compact.split(':');
+    if (parts.length!==2 || !/^[A-Z0-9._-]{1,24}$/.test(parts[0]) || !/^[A-Z0-9._-]{1,32}$/.test(parts[1])) return null;
+    return `${parts[0]}:${parts[1]}`;
+  }
+  if (!/^[A-Z0-9._-]{1,32}$/.test(compact)) return null;
+  const cryptoBases=new Set(['BTC','ETH','SOL','BNB','XRP','DOGE','TRX','ZEC','LINK','NEAR','TAO','SUI','HYPE','BP']);
+  if (cryptoBases.has(compact)) return `BINANCE:${compact}USDT`;
+  if (/(USDT|USDC|BUSD)$/.test(compact)) return `BINANCE:${compact}`;
+  if (/TRY$/.test(compact)) return `FX_IDC:${compact}`;
+  return `NASDAQ:${compact}`;
+}
+
+function clearTradingViewPanel(){
+  tradingViewPanelGeneration++;
+  const host=$('#tradingviewPanelChart');
+  if (host){
+    host.removeAttribute('aria-busy');
+    host.replaceChildren();
+  }
+}
+
+function renderTradingViewPanel(){
+  const panel=$('#panel-tradingview');
+  const host=$('#tradingviewPanelChart');
+  if (!panel || panel.hidden || panelVisibility['panel-tradingview']!==true || !host) return;
+  clearTradingViewPanel();
+  const generation=tradingViewPanelGeneration;
+  const input=$('#tradingviewPanelSymbol');
+  const saved=cacheGet(TRADINGVIEW_PANEL_SYMBOL_KEY);
+  const symbol=normalizeTradingViewPanelSymbol(input?.value || saved || 'BINANCE:BTCUSDT');
+  if (!symbol){
+    host.append(assetChartState('USE EXCHANGE:SYMBOL'));
+    return;
+  }
+  if (input) input.value=symbol;
+  host.setAttribute('aria-busy','true');
+  const loading=assetChartState('LOADING CHART…');
+  const container=document.createElement('div');
+  container.className='tradingview-widget-container';
+  const widget=document.createElement('div');
+  widget.className='tradingview-widget-container__widget';
+  const attribution=document.createElement('div');
+  attribution.className='tradingview-widget-copyright';
+  const attributionLink=document.createElement('a');
+  attributionLink.href=tradingViewUrlForSymbol(symbol);
+  attributionLink.target='_blank';
+  attributionLink.rel='noopener nofollow';
+  attributionLink.textContent=`${symbol} chart by TradingView`;
+  attribution.append(attributionLink);
+  const script=document.createElement('script');
+  script.type='text/javascript';
+  script.src='https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
+  script.async=true;
+  script.textContent=JSON.stringify({
+    autosize:true,
+    symbol,
+    interval:'D',
+    timezone:'Etc/UTC',
+    theme:'dark',
+    style:'1',
+    locale:'en',
+    backgroundColor:'rgba(7, 18, 20, 1)',
+    gridColor:'rgba(255, 255, 255, 0.06)',
+    hide_side_toolbar:true,
+    hide_top_toolbar:false,
+    hide_legend:false,
+    hide_volume:false,
+    allow_symbol_change:false,
+    save_image:false,
+    calendar:false,
+    withdateranges:true,
+    support_host:'https://www.tradingview.com'
+  });
+  script.addEventListener('load',()=>{
+    if (generation===tradingViewPanelGeneration){
+      host.removeAttribute('aria-busy');
+      loading.remove();
+    }
+  },{once:true});
+  script.addEventListener('error',()=>{
+    if (generation!==tradingViewPanelGeneration) return;
+    host.removeAttribute('aria-busy');
+    host.replaceChildren(assetChartState('TRADINGVIEW CHART COULD NOT LOAD'));
+  },{once:true});
+  container.append(widget,attribution,script);
+  host.append(loading,container);
+}
+
+function renderAssetChart(asset){
+  const host = $('#assetMenuChart');
+  if (!host) return;
+  clearAssetChart();
+  const generation = assetChartGeneration;
+  const symbol = tradingViewSymbol(asset);
+  if (!symbol){
+    host.append(assetChartState('TRADINGVIEW CHART UNAVAILABLE'));
+    return;
+  }
+
+  host.setAttribute('aria-busy', 'true');
+  const loading = assetChartState('LOADING CHART…');
+  const container = document.createElement('div');
+  container.className = 'tradingview-widget-container';
+  const widget = document.createElement('div');
+  widget.className = 'tradingview-widget-container__widget';
+  const attribution = document.createElement('div');
+  attribution.className = 'tradingview-widget-copyright';
+  const attributionLink = document.createElement('a');
+  attributionLink.href = tradingViewUrl(asset);
+  attributionLink.target = '_blank';
+  attributionLink.rel = 'noopener nofollow';
+  attributionLink.textContent = `${asset.name} chart by TradingView`;
+  attribution.append(attributionLink);
+  const script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
+  script.async = true;
+  script.textContent = JSON.stringify({
+    autosize: true,
+    symbol,
+    interval: 'D',
+    timezone: 'Etc/UTC',
+    theme: 'dark',
+    style: '1',
+    locale: 'en',
+    backgroundColor: 'rgba(7, 18, 20, 1)',
+    gridColor: 'rgba(255, 255, 255, 0.06)',
+    hide_side_toolbar: true,
+    hide_top_toolbar: false,
+    hide_legend: false,
+    hide_volume: false,
+    allow_symbol_change: false,
+    save_image: false,
+    calendar: false,
+    withdateranges: true,
+    support_host: 'https://www.tradingview.com'
+  });
+  script.addEventListener('load', () => {
+    if (generation === assetChartGeneration){
+      host.removeAttribute('aria-busy');
+      loading.remove();
+    }
+  }, { once:true });
+  script.addEventListener('error', () => {
+    if (generation !== assetChartGeneration) return;
+    host.removeAttribute('aria-busy');
+    host.replaceChildren(assetChartState('TRADINGVIEW CHART COULD NOT LOAD'));
+  }, { once:true });
+  container.append(widget, attribution, script);
+  host.append(loading, container);
+}
+
+function closeAssetMenu(){
+  const menu = $('#assetMenu');
+  if (menu) menu.hidden = true;
+  clearAssetChart();
+  activeAssetMenu = null;
+}
+
+function openAssetMenu(asset, anchor){
+  if (!asset || !anchor) return;
+  const menu = $('#assetMenu');
+  const title = $('#assetMenuTitle');
+  const tv = $('#assetMenuTradingView');
+  const remove = $('#assetMenuRemove');
+  if (!menu || !title || !tv || !remove) return;
+
+  activeAssetMenu = asset;
+  title.textContent = `${asset.name} · ${asset.cls || (asset.kind === 'crypto' ? 'COIN' : 'ASSET')}`;
+  tv.href = tradingViewUrl(asset);
+  remove.hidden = false;
+  remove.setAttribute('aria-hidden', 'false');
+  menu.style.visibility = 'hidden';
+  menu.hidden = false;
+
+  const rect = typeof anchor.getBoundingClientRect === 'function'
+    ? anchor.getBoundingClientRect()
+    : { left:anchor.clientX, right:anchor.clientX, top:anchor.clientY, bottom:anchor.clientY };
+  const gap = 8;
+  const left = Math.max(10, Math.min(rect.left, window.innerWidth - menu.offsetWidth - 10));
+  const below = rect.bottom + gap;
+  const top = below + menu.offsetHeight <= window.innerHeight - 10
+    ? below
+    : Math.max(10, rect.top - menu.offsetHeight - gap);
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+  menu.style.visibility = '';
+  renderAssetChart(asset);
+}
+
+$('#assetMenuTradingView').addEventListener('click', closeAssetMenu);
+$('#assetMenuClose').addEventListener('click', closeAssetMenu);
+$('#assetMenuRemove').addEventListener('click', e => {
+  e.preventDefault();
+  e.stopPropagation();
+  const asset = activeAssetMenu;
+  if (!asset) return;
+  closeAssetMenu();
+  removeAsset(asset);
+});
+document.addEventListener('click', e => {
+  if (!activeAssetMenu) return;
+  if (e.target.closest('#assetMenu, .asset-row, #bubbleCanvas')) return;
+  closeAssetMenu();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeAssetMenu();
+});
+
+const pageContextMenu = $('#pageContextMenu');
+const backgroundPicker = $('#backgroundPicker');
+const themePicker = $('#themePicker');
+const pagePanelManager = $('#pagePanelManager');
+const pageThemeChange = $('#pageThemeChange');
+const panelManager = $('#panelManager');
+const mobileBackgroundButton = $('#mobileBackgroundButton');
+let contextPoint = { x:10, y:10 };
+
+function backgroundName(path){
+  return String(path || '').split('/').pop().replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ');
+}
+
+function syncBackgroundPicker(){
+  const current = window.MusTerminalBackground.current();
+  backgroundPicker?.querySelectorAll('[data-background]').forEach(button => {
+    button.setAttribute('aria-pressed', button.dataset.background === current ? 'true' : 'false');
+  });
+}
+
+function renderBackgroundPicker(){
+  if (!backgroundPicker) return;
+  backgroundPicker.innerHTML = window.MusTerminalBackground.list().map(path => {
+    const label = backgroundName(path);
+    return `<button class="background-thumb" type="button" role="menuitem" data-background="${escapeHtml(path)}" aria-label="${escapeHtml(label)}" aria-pressed="false" title="${escapeHtml(label)}"><img src="${escapeHtml(path)}" alt="" loading="lazy" decoding="async"></button>`;
+  }).join('');
+  syncBackgroundPicker();
+}
+
+renderBackgroundPicker();
+
+function themeLabel(theme){
+  return theme === 'white' ? 'WHITE' : theme === 'black' ? 'BLACK' : 'LIQUID GLASS';
+}
+
+function syncThemePicker(){
+  const current = window.MusTerminalTheme.current();
+  themePicker?.querySelectorAll('[data-theme]').forEach(button => {
+    button.setAttribute('aria-pressed', button.dataset.theme === current ? 'true' : 'false');
+  });
+}
+
+function renderThemePicker(){
+  if (!themePicker) return;
+  themePicker.innerHTML = window.MusTerminalTheme.list().map(theme =>
+    `<button class="theme-choice" type="button" role="menuitem" data-theme="${escapeHtml(theme)}" aria-pressed="false">${themeLabel(theme)}</button>`
+  ).join('');
+  syncThemePicker();
+}
+
+renderThemePicker();
+
+backgroundPicker?.addEventListener('click', async event => {
+  const button = event.target.closest?.('[data-background]');
+  if (!button) return;
+  button.disabled = true;
+  try {
+    const changed = await window.MusTerminalBackground.select(button.dataset.background);
+    if (changed){
+      syncBackgroundPicker();
+      closePageContextMenu();
+    }
+  } catch (error) {
+    console.warn('background selection failed', error);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+themePicker?.addEventListener('click', event => {
+  const button = event.target.closest?.('[data-theme]');
+  if (!button) return;
+  if (window.MusTerminalTheme.select(button.dataset.theme)){
+    syncThemePicker();
+    closePageContextMenu();
+  }
+});
+
+function closePageContextMenu(){
+  pageContextMenu.hidden = true;
+  if (backgroundPicker) backgroundPicker.hidden = true;
+  if (themePicker) themePicker.hidden = true;
+  if (panelManager) panelManager.hidden = true;
+  pageThemeChange?.setAttribute('aria-expanded','false');
+  pagePanelManager?.setAttribute('aria-expanded','false');
+}
+
+function positionPageContextMenu(){
+  const gap = 10;
+  const rect = pageContextMenu.getBoundingClientRect();
+  const left = Math.max(gap, Math.min(contextPoint.x, window.innerWidth - rect.width - gap));
+  const top = Math.max(gap, Math.min(contextPoint.y, window.innerHeight - rect.height - gap));
+  pageContextMenu.style.left = `${left}px`;
+  pageContextMenu.style.top = `${top}px`;
+}
+
+function showPageContextMenu(x,y){
+  closeAssetMenu();
+  contextPoint = { x, y };
+  pageContextMenu.hidden = false;
+  positionPageContextMenu();
+}
+
+function openPageContextMenu(event){
+  if (event.target.closest?.('a, button, input, textarea, select, [contenteditable="true"]')) return;
+  event.preventDefault();
+  showPageContextMenu(event.clientX,event.clientY);
+}
+
+document.addEventListener('contextmenu', openPageContextMenu);
+mobileBackgroundButton?.addEventListener('click', event => {
+  event.stopPropagation();
+  if (!pageContextMenu.hidden){
+    closePageContextMenu();
+    return;
+  }
+  const rect=mobileBackgroundButton.getBoundingClientRect();
+  showPageContextMenu(rect.right,rect.bottom+8);
+});
+document.addEventListener('pointerdown', event => {
+  if (!event.target.closest?.('#pageContextMenu')) closePageContextMenu();
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') {
+    closePageContextMenu();
+    return;
+  }
+  if (pageContextMenu.hidden || !['ArrowDown','ArrowUp'].includes(event.key)) return;
+  const items=[...pageContextMenu.querySelectorAll('[role="menuitem"]')];
+  if (!items.length) return;
+  const current=items.indexOf(document.activeElement);
+  const direction=event.key==='ArrowDown'?1:-1;
+  const next=(current+direction+items.length)%items.length;
+  event.preventDefault();
+  items[next]?.focus({ preventScroll:true });
+});
+window.addEventListener('resize', closePageContextMenu);
+document.addEventListener('scroll', event => {
+  if (event.target === pageContextMenu || event.target.closest?.('#pageContextMenu')) return;
+  closePageContextMenu();
+}, true);
+$('#pageBackgroundChange').addEventListener('click', () => {
+  if (!backgroundPicker) return;
+  if (panelManager) panelManager.hidden = true;
+  if (themePicker) themePicker.hidden = true;
+  pageThemeChange?.setAttribute('aria-expanded','false');
+  pagePanelManager?.setAttribute('aria-expanded','false');
+  backgroundPicker.hidden = !backgroundPicker.hidden;
+  if (!backgroundPicker.hidden){
+    syncBackgroundPicker();
+    requestAnimationFrame(positionPageContextMenu);
+  }
+});
+pageThemeChange?.addEventListener('click', () => {
+  if (!themePicker) return;
+  if (backgroundPicker) backgroundPicker.hidden = true;
+  if (panelManager) panelManager.hidden = true;
+  pagePanelManager?.setAttribute('aria-expanded','false');
+  themePicker.hidden = !themePicker.hidden;
+  pageThemeChange.setAttribute('aria-expanded',String(!themePicker.hidden));
+  if (!themePicker.hidden){
+    syncThemePicker();
+    requestAnimationFrame(positionPageContextMenu);
+  }
+});
+pagePanelManager?.addEventListener('click', () => {
+  if (!panelManager) return;
+  if (backgroundPicker) backgroundPicker.hidden = true;
+  if (themePicker) themePicker.hidden = true;
+  pageThemeChange?.setAttribute('aria-expanded','false');
+  panelManager.hidden = !panelManager.hidden;
+  pagePanelManager.setAttribute('aria-expanded',String(!panelManager.hidden));
+  if (!panelManager.hidden){
+    renderPanelManager();
+    requestAnimationFrame(positionPageContextMenu);
+  }
+});
+panelManager?.addEventListener('click', event => {
+  const toggle=event.target.closest?.('[data-panel-toggle]');
+  if (!toggle || toggle.getAttribute('aria-disabled') === 'true') return;
+  togglePanel(toggle.dataset.panelToggle);
+  requestAnimationFrame(positionPageContextMenu);
+});
+$('#pageReload').addEventListener('click', () => window.location.reload());
+
+const performanceCache = new Map();
+let performanceRequestId = 0;
+
+function closePerformance(){
+  const modal = $('#performanceModal');
+  if (modal) modal.hidden = true;
+  performanceRequestId++;
+}
+
+function performanceLoadingCards(){
+  return ['1 MONTH','1 YEAR','YTD'].map(label =>
+    `<div class="perf-card"><div class="perf-label">${label}</div><div class="perf-loading"></div></div>`
+  ).join('');
+}
+
+function performanceBaseline(points, target, provider){
+  let found = null;
+  for (const point of points){
+    if (point[0] <= target) found = point;
+    else break;
+  }
+  const maxGap = provider === 'economic'
+    ? 45 * 24 * 60 * 60 * 1000
+    : 10 * 24 * 60 * 60 * 1000;
+  return found && target - found[0] <= maxGap ? found[1] : null;
+}
+
+function performancePct(current, baseline){
+  return isFinite(+current) && isFinite(+baseline) && +baseline > 0
+    ? ((+current - +baseline) / +baseline) * 100
+    : null;
+}
+
+function performanceTargets(now=Date.now()){
+  const d = new Date(now);
+  return [
+    { label:'1 MONTH', at:now - 30*24*60*60*1000 },
+    { label:'1 YEAR', at:now - 365*24*60*60*1000 },
+    { label:'YTD', at:Date.UTC(d.getUTCFullYear(),0,1) }
+  ];
+}
+
+async function loadPerformanceHistory(asset){
+  const provider = asset.historyProvider;
+  const symbol = asset.historySymbol;
+  if (!provider || !symbol) throw new Error('Historical source is unavailable');
+  const key = `${provider}:${symbol}`;
+  const cached = performanceCache.get(key);
+  if (cached && Date.now() - cached.time < 10*60*1000) return cached.points;
+
+  let points = [];
+  if (provider === 'binance'){
+    const r = await fetchWithTimeout(`https://api.binance.com/api/v3/klines?symbol=${encodeURIComponent(symbol)}&interval=1d&limit=400`);
+    if (!r.ok) throw new Error('Binance history '+r.status);
+    const data = await r.json();
+    points = (Array.isArray(data) ? data : []).map(k => [+k[0], +k[4]]);
+  } else if (provider === 'coingecko'){
+    const r = await fetchWithTimeout(`${COINGECKO_BASE}/coins/${encodeURIComponent(symbol)}/market_chart?vs_currency=usd&days=365`);
+    if (!r.ok) throw new Error('CoinGecko history '+r.status);
+    const data = await r.json();
+    points = Array.isArray(data.prices) ? data.prices.map(p => [+p[0], +p[1]]) : [];
+  } else if (provider === 'yahoo'){
+    const r = await fetchWithTimeout(`${APP_API_ORIGIN}/api/history?symbol=${encodeURIComponent(symbol)}`,{},20000);
+    if (!r.ok) throw new Error('Market history '+r.status);
+    const data = await r.json();
+    points = Array.isArray(data.points) ? data.points.map(p => [+p[0], +p[1]]) : [];
+  } else if (provider === 'derived_xautryg'){
+    const [goldResponse, fxResponse] = await Promise.all([
+      fetchWithTimeout(`${APP_API_ORIGIN}/api/history?symbol=${encodeURIComponent('GC=F')}`,{},20000),
+      fetchWithTimeout(`${APP_API_ORIGIN}/api/history?symbol=${encodeURIComponent('TRY=X')}`,{},20000)
+    ]);
+    if (!goldResponse.ok || !fxResponse.ok) throw new Error('Derived gold/TRY history unavailable');
+    const [goldData, fxData] = await Promise.all([goldResponse.json(), fxResponse.json()]);
+    const fxByDay = new Map((Array.isArray(fxData.points) ? fxData.points : []).map(point => {
+      const timestamp=Number(point?.[0]);
+      return [new Date(timestamp).toISOString().slice(0,10), [timestamp, Number(point?.[1])]];
+    }).filter(([day, point]) => day && isFinite(point[0]) && isFinite(point[1]) && point[1] > 0));
+    const gramsPerTroyOunce = 31.1034768;
+    points = (Array.isArray(goldData.points) ? goldData.points : []).map(point => {
+      const timestamp=Number(point?.[0]);
+      const goldPrice=Number(point?.[1]);
+      const fxPoint=fxByDay.get(new Date(timestamp).toISOString().slice(0,10));
+      return fxPoint && isFinite(timestamp) && goldPrice > 0
+        ? [timestamp, goldPrice * fxPoint[1] / gramsPerTroyOunce]
+        : null;
+    }).filter(Boolean);
+  } else if (provider === 'economic'){
+    const r = await fetchWithTimeout(`${APP_API_ORIGIN}/api/economic?symbol=${encodeURIComponent(symbol)}`,{},20000);
+    if (!r.ok) throw new Error('Economic history '+r.status);
+    const data = await r.json();
+    points = Array.isArray(data.points) ? data.points.map(p => [+p[0], +p[1]]) : [];
+  }
+  points = points.filter(p => isFinite(p[0]) && isFinite(p[1]) && (provider==='economic' || p[1] > 0)).sort((a,b) => a[0]-b[0]);
+  if (!points.length) throw new Error('Historical prices are empty');
+  performanceCache.set(key, { time:Date.now(), points });
+  return points;
+}
+
+async function openPerformance(asset){
+  if (!asset) return;
+  closeAssetMenu();
+  const modal = $('#performanceModal');
+  const title = $('#performanceTitle');
+  const sub = $('#performanceSub');
+  const grid = $('#performanceGrid');
+  const status = $('#performanceStatus');
+  const requestId = ++performanceRequestId;
+  const isEconomic = asset.historyProvider === 'economic';
+  title.textContent = asset.name;
+  sub.textContent = isEconomic
+    ? `LATEST RELEASE ${asset.chg>=0?'+':''}${(+asset.chg||0).toFixed(2)} PP · monthly series`
+    : `24H ${asset.chg>=0?'+':''}${(+asset.chg||0).toFixed(2)}% · extended performance`;
+  grid.innerHTML = performanceLoadingCards();
+  status.textContent = isEconomic ? 'Loading monthly economic observations…' : 'Loading historical closes…';
+  status.className = 'perf-status';
+  modal.hidden = false;
+  $('#performanceClose').focus();
+  try {
+    const points = await loadPerformanceHistory(asset);
+    if (requestId !== performanceRequestId) return;
+    const cards = performanceTargets().map(period => {
+      const baseline = performanceBaseline(points, period.at, asset.historyProvider);
+      const value = performancePct(asset.price, baseline);
+      if (value == null){
+        return `<div class="perf-card"><div class="perf-label">${period.label}</div><div class="perf-value na">NO DATA</div></div>`;
+      }
+      return `<div class="perf-card"><div class="perf-label">${period.label}</div><div class="perf-value ${value>=0?'pos':'neg'}">${value>=0?'+':''}${value.toFixed(2)}%</div></div>`;
+    });
+    grid.innerHTML = cards.join('');
+    status.textContent = isEconomic
+      ? 'Calculated from monthly BLS observations.'
+      : 'Calculated from historical closing prices.';
+  } catch(e){
+    if (requestId !== performanceRequestId) return;
+    grid.innerHTML = ['1 MONTH','1 YEAR','YTD'].map(label =>
+      `<div class="perf-card"><div class="perf-label">${label}</div><div class="perf-value na">UNAVAILABLE</div></div>`
+    ).join('');
+    status.textContent = 'Historical performance could not be loaded right now.';
+    status.className = 'perf-status err';
+    console.warn('performance history failed', e);
+  }
+}
+
+$('#performanceClose').addEventListener('click', closePerformance);
+$('#performanceModal').addEventListener('click', e => {
+  if (e.target === $('#performanceModal')) closePerformance();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !$('#performanceModal').hidden) closePerformance();
+});
+
+function clearMarketDropStyles(){
+  document.querySelectorAll('#ticker-body .asset-row').forEach(row => {
+    row.classList.remove('dragging', 'drop-before', 'drop-after');
+  });
+}
+
+function visibleMarketIds(){
+  return [...document.querySelectorAll('#ticker-body .asset-row')].map(row => row.dataset.assetId);
+}
+
+function reorderedMarketIds(ids, draggedId, targetId, placeAfter){
+  const next = ids.filter(id => id !== draggedId);
+  const targetIndex = next.indexOf(targetId);
+  if (targetIndex < 0 || !ids.includes(draggedId)) return ids;
+  next.splice(targetIndex + (placeAfter ? 1 : 0), 0, draggedId);
+  return next;
+}
+
+function storeVisibleMarketOrder(visibleIds){
+  const visibleSet = new Set(visibleIds);
+  const unavailableIds = marketOrder.filter(id => !visibleSet.has(id));
+  marketOrder = [...visibleIds, ...unavailableIds];
+  tableSort = { key:'manual', dir:1 };
+  saveMarketOrder();
+}
+
+function focusMarketRow(assetId){
+  requestAnimationFrame(() => {
+    const row = [...document.querySelectorAll('#ticker-body .asset-row')]
+      .find(item => item.dataset.assetId === assetId);
+    row?.focus();
+  });
+}
+
+function moveMarketRowByStep(assetId, step){
+  const ids = visibleMarketIds();
+  const from = ids.indexOf(assetId);
+  const to = from + step;
+  if (from < 0 || to < 0 || to >= ids.length) return false;
+  [ids[from], ids[to]] = [ids[to], ids[from]];
+  storeVisibleMarketOrder(ids);
+  renderMarketTable();
+  focusMarketRow(assetId);
+  return true;
+}
+
+function renderMarketTable(){
+  if (marketDragActive){
+    pendingMarketRender = true;
+    return;
+  }
+  pendingMarketRender = false;
+  const rows = [];
+  CRYPTO_LIST.forEach(c => {
+    if (isAssetHidden(c.base)) return;
+    const t = tickerMap[c.base];
+    if (!t) return;
+    const price = +t.lastPrice;
+    rows.push({ id:c.base, name:c.base, sub:'/USDT', kind:'crypto', cls:'COIN', usd:true,
+      quotedAt:finiteValue(t.quotedAt,0), historyProvider:'binance', historySymbol:c.base+'USDT',
+      price, chg:+t.priceChangePercent, high:+t.highPrice, low:+t.lowPrice,
+      vol:+t.quoteVolume, volUsd:true, mcap:price*c.supply });
+  });
+  if (hypeRow && !isAssetHidden('HYPE')){
+    rows.push({ id:'HYPE', name:'HYPE', sub:'/USD', kind:'crypto', cls:'COIN', usd:true,
+      quotedAt:finiteValue(hypeRow.quotedAt,0), source:'coingecko', cgId:'hyperliquid', historyProvider:'coingecko', historySymbol:'hyperliquid',
+      price:finiteValue(hypeRow.price), chg:finiteValue(hypeRow.chg,0), high:finiteValue(hypeRow.high), low:finiteValue(hypeRow.low),
+      vol:finiteValue(hypeRow.vol), volUsd:true, mcap:finiteValue(hypeRow.mcap,0) });
+  }
+  TRADFI.forEach(f => {
+    if (isAssetHidden(f.key)) return;
+    const d = tradfiRows[f.key];
+    if (!d) return;
+    const price=finiteValue(d.price);
+    const previous=finiteValue(d.prev);
+    const sourcePct=finiteValue(d.chgPct);
+    rows.push({ id:f.key, name:f.name, sub:f.sub, kind:'tradfi', cls:f.cls, usd:f.usd,
+      quotedAt:finiteValue(d.quotedAt,0), historyProvider:'yahoo', historySymbol:f.ysym,
+      price,
+      chg:sourcePct !== null ? sourcePct : (previous ? (price-previous)/previous*100 : 0),
+      high:finiteValue(d.high), low:finiteValue(d.low), vol:finiteValue(d.vol), volUsd:false, mcap:f.mcap });
+  });
+  // user-added items share one normalized data model with the bubble panel.
+  customItems.forEach(c => {
+    const row = customAssetSnapshot(c);
+    if (row) rows.push(row);
+  });
+  const sk = tableSort.key, sd = tableSort.dir;
+  if (sk === 'manual'){
+    const manualIndex = new Map(marketOrder.map((id,index) => [id,index]));
+    rows.sort((a,b) => {
+      const ai = manualIndex.has(String(a.id)) ? manualIndex.get(String(a.id)) : Number.MAX_SAFE_INTEGER;
+      const bi = manualIndex.has(String(b.id)) ? manualIndex.get(String(b.id)) : Number.MAX_SAFE_INTEGER;
+      return ai - bi;
+    });
+  } else {
+    const num = v => (v==null || !isFinite(v)) ? -Infinity : v;
+    rows.sort((a,b) => (num(a[sk]) - num(b[sk])) * sd);
+  }
+  updateSortIndicators();
+
+  window.MusMarketSnapshot = rows;
+  window.dispatchEvent(new CustomEvent('mus:markets',{detail:rows}));
+  const displayedRows = typeof window.MusFilterMarkets==='function' ? window.MusFilterMarkets(rows) : rows;
+  const rowMeta = new Map(rows.map(r => [String(r.id), r]));
+  $('#ticker-body').innerHTML = displayedRows.map((r,i) => {
+    const prev = prevPrices[r.id];
+    let flash=''; if (r.price!=null && prev!==undefined && prev!==r.price) flash = r.price>prev ? 'fu':'fd';
+    if (r.price!=null) prevPrices[r.id] = r.price;
+    const eq = (r.kind==='tradfi' || r.kind==='stock');          // equity-style formatting (2 decimals)
+    const fixedDigits=Number.isInteger(r.decimals) ? r.decimals : (eq ? 2 : null);
+    const fmtP = v => (v==null || (eq && r.cls!=='ECONOMIC' && v<=0)) ? null : (fixedDigits==null ? smartPrice(v) : fmtNum(v,fixedDigits));
+    const cur = r.usd ? '$' : '';
+    const suffix = r.suffix || '';
+    const priceStr = fmtP(r.price)!=null ? cur+fmtP(r.price)+suffix : '<span style="color:var(--muted2)">…</span>';
+    const highStr  = fmtP(r.high)!=null ? fmtP(r.high)+suffix : '—';
+    const lowStr   = fmtP(r.low) !=null ? fmtP(r.low)+suffix  : '—';
+    const change=finiteValue(r.chg,0);
+    const safeName=escapeHtml(r.name);
+    const safeSub=escapeHtml(r.sub);
+    const safeClass=escapeHtml(r.cls);
+    const tag = r.cls ? `<span class="kind-tag t-${safeClass}">${safeClass}</span>` : '';
+    return `<tr class="asset-row" data-asset-id="${escapeHtml(r.id)}" draggable="true" tabindex="0" role="button" aria-label="${safeName} actions; drag to reorder">
+      <td><div class="sym-cell"><span class="rank">${i+1}</span><span class="base">${safeName}</span><span class="quote">${safeSub}</span>${tag}</div></td>
+      <td class="pricecell num ${flash}">${priceStr}</td>
+      <td><button class="chgpill perf-trigger num ${change>=0?'pos':'neg'}" type="button" data-performance-id="${escapeHtml(r.id)}" aria-label="Open ${safeName} extended performance">${change>=0?'+':''}${change.toFixed(2)}%</button></td>
+      <td class="num">${highStr}</td>
+      <td class="num">${lowStr}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="5"><div class="empty-state">No matching assets. Add a symbol or change your filters.</div></td></tr>';
+  $('#ticker-body').querySelectorAll('.asset-row').forEach(row => {
+    const asset = rowMeta.get(row.dataset.assetId);
+    const open = () => openAssetMenu(asset, row);
+    const performanceButton = row.querySelector('.perf-trigger');
+    performanceButton.addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      openPerformance(asset);
+    });
+    row.addEventListener('dragstart', event => {
+      if (event.target.closest?.('.perf-trigger')){
+        event.preventDefault();
+        return;
+      }
+      draggedMarketId = row.dataset.assetId;
+      marketDragActive = true;
+      suppressAssetClick = true;
+      row.classList.add('dragging');
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', draggedMarketId);
+      closeAssetMenu();
+      closePageContextMenu();
+    });
+    row.addEventListener('dragover', event => {
+      if (!draggedMarketId || draggedMarketId === row.dataset.assetId) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      document.querySelectorAll('#ticker-body .drop-before, #ticker-body .drop-after').forEach(item => {
+        if (item !== row) item.classList.remove('drop-before', 'drop-after');
+      });
+      const rect = row.getBoundingClientRect();
+      const placeAfter = event.clientY > rect.top + rect.height / 2;
+      row.classList.toggle('drop-before', !placeAfter);
+      row.classList.toggle('drop-after', placeAfter);
+
+      const scroller = row.closest('.px-scroll');
+      const scrollRect = scroller?.getBoundingClientRect();
+      if (scroller && scrollRect){
+        if (event.clientY < scrollRect.top + 30) scroller.scrollTop -= 12;
+        else if (event.clientY > scrollRect.bottom - 30) scroller.scrollTop += 12;
+      }
+    });
+    row.addEventListener('dragleave', event => {
+      if (!row.contains(event.relatedTarget)) row.classList.remove('drop-before', 'drop-after');
+    });
+    row.addEventListener('drop', event => {
+      if (!draggedMarketId || draggedMarketId === row.dataset.assetId) return;
+      event.preventDefault();
+      const draggedId = draggedMarketId;
+      const rect = row.getBoundingClientRect();
+      const placeAfter = event.clientY > rect.top + rect.height / 2;
+      const nextOrder = reorderedMarketIds(visibleMarketIds(), draggedId, row.dataset.assetId, placeAfter);
+      marketDragActive = false;
+      draggedMarketId = null;
+      pendingMarketRender = false;
+      clearMarketDropStyles();
+      storeVisibleMarketOrder(nextOrder);
+      renderMarketTable();
+      focusMarketRow(draggedId);
+      window.setTimeout(() => { suppressAssetClick = false; }, 0);
+    });
+    row.addEventListener('dragend', () => {
+      const shouldRender = pendingMarketRender;
+      marketDragActive = false;
+      draggedMarketId = null;
+      pendingMarketRender = false;
+      clearMarketDropStyles();
+      window.setTimeout(() => { suppressAssetClick = false; }, 0);
+      if (shouldRender) renderMarketTable();
+    });
+    row.addEventListener('click', event => {
+      if (suppressAssetClick){
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      open();
+    });
+    row.addEventListener('keydown', e => {
+      if (e.target.closest('.perf-trigger')) return;
+      if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')){
+        e.preventDefault();
+        moveMarketRowByStep(row.dataset.assetId, e.key === 'ArrowUp' ? -1 : 1);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+    });
+  });
+}
+
+/* ---- watchlist add/remove (coins via Binance/CoinGecko, stocks via CNBC) ---- */
+function isKnownSymbol(sym){
+  const defaultId=defaultAssetIdForSymbol(sym);
+  return (defaultId && !isAssetHidden(defaultId)) || customItems.some(c=>c.sym===sym);
+}
+function pxMsg(text, kind){
+  const el = $('#px-msg');
+  el.textContent = text || '';
+  el.className = 'px-msg' + (text?' show':'') + (kind?' '+kind:'');
+}
+
+async function binancePairQuoteOne(symbol){
+  try {
+    const r=await fetchWithTimeout(`https://api.binance.com/api/v3/ticker/24hr?symbol=${encodeURIComponent(symbol)}`,{cache:'no-store'},10000);
+    if (!r.ok) return null;
+    const t=await r.json();
+    if (!isFinite(+t.lastPrice)) return null;
+    return t;
+  } catch(e){ return null; }
+}
+
+async function yahooQuoteOne(symbol){
+  try {
+    const r=await fetchWithTimeout(`${APP_API_ORIGIN}/api/quote?symbol=${encodeURIComponent(symbol)}`,{cache:'no-store'},12000);
+    if (!r.ok) return null;
+    const quote=await r.json();
+    quote.quotedAt=Date.now();
+    return isFinite(+quote.price) ? quote : null;
+  } catch(e){ return null; }
+}
+
+async function economicQuoteOne(symbol){
+  try {
+    const r=await fetchWithTimeout(`${APP_API_ORIGIN}/api/economic?symbol=${encodeURIComponent(symbol)}`,{cache:'no-store'},16000);
+    if (!r.ok) return null;
+    const quote=await r.json();
+    quote.quotedAt=Date.now();
+    return isFinite(+quote.price) ? quote : null;
+  } catch(e){ return null; }
+}
+
+async function cnbcQuoteOne(sym){
+  try {
+    const r = await fetchWithTimeout('https://quote.cnbc.com/quote-html-webservice/quote.htm?requestMethod=quick&fund=1&exthrs=1&output=json&symbols='+encodeURIComponent(sym), { cache:'no-store' }, 12000);
+    if (!r.ok) return null;
+    const j = await r.json();
+    let q = j.QuickQuoteResult && j.QuickQuoteResult.QuickQuote; if (!q) return null;
+    const x = Array.isArray(q) ? q[0] : q;
+    const price = parseFloat(x.last);
+    if (!isFinite(price)) return null;
+    return { quotedAt:Date.now(), price, chgPct:parseFloat(x.change_pct)||0, prev:parseFloat(x.previous_day_closing)||null,
+             high:parseFloat(x.high)||null, low:parseFloat(x.low)||null, vol:x.volume?parseFloat(x.volume):null, name:x.name||sym };
+  } catch(e){ return null; }
+}
+
+const GRAMS_PER_TROY_OUNCE = 31.1034768;
+async function xautrygQuote(){
+  let gold=tradfiRows.GOLD;
+  if (!gold || !isFinite(+gold.price)) gold=await cnbcQuoteOne('@GC.1');
+  const fx=await yahooQuoteOne('TRY=X');
+  if (!gold || !fx || !isFinite(+gold.price) || !isFinite(+fx.price)) return null;
+
+  const price=+gold.price * +fx.price / GRAMS_PER_TROY_OUNCE;
+  const previous=isFinite(+gold.prev) && isFinite(+fx.prev)
+    ? +gold.prev * +fx.prev / GRAMS_PER_TROY_OUNCE
+    : null;
+  const chgPct=previous && previous > 0 ? (price - previous) / previous * 100
+    : finiteValue(gold.chgPct,0) + finiteValue(fx.chgPct,0);
+  return {
+    quotedAt:Math.min(finiteValue(gold.quotedAt,0),finiteValue(fx.quotedAt,0)),
+    price,
+    chgPct,
+    prev:previous,
+    high:isFinite(+gold.high) ? +gold.high * +fx.price / GRAMS_PER_TROY_OUNCE : null,
+    low:isFinite(+gold.low) ? +gold.low * +fx.price / GRAMS_PER_TROY_OUNCE : null,
+    vol:null,
+    name:'GRAM GOLD / TRY'
+  };
+}
+
+async function commodityFallbackQuote(asset){
+  if (asset?.sym!=='SILVER') return null;
+  try {
+    const r=await fetchWithTimeout('https://api.gold-api.com/price/XAG', { cache:'no-store' }, 12000);
+    if (!r.ok) return null;
+    const data=await r.json();
+    const price=Number(data?.price);
+    if (!isFinite(price) || price<=0) return null;
+    return { quotedAt:Date.now(), price, chgPct:0, prev:null, high:null, low:null, vol:null, name:'Silver' };
+  } catch(e){ return null; }
+}
+
+async function customTradFiQuoteOne(asset){
+  return await cnbcQuoteOne(asset.cnbcSymbol || asset.sym) || await commodityFallbackQuote(asset);
+}
+
+const COINGECKO_BASE = 'https://api.coingecko.com/api/v3';
+const COINGECKO_ALIASES = {
+  BP: { id:'backpack', name:'Backpack', tvSymbol:'BPUSDT', tvExchange:'MEXC' }
+};
+
+function normalizeCoinGeckoQuote(c){
+  if (!c || finiteValue(c.current_price)===null || +c.current_price<=0) return null;
+  return {
+    quotedAt:Date.now(),
+    price:+c.current_price,
+    chg:isFinite(+c.price_change_percentage_24h) ? +c.price_change_percentage_24h : 0,
+    high:isFinite(+c.high_24h) ? +c.high_24h : null,
+    low:isFinite(+c.low_24h) ? +c.low_24h : null,
+    vol:isFinite(+c.total_volume) ? +c.total_volume : null,
+    mcap:isFinite(+c.market_cap) ? +c.market_cap : 0
+  };
+}
+
+async function coinGeckoMarket(ids){
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (!unique.length) return [];
+  const url = `${COINGECKO_BASE}/coins/markets?vs_currency=usd&ids=${encodeURIComponent(unique.join(','))}&price_change_percentage=24h`;
+  const r = await fetchWithTimeout(url, { cache:'no-store' }, 16000);
+  if (!r.ok) throw new Error('CoinGecko HTTP '+r.status);
+  const data = await r.json();
+  return Array.isArray(data) ? data : [];
+}
+
+async function coinGeckoCoinOne(sym){
+  try {
+    const alias = COINGECKO_ALIASES[sym];
+    let match = alias ? { id:alias.id, name:alias.name, symbol:sym } : null;
+    if (!match){
+      const r = await fetchWithTimeout(`${COINGECKO_BASE}/search?query=${encodeURIComponent(sym)}`, { cache:'no-store' }, 12000);
+      if (!r.ok) throw new Error('CoinGecko search HTTP '+r.status);
+      const data = await r.json();
+      const exact = (Array.isArray(data.coins) ? data.coins : [])
+        .filter(c => String(c.symbol || '').toUpperCase() === sym)
+        .sort((a,b) => (a.market_cap_rank || Infinity) - (b.market_cap_rank || Infinity));
+      match = exact[0] || null;
+    }
+    if (!match) return null;
+    const market = (await coinGeckoMarket([match.id]))[0];
+    const quote = normalizeCoinGeckoQuote(market);
+    if (!quote) return null;
+    return {
+      item:{
+        sym,
+        type:'crypto',
+        source:'coingecko',
+        cgId:match.id,
+        name:match.name || sym,
+        tvSymbol:alias && alias.tvSymbol,
+        tvExchange:alias && alias.tvExchange
+      },
+      quote
+    };
+  } catch(e){
+    console.warn('CoinGecko coin search failed', e);
+    return null;
+  }
+}
+
+async function fetchCustomCoinGecko(){
+  const coins = customItems.filter(c => c.type === 'crypto' && c.source === 'coingecko' && c.cgId);
+  if (!coins.length) return;
+  try {
+    const markets = await coinGeckoMarket(coins.map(c => c.cgId));
+    const byId = new Map(markets.map(c => [c.id, c]));
+    coins.forEach(item => {
+      const quote = normalizeCoinGeckoQuote(byId.get(item.cgId));
+      if (quote) customCoinQuotes[item.sym] = quote;
+    });
+    saveCustom();
+    renderAll();
+  } catch(e){ console.warn('custom CoinGecko refresh failed', e); }
+}
+
+async function fetchCustomForex(){
+  const forexItems=customItems.filter(c => c.type==='forex' && c.ysym);
+  if (!forexItems.length) return;
+  const results=await Promise.all(forexItems.map(async item => [
+    item,
+    item.sym==='XAUTRYG' ? await xautrygQuote() : await yahooQuoteOne(item.ysym)
+  ]));
+  let changed=false;
+  results.forEach(([item,quote]) => {
+    if (!quote) return;
+    customQuotes[item.sym]=quote;
+    changed=true;
+  });
+  if (!changed) return;
+  saveCustom();
+  renderAll();
+}
+
+async function fetchCustomEconomic(){
+  const economicItems=customItems.filter(c => c.type==='economic');
+  if (!economicItems.length) return;
+  const results=await Promise.all(economicItems.map(async item => [item,await economicQuoteOne(item.sym)]));
+  let changed=false;
+  results.forEach(([item,quote]) => {
+    if (!quote) return;
+    customQuotes[item.sym]=quote;
+    changed=true;
+  });
+  if (!changed) return;
+  saveCustom();
+  renderAll();
+}
+
+async function addCustom(){
+  const rawInput=($('#px-q').value||'').trim();
+  const command=rawInput.toLowerCase().replace(/\s+/g,' ');
+  if (command==='trenches' || command==='trenches refresh'){
+    $('#px-q').value='';
+    focusTrenches(command.endsWith(' refresh'));
+    return;
+  }
+  const specialAlias=customTradFiAlias(rawInput) || customEconomicAlias(rawInput) || customPairAlias(rawInput);
+  const rawSym = rawInput.toUpperCase().replace(/[^A-Z0-9.\-]/g,'');
+  const sym = specialAlias?.sym || (rawSym === 'BACKPACK' ? 'BP' : rawSym);
+  if (!sym){ $('#px-q').focus(); return; }
+  const defaultId=defaultAssetIdForSymbol(sym);
+  if (defaultId && isAssetHidden(defaultId)){
+    hiddenAssets=hiddenAssets.filter(id=>id!==defaultId);
+    saveHiddenAssets();
+    $('#px-q').value='';
+    renderAll();
+    pxMsg(`Restored ${sym} to list`, 'ok');
+    return;
+  }
+  const existingCustom = customItems.find(c => c.sym === sym);
+  let replaceExistingStock = false;
+  let replaceExistingSpecial = false;
+  if (existingCustom){
+    const shouldReplaceWithSpecial=specialAlias && existingCustom.type!==specialAlias.type;
+    if (shouldReplaceWithSpecial){
+      replaceExistingSpecial=true;
+    } else {
+      const alias = COINGECKO_ALIASES[sym];
+      const isRequestedCoinMissing = alias && existingCustom.type !== 'crypto';
+      if (!isRequestedCoinMissing){ pxMsg(`${sym} is already in the list`, 'err'); return; }
+      replaceExistingStock = true;
+    }
+  } else if (isKnownSymbol(sym)){
+    pxMsg(`${sym} is already in the list`, 'err');
+    return;
+  }
+  // Reserved commodities, economic indicators, Binance pairs and FX pairs take priority over
+  // similarly named coins or stock symbols.
+  if (specialAlias){
+    let quote=null;
+    if (specialAlias.type==='commodity'){
+      pxMsg(`Loading ${specialAlias.name} commodity…`);
+      quote=await customTradFiQuoteOne(specialAlias);
+      if (!quote){
+        pxMsg(`${specialAlias.name} commodity price could not be loaded right now`, 'err');
+        return;
+      }
+    } else if (specialAlias.type==='crypto_pair'){
+      quote=tickerSymbolMap[specialAlias.binanceSymbol] || await binancePairQuoteOne(specialAlias.binanceSymbol);
+    } else if (specialAlias.type==='forex'){
+      quote=specialAlias.sym==='XAUTRYG'
+        ? await xautrygQuote()
+        : await yahooQuoteOne(specialAlias.ysym);
+    } else if (specialAlias.type==='economic'){
+      pxMsg(`Loading ${specialAlias.name}…`);
+      quote=await economicQuoteOne(specialAlias.sym);
+      if (!quote){
+        pxMsg(`${specialAlias.name} could not be loaded right now`, 'err');
+        return;
+      }
+    }
+    if (replaceExistingSpecial){
+      customItems=customItems.filter(c=>c.sym!==sym);
+      delete customQuotes[sym];
+      delete customCoinQuotes[sym];
+    }
+    customItems.push(specialAlias);
+    if (specialAlias.type==='crypto_pair' && quote) tickerSymbolMap[specialAlias.binanceSymbol]=quote;
+    else if (quote) customQuotes[specialAlias.sym]=quote;
+    saveCustom();
+    $('#px-q').value='';
+    const typeLabel=specialAlias.type==='crypto_pair' || specialAlias.type==='forex'
+      ? 'forex'
+      : specialAlias.type==='economic' ? 'economic indicator' : 'commodity';
+    pxMsg(`Added ${specialAlias.name} · ${typeLabel}${quote?'':' · price loading'}`, 'ok');
+    renderAll();
+    return;
+  }
+  // 1) crypto on Binance?
+  if (tickerMap[sym]){
+    customItems.push({ sym, type:'crypto' }); saveCustom();
+    $('#px-q').value=''; pxMsg(`Added ${sym} · crypto`, 'ok'); renderAll(); return;
+  }
+  // 2) coins not listed on Binance (including Backpack/BP)
+  pxMsg(`Searching “${sym}”…`);
+  const coin = await coinGeckoCoinOne(sym);
+  if (coin){
+    if (replaceExistingStock){
+      customItems = customItems.filter(c => c.sym !== sym);
+      delete customQuotes[sym];
+    }
+    customItems.push(coin.item);
+    customCoinQuotes[sym] = coin.quote;
+    saveCustom();
+    $('#px-q').value='';
+    pxMsg(`Added ${coin.item.name} (${sym}) · crypto`, 'ok');
+    renderAll();
+    return;
+  }
+  if (replaceExistingStock){
+    pxMsg(`Backpack (BP) price could not be loaded right now`, 'err');
+    return;
+  }
+  // 3) stock via CNBC
+  const quote = await cnbcQuoteOne(sym);
+  if (quote){
+    customItems.push({ sym, type:'stock', name:quote.name, tvSymbol:sym, tvExchange:'NASDAQ' }); customQuotes[sym] = quote; saveCustom();
+    $('#px-q').value=''; pxMsg(`Added ${quote.name} (${sym})`, 'ok'); renderAll();
+  } else {
+    pxMsg(`“${sym}” not found as a coin or stock`, 'err');
+  }
+}
+function removeAsset(asset){
+  if (!asset) return false;
+  if (asset.custom) return removeCustom(asset.rmsym || asset.name);
+  const id=String(asset.id||'').trim();
+  if (!id){ pxMsg('Asset could not be removed', 'err'); return false; }
+  if (!isAssetHidden(id)){
+    hiddenAssets.push(id);
+    saveHiddenAssets();
+  }
+  renderAll();
+  pxMsg(`Removed ${asset.name} · search ${id} to restore`, 'ok');
+  return true;
+}
+
+function removeCustom(sym){
+  const symbol = String(sym || '').trim().toUpperCase();
+  const before = customItems.length;
+  customItems = customItems.filter(c => c.sym !== symbol);
+  if (customItems.length === before){
+    pxMsg(`${symbol || 'Asset'} is not in the added list`, 'err');
+    return false;
+  }
+  delete customQuotes[symbol];
+  delete customCoinQuotes[symbol];
+  saveCustom();
+  renderAll();
+  pxMsg(`Removed ${symbol} from list`, 'ok');
+  return true;
+}
+
+// reflect the active sort column/direction in the table headers
+function updateSortIndicators(){
+  document.querySelectorAll('#panel-table thead th[data-sort]').forEach(th => {
+    const ar = th.querySelector('.sort-ar'); if (!ar) return;
+    if (th.dataset.sort === tableSort.key){
+      ar.textContent = tableSort.dir === -1 ? '▼' : '▲';
+      th.classList.add('sorted');
+    } else { ar.textContent = ''; th.classList.remove('sorted'); }
+  });
+}
+
+/* HYPE (Hyperliquid) — not listed on Binance, sourced from CoinGecko */
+async function fetchHype(){
+  try {
+    const r = await fetchWithTimeout('https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=hyperliquid&price_change_percentage=24h',{cache:'no-store'},12000);
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const payload = await r.json();
+    const c = Array.isArray(payload) ? payload[0] : null;
+    const price=finiteValue(c?.current_price);
+    if(price===null) throw new Error('empty or invalid');
+    hypeRow = { quotedAt:Date.now(), price, chg:finiteValue(c.price_change_percentage_24h,0), high:finiteValue(c.high_24h), low:finiteValue(c.low_24h), vol:finiteValue(c.total_volume), mcap:finiteValue(c.market_cap,0) };
+    cacheSet('cc_hype', hypeRow);
+    renderAll();
+  } catch(e){ console.warn('hype failed', e); }   // fall back to cached value
+}
+
+/* Traditional markets (S&P 500, NASDAQ, Oil, Gold) via CNBC's public quote API.
+   Direct CORS (no proxy, no API key) in a single batch request — this works even on
+   networks where third-party CORS proxies are blocked. gold-api.com is a last-resort
+   fallback for gold only. Whatever loads is cached so the panel never blanks out. */
+const CNBC_BASE = 'https://quote.cnbc.com/quote-html-webservice/quote.htm?requestMethod=quick&fund=1&exthrs=1&output=json&symbols=';
+const CNBC_MAP = { '.SPX':'SPX', '.IXIC':'NDX', '@CL.1':'OIL', '@GC.1':'GOLD' };
+async function fetchTradFi(){
+  let ok = 0, gotGold = false;
+  const customTradFiItems = customItems.filter(c => c.type==='stock' || c.type==='commodity');
+  const customByCnbcSymbol = new Map(customTradFiItems.map(c => [c.cnbcSymbol || c.sym, c.sym]));
+  const refreshedCustomSymbols = new Set();
+  const syms = ['.SPX','.IXIC','@CL.1','@GC.1', ...customByCnbcSymbol.keys()];   // TradFi + added stocks/commodities in one batch
+  try {
+    const r = await fetchWithTimeout(CNBC_BASE + encodeURIComponent(syms.join('|')), { cache:'no-store' }, 12000);
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    const j = await r.json();
+    let q = (j?.QuickQuoteResult && j.QuickQuoteResult.QuickQuote) || [];
+    if (!Array.isArray(q)) q = [q];
+    q.filter(x => x && typeof x === 'object').forEach(x => {
+      const price = parseFloat(x.last);
+      if (!isFinite(price)) return;
+      const quote = {
+        quotedAt:Date.now(), price,
+        chgPct: parseFloat(x.change_pct),
+        prev: parseFloat(x.previous_day_closing) || null,
+        high: parseFloat(x.high) || null,
+        low:  parseFloat(x.low)  || null,
+        vol:  x.volume ? parseFloat(x.volume) : null,
+        name: x.name
+      };
+      const key = CNBC_MAP[x.symbol];
+      if (key){ tradfiRows[key] = quote; ok++; if (key === 'GOLD') gotGold = true; }
+      else {
+        const customSymbol=customByCnbcSymbol.get(x.symbol) || x.symbol;
+        customQuotes[customSymbol] = quote;
+        refreshedCustomSymbols.add(customSymbol);
+      }
+    });
+  } catch(e){ console.warn('tradfi (CNBC) failed', e); }
+  for (const item of customTradFiItems){
+    if (item.type!=='commodity' || refreshedCustomSymbols.has(item.sym)) continue;
+    const fallback=await commodityFallbackQuote(item);
+    if (fallback) customQuotes[item.sym]=fallback;
+  }
+  if (!gotGold){                                   // CORS-native fallback for gold
+    try { const r = await fetchWithTimeout('https://api.gold-api.com/price/XAU',{},12000);
+          if (r.ok){ const g = await r.json();
+            tradfiRows.GOLD = { quotedAt:Date.now(), price:g.price, chgPct:0, prev:null, high:null, low:null, vol:null }; ok++; } }
+    catch(e){}
+  }
+  if (ok) cacheSet('cc_tradfi', tradfiRows);
+  cacheSet('cc_customq', customQuotes);
+  renderAll();
+}
+
+/* ============================================================
+   INIT + SCHEDULERS
+   ============================================================ */
+// loading skeletons for table
+$('#ticker-body').innerHTML = Array.from({length:8}).map(()=>
+  `<tr><td colspan="5" style="padding:0"><div class="skel skel-row"></div></td></tr>`).join('');
+
+// prices watchlist: add a coin or stock by symbol
+$('#px-add').onclick = addCustom;
+$('#px-q').addEventListener('keydown', e => { if (e.key === 'Enter') addCustom(); });
+$('#trench-refresh').onclick = () => focusTrenches(true);
+const tradingViewPanelForm=$('#tradingviewPanelForm');
+const tradingViewPanelInput=$('#tradingviewPanelSymbol');
+const initialTradingViewSymbol=normalizeTradingViewPanelSymbol(cacheGet(TRADINGVIEW_PANEL_SYMBOL_KEY) || 'BINANCE:BTCUSDT');
+if (tradingViewPanelInput && initialTradingViewSymbol) tradingViewPanelInput.value=initialTradingViewSymbol;
+tradingViewPanelForm?.addEventListener('submit', event => {
+  event.preventDefault();
+  const symbol=normalizeTradingViewPanelSymbol(tradingViewPanelInput?.value);
+  if (!symbol){
+    clearTradingViewPanel();
+    $('#tradingviewPanelChart')?.append(assetChartState('USE EXCHANGE:SYMBOL'));
+    return;
+  }
+  cacheSet(TRADINGVIEW_PANEL_SYMBOL_KEY,symbol);
+  if (tradingViewPanelInput) tradingViewPanelInput.value=symbol;
+  renderTradingViewPanel();
+});
+setupIndependentPanelFrames();
+setupPanelDragging();
+renderPanelManager();
+updatePanelLayout();
+setupPanelResizers();
+
+// click a column header to sort by it (toggles asc/desc)
+document.querySelectorAll('#panel-table thead th[data-sort]').forEach(th => {
+  th.addEventListener('click', event => {
+    if (event.target.closest('.px-search')) return;
+    const key = th.dataset.sort;
+    if (tableSort.key === key) tableSort.dir *= -1;
+    else tableSort = { key, dir: -1 };   // new column starts descending (highest first)
+    renderMarketTable();
+  });
+});
+
+fetchTickers();
+fetchHype();
+fetchTradFi();
+fetchCustomCoinGecko();
+fetchCustomForex();
+fetchCustomEconomic();
+if (panelVisibility['panel-trenches']) loadTrenches(false);
+if (panelVisibility['panel-forecast']) loadForecast(false);
+
+// early retries: if no TradFi loaded yet (a proxy was briefly down), try again soon
+setTimeout(() => { if (!Object.keys(tradfiRows).length) fetchTradFi(); }, 5000);
+setTimeout(() => { if (!Object.keys(tradfiRows).length) fetchTradFi(); }, 15000);
+
+const pollWhenVisible = (fn, ms) => window.setInterval(() => {
+  if (!document.hidden) fn();
+}, ms);
+
+pollWhenVisible(fetchTickers, 15000);      // 15s price refresh (Binance)
+pollWhenVisible(fetchHype, 60*1000);      // 60s (CoinGecko — HYPE)
+pollWhenVisible(fetchCustomCoinGecko, 60*1000); // 60s (added CoinGecko coins)
+pollWhenVisible(fetchCustomForex, 60*1000); // 60s (added FX pairs)
+pollWhenVisible(fetchCustomEconomic, 60*60*1000); // 60m (BLS economic indicators)
+pollWhenVisible(fetchTradFi, 60*1000);    // 60s (CNBC — S&P/NASDAQ/Gold/Oil)
+pollWhenVisible(() => { if(panelVisibility['panel-trenches']) loadTrenches(false); }, TRENCH_AUTO_MS); // 16m SOL Meme Trenches scan
+pollWhenVisible(() => { if(panelVisibility['panel-forecast']) loadForecast(false); }, FORECAST_REFRESH_MS); // hourly crypto forecast refresh
+
+// Refresh the fast market feed once when returning to the tab, instead of
+// keeping all timers and canvas work active while the page is backgrounded.
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) fetchTickers();
+});

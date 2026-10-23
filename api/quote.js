@@ -9,7 +9,7 @@ async function fetchWithTimeout(url) {
       signal: controller.signal,
       headers: {
         Accept: 'application/json',
-        'User-Agent': 'Mozilla/5.0 (compatible; MUS-Terminal/1.0)'
+        'User-Agent': 'Mozilla/5.0 (compatible; MUS-Terminal/2.0)'
       }
     });
   } finally {
@@ -19,6 +19,7 @@ async function fetchWithTimeout(url) {
 
 function finiteNumber(...values) {
   for (const value of values) {
+    if (value === null || value === undefined || typeof value === 'boolean' || String(value).trim() === '') continue;
     const number = Number(value);
     if (Number.isFinite(number)) return number;
   }
@@ -59,7 +60,7 @@ export default async function handler(request, response) {
     const meta = result.meta || {};
     const quote = result.indicators?.quote?.[0] || {};
     const closes = Array.isArray(quote.close)
-      ? quote.close.map(Number).filter(Number.isFinite)
+      ? quote.close.map(value => finiteNumber(value)).filter(value => value !== null)
       : [];
     const price = finiteNumber(meta.regularMarketPrice, closes.at(-1));
     if (!price || price <= 0) {
@@ -88,3 +89,4 @@ export default async function handler(request, response) {
     return response.status(500).json({ error: 'Quote could not be loaded' });
   }
 }
+
